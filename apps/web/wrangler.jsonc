@@ -1,0 +1,16 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "p5stage-web",
+  // @astrojs/cloudflare v14 が用意するサーバエントリポイント。
+  // Durable Objects を足す Phase 4 で自前の worker.ts に差し替える。
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-08-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+  "vars": {
+    // 実行 iframe を配信する別オリジン (要件 5.1)。環境ごとに上書きする。
+    "PUBLIC_PREVIEW_ORIGIN": "http://localhost:8788",
+  },
+}

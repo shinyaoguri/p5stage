@@ -4,13 +4,28 @@ p5.js スケッチの開発・共有プラットフォーム (OpenProcessing.org
 差別化は Gist/GitHub 連携・バージョン管理・ライブコーディング。
 将来的にチュートリアル機能・教育向けクラス機能を予定。
 
-## 現況
+要件の正本は `docs/requirements.md`、実装計画は `docs/roadmap.md`。
+進捗と課題は各フェーズの Issue に積む (Phase 0 は #4)。
 
-要件定義中 (方針と残タスクは Issue #1 が正本)。技術スタック未確定のため、
-ビルド・テスト・lint コマンドはまだ無い。確定したらこの節を検証コマンドで置き換えること。
+## 検証コマンド
+
+```bash
+npm run lint          # ESLint
+npm run format:check  # Prettier
+npm run typecheck     # wrangler types → 各ワークスペースの型検査
+npm test              # Vitest
+npm run build         # 全ワークスペースのビルド
+```
+
+CI (.github/workflows/ci.yml) はこの順で実行する。
 
 ## リポ固有の注意
 
-- 方向性が決まるまでサービス本体の実装はしない (Issue #1 の合意)
-- エディタ機能は `~/Repos/canvastage` (ローカルリポジトリ) を参考にする
+- npm workspaces のモノレポ。`apps/web` (本体) / `apps/preview` (別オリジンの実行環境) /
+  `packages/shared` (共有定義)
+- **他者コードを実行するため、実行 iframe は本体と必ず別オリジンに置く** (要件 5.1)。
+  両者を同一オリジンに寄せる変更は入れない
+- エディタ機能は `~/Repos/canvastage` (ローカルリポジトリ) を参考にする。ただしあちらは
+  same-origin iframe / 単一パッケージ / Pages Functions が前提で、設計が違う箇所は移植ではなく作り替えになる
+- `worker-configuration.d.ts` は `wrangler types` の生成物。コミットしない・手で編集しない
 - 設計判断 (技術選定・アーキテクチャ・運用方針) は `docs/decisions/` の ADR に残す

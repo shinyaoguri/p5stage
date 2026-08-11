@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>p5stage preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #16161a;
+        color: #9a9aa6;
+        font-family: system-ui, sans-serif;
+        display: grid;
+        place-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      スケッチ実行環境のオリジン。本体サイトの iframe から読み込まれる前提で、
+      直接開かれたときはこのプレースホルダを出す。
+      実行時のコード注入 (buildHtml 相当) は Phase 1 で実装する。
+    -->
+    <p>p5stage のスケッチ実行環境です。</p>
+  </body>
+</html>
