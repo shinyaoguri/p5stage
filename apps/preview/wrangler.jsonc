@@ -9,6 +9,12 @@
     // すべてのリクエストを Worker に通してセキュリティヘッダを付ける。
     "run_worker_first": true,
   },
+  "routes": [
+    {
+      "pattern": "preview.p5stage.org",
+      "custom_domain": true,
+    },
+  ],
   "observability": {
     "enabled": true,
   },
@@ -17,7 +23,8 @@
     "port": 8788,
   },
   "vars": {
-    // 埋め込みを許可する本体オリジン。環境ごとに上書きする。
-    "PUBLIC_WEB_ORIGIN": "http://localhost:4321",
+    // 埋め込みを許可する本体オリジン。
+    // ここは本番値。ローカルは .dev.vars で上書きする (.dev.vars.example 参照)。
+    "PUBLIC_WEB_ORIGIN": "https://p5stage.org",
   },
 }
