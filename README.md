@@ -50,6 +50,19 @@ cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 
 `worker-configuration.d.ts` は `wrangler.jsonc` から自動生成される型で、コミットしない。
 
+## マージ運用
+
+main への required check は集約ジョブ **`ci-gate`** 1 本。`verify` / `deploy` /
+`preview-deploy` の結果を畳み、すべて success か skipped なら成功する。条件付きで
+skip されるジョブを個別に required にすると「実行されない PR」で永久 pending になり
+auto-merge が詰まるため、ゲートを 1 本に集約している。
+
+可逆な変更の PR は CI green を待って自動マージする。
+
+```bash
+gh pr merge <番号> --auto --squash
+```
+
 ## デプロイ
 
 main への push で GitHub Actions が Cloudflare Workers へデプロイする。PR では
