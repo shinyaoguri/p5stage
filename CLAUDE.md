@@ -17,7 +17,9 @@ npm test              # Vitest
 npm run build         # 全ワークスペースのビルド
 ```
 
-CI (.github/workflows/ci.yml) はこの順で実行する。
+CI (.github/workflows/ci.yml) はこの順で実行する。required check は集約ジョブ
+`ci-gate` 1 本。可逆な変更の PR は `gh pr merge <番号> --auto --squash` で
+CI green を待って自動マージする。
 
 ## リポ固有の注意
 
