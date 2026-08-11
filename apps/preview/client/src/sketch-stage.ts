@@ -94,12 +94,21 @@ export interface RunOptions {
   onSwapped?(): void;
 }
 
+/** ダブルバッファの添字。2 枚しかないことを型に持たせる。 */
+type FrameIndex = 0 | 1;
+
+const FRAME_INDICES = [0, 1] as const;
+
+function otherFrame(index: FrameIndex): FrameIndex {
+  return index === 0 ? 1 : 0;
+}
+
 export class SketchStage {
   readonly #frames: readonly [HTMLIFrameElement, HTMLIFrameElement];
   readonly #options: SketchStageOptions;
   /** 各フレームが表示している実行の世代。 */
   readonly #frameGenerations: [number, number] = [NO_GENERATION, NO_GENERATION];
-  #activeIndex = 0;
+  #activeIndex: FrameIndex = 0;
   /** 最後に受け付けた実行の世代。追い越された実行を捨てるのに使う。 */
   #generation = NO_GENERATION;
   /** 進行中の演出。次の実行が来たら打ち切る。 */
@@ -144,7 +153,7 @@ export class SketchStage {
     this.#cancelAnimations();
 
     const outgoingIndex = this.#activeIndex;
-    const incomingIndex = outgoingIndex === 0 ? 1 : 0;
+    const incomingIndex = otherFrame(outgoingIndex);
     const outgoing = this.#frames[outgoingIndex];
     const incoming = this.#frames[incomingIndex];
 
@@ -203,7 +212,8 @@ export class SketchStage {
   stop(): void {
     this.#generation += 1;
     this.#cancelAnimations();
-    for (const [index, frame] of this.#frames.entries()) {
+    for (const index of FRAME_INDICES) {
+      const frame = this.#frames[index];
       resetLayerStyle(frame);
       frame.srcdoc = "";
       this.#retire(index);
@@ -269,7 +279,7 @@ export class SketchStage {
   }
 
   /** そのフレームが抱えていた実行の終わりを知らせる。 */
-  #retire(index: number): void {
+  #retire(index: FrameIndex): void {
     const generation = this.#frameGenerations[index];
     if (generation === NO_GENERATION) return;
     this.#frameGenerations[index] = NO_GENERATION;

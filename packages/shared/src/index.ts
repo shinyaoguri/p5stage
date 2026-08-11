@@ -46,6 +46,7 @@ export {
   isTransitionId,
 } from "./transitions";
 export type {
+  LayerKeyframe,
   LayerPlan,
   LayerStyle,
   PreviewTransition,

@@ -24,10 +24,16 @@ export interface LayerStyle {
   readonly clipPath?: string;
 }
 
+/**
+ * 演出の 1 コマ。Web Animations API の `Keyframe` に渡せる形だが、型はここで
+ * 自前に持つ。このパッケージは Workers からも読まれ、そちらには DOM の型が無い。
+ */
+export type LayerKeyframe = Readonly<Record<string, string | number>>;
+
 /** レイヤ 1 枚の振る舞い。keyframes が null なら初期スタイルのまま動かさない。 */
 export interface LayerPlan {
   readonly setup: LayerStyle;
-  readonly keyframes: readonly Keyframe[] | null;
+  readonly keyframes: readonly LayerKeyframe[] | null;
 }
 
 /**
