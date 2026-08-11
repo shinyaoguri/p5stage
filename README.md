@@ -44,7 +44,8 @@ cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 | `npm run lint` | ESLint |
 | `npm run format` / `npm run format:check` | Prettier |
 | `npm run typecheck` | `wrangler types` で型を生成してから各ワークスペースを型検査 |
-| `npm test` | Vitest |
+| `npm test` | Vitest (DOM に依存しない純ロジック) |
+| `npm run test:e2e` | Playwright (実ブラウザ。下記) |
 | `npm run build` | 全ワークスペースのビルド |
 
 エディタ (http://localhost:4321/edit) を触るときは両方を起動する
@@ -54,9 +55,31 @@ cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 
 `worker-configuration.d.ts` は `wrangler.jsonc` から自動生成される型で、コミットしない。
 
+## E2E (Playwright)
+
+`e2e/` に置く。対象は**本体と実行環境を別オリジンで立てた構成**で、
+オリジン境界・iframe の属性・Worker が返すヘッダ・Monaco と IndexedDB の実挙動など、
+単体テスト (Vitest) では観測できないものを見る。
+
+初回はブラウザ本体の取得が要る。
+
+```bash
+npx playwright install chromium
+```
+
+サーバの起動は [playwright.config.ts](playwright.config.ts) が受け持つ。両アプリを
+ビルドしてから `wrangler dev` で立て、オリジンは `--var` で渡すので `.dev.vars` は要らない。
+ポートは開発サーバ (4321 / 8788) と分けてあり (8790 / 8791)、開発サーバを止めずに回せる。
+
+| コマンド | 内容 |
+|---|---|
+| `npm run test:e2e` | 全件 |
+| `npm run test:e2e -- --grep 別オリジン` | 名前で絞る |
+| `npm run test:e2e:ui` | UI モード (対話的に選んで実行・トレース閲覧) |
+
 ## マージ運用
 
-main への required check は集約ジョブ **`ci-gate`** 1 本。`verify` / `deploy` /
+main への required check は集約ジョブ **`ci-gate`** 1 本。`verify` / `e2e` / `deploy` /
 `preview-deploy` の結果を畳み、すべて success か skipped なら成功する。条件付きで
 skip されるジョブを個別に required にすると「実行されない PR」で永久 pending になり
 auto-merge が詰まるため、ゲートを 1 本に集約している。

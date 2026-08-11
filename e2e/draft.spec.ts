@@ -1,0 +1,87 @@
+/**
+ * ドラフト自動保存 (1-6) の回帰テスト。
+ *
+ * 間引きの時間や書き込みの直列化は draft-store.test.ts が持つ。ここで見るのは
+ * 「リロードを跨いで続きから書ける」という、実際のブラウザと IndexedDB が
+ * 揃って初めて確かめられる部分。
+ */
+
+import { expect, test } from "@playwright/test";
+
+import {
+  addFile,
+  fileTab,
+  fileTabNames,
+  openEditor,
+  openFile,
+  readStoredDraft,
+  typeIntoEditor,
+} from "./helpers";
+
+test.describe("下書き", () => {
+  test("編集はリロードを跨いで続きから始まる", async ({ page }) => {
+    await openEditor(page);
+    // 開いただけでは書かない (下書きが無い状態で復元の表示は出ない)。
+    await expect(page.locator("#draft-status")).toHaveText("");
+
+    await typeIntoEditor(page, 'console.log("e2e-draft");');
+    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+
+    await page.reload();
+
+    // 黙って復元する。代わりに「いつの続きか」を出す。
+    await expect(page.locator("#draft-status")).toContainText(
+      "下書きを復元しました"
+    );
+    await expect(page.locator("#editor")).toContainText("e2e-draft");
+  });
+
+  test("ファイル構成と開いていたファイルごと戻る", async ({ page }) => {
+    await openEditor(page);
+
+    await addFile(page, "memo.txt");
+    await typeIntoEditor(page, "e2e-memo");
+    await openFile(page, "style.css");
+    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+
+    await page.reload();
+
+    await expect(fileTabNames(page)).toHaveText([
+      "index.html",
+      "style.css",
+      "sketch.js",
+      "memo.txt",
+    ]);
+    await expect(fileTab(page, "style.css")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await openFile(page, "memo.txt");
+    await expect(page.locator("#editor")).toContainText("e2e-memo");
+  });
+
+  test("「新規」で破棄すると既定のテンプレートに戻る", async ({ page }) => {
+    await openEditor(page);
+    await typeIntoEditor(page, 'console.log("e2e-draft");');
+    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+
+    // 復元は黙ってやるが、破棄は取り消せないので確認を挟む。
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await page.locator("#new").click();
+    await expect(page.locator("#editor")).toContainText("e2e-draft");
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.locator("#new").click();
+
+    await expect(page.locator("#draft-status")).toHaveText(
+      "下書きを破棄しました"
+    );
+    await expect(page.locator("#editor")).toContainText("function setup()");
+
+    // 消した先から書き戻されないこと (予約中の保存ごと捨てている)。
+    await expect.poll(() => readStoredDraft(page)).toBeNull();
+    await page.reload();
+    await expect(page.locator("#draft-status")).toHaveText("");
+    await expect(page.locator("#editor")).not.toContainText("e2e-draft");
+  });
+});

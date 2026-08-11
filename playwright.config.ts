@@ -1,0 +1,83 @@
+import { fileURLToPath } from "node:url";
+
+import { defineConfig, devices } from "@playwright/test";
+
+import {
+  PREVIEW_ORIGIN,
+  PREVIEW_PORT,
+  WEB_ORIGIN,
+  WEB_PORT,
+} from "./e2e/origins";
+
+/**
+ * E2E の対象は「本体 (web) と実行環境 (preview) を別オリジンで立てた構成」
+ * (要件 5.1 / ADR 0007)。単体テスト (vitest) が DOM を持たない純ロジックを見るのに対し、
+ * ここでは実ブラウザでしか確かめられないもの — オリジン境界・iframe の属性・
+ * Worker が付けるヘッダ・Monaco と IndexedDB の実挙動 — を見る。
+ *
+ * サーバは astro dev ではなく **wrangler dev** で立てる。理由は 2 つ。
+ *
+ * - preview の `frame-ancestors` は Worker が付けるヘッダで、Worker を通さないと
+ *   本番と同じ応答にならない
+ * - Astro 7 の `astro dev` は常駐プロセスとして起動して即座に返るため、
+ *   Playwright が起動を待てず、終了時に落とすこともできない
+ *
+ * オリジンは `.dev.vars` ではなく `--var` で渡す。`.dev.vars` は gitignore 済みで
+ * CI には無く、手元の値にも依存させたくない。
+ */
+const appDir = (name: string): string =>
+  fileURLToPath(new URL(`apps/${name}/`, import.meta.url));
+
+const isCI = Boolean(process.env.CI);
+
+/** 起動には両アプリのビルドが要る。CI の冷えた環境でも足りる長さにする。 */
+const SERVER_TIMEOUT_MS = 180_000;
+
+/**
+ * wrangler のローカル状態の置き場。
+ *
+ * 既定 (`.wrangler/state`) のままだと、開発中の `npm run dev:preview` と
+ * E2E のサーバが同じ SQLite を掴んで `SQLITE_BUSY` で落ちる。E2E は専用の
+ * 置き場を持ち、開発サーバを止めずに回せるようにする。
+ */
+const PERSIST_DIR = ".wrangler/e2e";
+
+export default defineConfig({
+  testDir: "./e2e",
+  fullyParallel: true,
+  // .only の消し忘れで CI が一部しか回らないのを防ぐ。
+  forbidOnly: isCI,
+  // 実行環境の起動待ちなど、環境由来の揺れだけを 1 回だけ拾い直す。
+  retries: isCI ? 1 : 0,
+  reporter: isCI
+    ? [["github"], ["html", { open: "never" }]]
+    : [["list"], ["html", { open: "never" }]],
+  use: {
+    baseURL: WEB_ORIGIN,
+    // 別オリジンの iframe を 2 段 (ランナー → スケッチ) 挟むので、
+    // 既定の 5 秒では初回の実行が間に合わないことがある。
+    actionTimeout: 15_000,
+    // 落ちた 1 回目は素通しし、やり直しのときだけ詳細を採る。
+    trace: "on-first-retry",
+  },
+  expect: { timeout: 15_000 },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  webServer: [
+    {
+      command: `npm run build && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN}`,
+      cwd: appDir("web"),
+      url: `${WEB_ORIGIN}/edit`,
+      reuseExistingServer: !isCI,
+      timeout: SERVER_TIMEOUT_MS,
+      env: { WRANGLER_SEND_METRICS: "false" },
+    },
+    {
+      command: `npm run build:client && npx wrangler dev --port ${PREVIEW_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_WEB_ORIGIN:${WEB_ORIGIN}`,
+      cwd: appDir("preview"),
+      url: `${PREVIEW_ORIGIN}/runner/`,
+      reuseExistingServer: !isCI,
+      timeout: SERVER_TIMEOUT_MS,
+      env: { WRANGLER_SEND_METRICS: "false" },
+    },
+  ],
+});
