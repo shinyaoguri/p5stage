@@ -7,6 +7,7 @@
  */
 
 import { parseSketchFiles, type SketchFiles } from "./files";
+import { clampTransitionMs, isTransitionId } from "./transitions";
 
 /**
  * プロトコルのバージョン。
@@ -33,9 +34,25 @@ const CONSOLE_LEVELS: readonly string[] = [
   "debug",
 ];
 
+/**
+ * 実行の切り替え演出。ダブルバッファを持つランナー側で適用する (ADR 0007)。
+ * どの演出にするかは本体の設定なので、実行の指示に乗せて毎回渡す。
+ */
+export interface TransitionRequest {
+  /** 既知の演出 id (transitions.ts のレジストリにあるもの)。 */
+  readonly id: string;
+  readonly durationMs: number;
+}
+
 /** 本体 → ランナー。 */
 export type HostMessage =
-  | { readonly type: "run"; readonly gen: number; readonly files: SketchFiles }
+  | {
+      readonly type: "run";
+      readonly gen: number;
+      readonly files: SketchFiles;
+      /** null なら即時切替。 */
+      readonly transition: TransitionRequest | null;
+    }
   | { readonly type: "stop"; readonly gen: number };
 
 /** ランナー → 本体。 */
@@ -76,6 +93,25 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
+/**
+ * 演出の指定を読み取る。指定が無い・未知の id・壊れた値はすべて「演出なし」に倒す。
+ *
+ * ここで実行そのものを弾かないのは、演出は見た目の飾りであって、スケッチが動かない
+ * 理由にはならないため。長さは範囲外でも丸めて受ける (極端な値でフレームの入れ替えが
+ * 止まったままにならないよう、上限は必ず効かせる)。
+ */
+function parseTransition(value: unknown): TransitionRequest | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { id, durationMs } = value as { id?: unknown; durationMs?: unknown };
+  if (!isTransitionId(id)) return null;
+  return {
+    id,
+    durationMs: clampTransitionMs(
+      typeof durationMs === "number" ? durationMs : Number.NaN
+    ),
+  };
+}
+
 /** 受信データを本体 → ランナーのメッセージとして読み取る。妥当でなければ null。 */
 export function parseHostMessage(value: unknown): HostMessage | null {
   const message = unwrap(value);
@@ -87,7 +123,11 @@ export function parseHostMessage(value: unknown): HostMessage | null {
   switch (type) {
     case "run": {
       const files = parseSketchFiles((message as { files?: unknown }).files);
-      return files === null ? null : { type: "run", gen, files };
+      if (files === null) return null;
+      const transition = parseTransition(
+        (message as { transition?: unknown }).transition
+      );
+      return { type: "run", gen, files, transition };
     }
     case "stop":
       return { type: "stop", gen };

@@ -1,5 +1,10 @@
 ---
-import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
+import {
+  DEFAULT_TRANSITION_ID,
+  OriginConfigError,
+  TRANSITION_OPTIONS,
+  resolveOrigins,
+} from "@p5stage/shared";
 import { env } from "cloudflare:workers";
 
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -33,6 +38,20 @@ try {
         <div id="file-tabs" />
 
         <div class="chrome">
+          {/* 演出の選択は暫定の置き場。設定パネル (Issue #11 の 1-5) が引き取る。 */}
+          <label class="field">
+            切り替え
+            <select id="transition">
+              {TRANSITION_OPTIONS.map((option) => (
+                <option
+                  value={option.value}
+                  selected={option.value === DEFAULT_TRANSITION_ID}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button id="run" type="button">
             実行 (⌘/Ctrl+Enter)
           </button>
@@ -42,16 +61,22 @@ try {
           <span id="status" class="status" role="status" />
         </div>
 
-        <ul id="console" class="console" role="log" aria-live="polite" />
+        <div id="console" />
       </div>
     )
   }
 </BaseLayout>
 
 <script>
-  import { DEFAULT_SKETCH_FILES } from "@p5stage/shared";
+  import {
+    DEFAULT_SKETCH_FILES,
+    DEFAULT_TRANSITION_MS,
+    isTransitionId,
+    type TransitionRequest,
+  } from "@p5stage/shared";
 
   import { CodeEditor } from "../scripts/editor/code-editor";
+  import { ConsolePanel } from "../scripts/editor/console-panel";
   import { FileTabs } from "../scripts/editor/file-tabs";
   import { isRunShortcut } from "../scripts/editor/run-shortcut";
   import { PreviewHost } from "../scripts/preview-host";
@@ -61,34 +86,37 @@ try {
   const editorHost = document.getElementById("editor");
   const tabsHost = document.getElementById("file-tabs");
   const stage = document.getElementById("stage");
-  const consoleList = document.getElementById("console");
+  const consoleHost = document.getElementById("console");
   const status = document.getElementById("status");
 
-  if (root && previewOrigin && editorHost && tabsHost && stage && consoleList) {
+  if (root && previewOrigin && editorHost && tabsHost && stage && consoleHost) {
     const setStatus = (text: string) => {
       if (status) status.textContent = text;
     };
+
+    const consolePanel = new ConsolePanel(consoleHost);
 
     const host = new PreviewHost(stage, {
       previewOrigin,
       onReady: () => setStatus("実行環境に接続しました"),
       onRendered: (gen) => setStatus(`実行 #${gen}`),
       onError: (message) => setStatus(message),
-      onConsole: (level, message) => {
-        const item = document.createElement("li");
-        item.className = `console-line console-${level}`;
-        item.textContent = message;
-        consoleList.appendChild(item);
-        while (consoleList.childElementCount > 100) {
-          consoleList.firstElementChild?.remove();
-        }
-        consoleList.scrollTop = consoleList.scrollHeight;
-      },
+      onConsole: (level, message, timestamp) =>
+        consolePanel.add(level, message, timestamp),
     });
 
+    // 演出は「なし」も選べるので、id が既知のときだけ指定として組み立てる。
+    const selectedTransition = (): TransitionRequest | null => {
+      const select = document.getElementById("transition");
+      const id = select instanceof HTMLSelectElement ? select.value : "";
+      return isTransitionId(id)
+        ? { id, durationMs: DEFAULT_TRANSITION_MS }
+        : null;
+    };
+
     const run = () => {
-      consoleList.replaceChildren();
-      host.run(editor.getFiles());
+      consolePanel.clear();
+      host.run(editor.getFiles(), selectedTransition());
     };
 
     const editor = new CodeEditor(editorHost, {
@@ -216,45 +244,34 @@ try {
     background: rgb(255 255 255 / 0.15);
   }
 
+  .field {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+    color: rgb(255 255 255 / 0.7);
+  }
+
+  .field select {
+    padding: 0.125rem 0.25rem;
+    border: 1px solid rgb(255 255 255 / 0.25);
+    border-radius: 0.25rem;
+    background: rgb(0 0 0 / 0.4);
+    color: #fff;
+    font: inherit;
+  }
+
   .status {
     color: rgb(255 255 255 / 0.7);
   }
 
-  /* コンソール。整えるのは 1-4 (console パネル) の担当で、ここは最小限。 */
-  .console {
+  /* コンソール。中身の見た目は styles/console-panel.css (JS が組み立てる DOM に
+     届かせるため)。ここは置き場所だけを決める。 */
+  #console {
     position: absolute;
     z-index: 20;
     right: 0.5rem;
     bottom: 0.5rem;
-    max-width: min(28rem, 50vw);
-    max-height: 30vh;
-    margin: 0;
-    padding: 0.5rem;
-    overflow-y: auto;
-    border-radius: 0.25rem;
-    background: rgb(0 0 0 / 0.5);
-    color: rgb(255 255 255 / 0.75);
-    list-style: none;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.75rem;
-    backdrop-filter: blur(8px);
-  }
-
-  .console:empty {
-    display: none;
-  }
-
-  .console-line {
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .console-warn {
-    color: #ffcc66;
-  }
-
-  .console-error {
-    color: #ff8095;
+    max-width: calc(100% - 1rem);
   }
 
   .error {

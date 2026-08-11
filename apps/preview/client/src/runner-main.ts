@@ -8,10 +8,12 @@
 import {
   PROTOCOL_VERSION,
   envelope,
+  getTransition,
   parseHostMessage,
   type ConsoleLevel,
   type RunnerMessage,
   type SketchFiles,
+  type TransitionRequest,
 } from "@p5stage/shared";
 
 import { buildSketchHtml, MissingEntryFileError } from "./build-html";
@@ -76,8 +78,6 @@ function main(): void {
     return;
   }
 
-  const stage = new SketchStage(document.body);
-
   const toHost = (message: RunnerMessage): void => {
     window.parent.postMessage(envelope(message), webOrigin);
   };
@@ -86,10 +86,29 @@ function main(): void {
     toHost({ type: "console", level, message, timestamp: Date.now() });
   };
 
-  /** 実行中のスケッチが使っている blob URL。次の実行が始まったら解放する。 */
-  let liveFileUrls: Map<string, string> = new Map();
+  /**
+   * 世代ごとの blob URL。
+   *
+   * 演出の間は新旧 2 つのスケッチが同時に生きているため、「次の実行が始まったら
+   * 前の分を捨てる」ではまだ表示中の文書から資源を取り上げてしまう。解放は
+   * ステージが「そのフレームは降りた」と知らせてきた時点に合わせる。
+   */
+  const fileUrlsByGeneration = new Map<number, Map<string, string>>();
 
-  const run = async (generation: number, files: SketchFiles): Promise<void> => {
+  const releaseFileUrls = (generation: number): void => {
+    const urls = fileUrlsByGeneration.get(generation);
+    if (urls === undefined) return;
+    fileUrlsByGeneration.delete(generation);
+    for (const url of urls.values()) URL.revokeObjectURL(url);
+  };
+
+  const stage = new SketchStage(document.body, { onRetired: releaseFileUrls });
+
+  const run = async (
+    generation: number,
+    files: SketchFiles,
+    transition: TransitionRequest | null
+  ): Promise<void> => {
     const fileUrls = createFileUrls(files);
     let html: string;
     try {
@@ -113,23 +132,27 @@ function main(): void {
       return;
     }
 
+    fileUrlsByGeneration.set(generation, fileUrls);
+
     // 差し替えの失敗を握り潰すと、本体からは「実行したのに応答が無い」に見える。
     const swapped = await stage
-      .run(html, generation)
+      .run(html, generation, {
+        transition:
+          transition === null
+            ? null
+            : (getTransition(transition.id)?.plan ?? null),
+        durationMs: transition?.durationMs ?? 0,
+        // 演出の完了ではなく、画面に出た時点で本体へ返す。
+        onSwapped: () => toHost({ type: "rendered", gen: generation }),
+      })
       .catch((error: unknown) => {
         report("error", `スケッチを差し替えられませんでした: ${String(error)}`);
         return false;
       });
 
-    if (!swapped) {
-      // 追い越された実行。作った URL は誰も使わないのでここで捨てる。
-      for (const url of fileUrls.values()) URL.revokeObjectURL(url);
-      return;
-    }
-
-    for (const url of liveFileUrls.values()) URL.revokeObjectURL(url);
-    liveFileUrls = fileUrls;
-    toHost({ type: "rendered", gen: generation });
+    // 追い越された実行。画面に出ないまま終わるので、ここで捨てる
+    // (画面に出た実行の解放は onRetired が受け持つ)。
+    if (!swapped) releaseFileUrls(generation);
   };
 
   window.addEventListener("message", (event: MessageEvent) => {
@@ -161,7 +184,7 @@ function main(): void {
     if (message === null) return;
 
     if (message.type === "run") {
-      void run(message.gen, message.files);
+      void run(message.gen, message.files, message.transition);
     } else {
       stage.stop();
     }

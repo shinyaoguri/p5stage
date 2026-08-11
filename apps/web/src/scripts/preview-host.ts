@@ -14,6 +14,7 @@ import {
   type ConsoleLevel,
   type HostMessage,
   type SketchFiles,
+  type TransitionRequest,
 } from "@p5stage/shared";
 
 export interface PreviewHostOptions {
@@ -60,10 +61,15 @@ export class PreviewHost {
     container.appendChild(this.#frame);
   }
 
-  /** スケッチを実行する。ランナーが未接続なら、つながった時点で実行する。 */
-  run(files: SketchFiles): void {
+  /**
+   * スケッチを実行する。ランナーが未接続なら、つながった時点で実行する。
+   *
+   * 切り替えの演出は本体の設定だが、動かすのはダブルバッファを持つランナーなので
+   * (ADR 0007)、実行のたびに指示に乗せて渡す。
+   */
+  run(files: SketchFiles, transition: TransitionRequest | null = null): void {
     this.#generation += 1;
-    this.#send({ type: "run", gen: this.#generation, files });
+    this.#send({ type: "run", gen: this.#generation, files, transition });
   }
 
   /** 実行中のスケッチを止める。 */
