@@ -12,6 +12,10 @@
       "custom_domain": true,
     },
   ],
+  // PR ごとの確認用 URL (<alias>-p5stage-web.<subdomain>.workers.dev) を発行する。
+  // routes を宣言すると workers_dev は false と推論され、既定ではプレビュー URL も
+  // 出なくなるため、明示的に有効化する。workers.dev の常設ルートは開けない。
+  "preview_urls": true,
   "observability": {
     "enabled": true,
   },
