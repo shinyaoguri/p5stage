@@ -1,6 +1,7 @@
 import { resolveOrigins } from "@p5stage/shared";
 
 import { withSecurityHeaders } from "./headers";
+import { injectWebOrigin, isHtmlResponse } from "./inject-origin";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -10,7 +11,19 @@ export default {
       preview: new URL(request.url).origin,
     });
 
-    const response = await env.ASSETS.fetch(request);
-    return withSecurityHeaders(response, web);
+    const asset = await env.ASSETS.fetch(request);
+    const response = withSecurityHeaders(asset, web);
+    if (!isHtmlResponse(response)) return response;
+
+    // ランナーが postMessage の相手を判別できるよう、本体オリジンを埋め込む。
+    const html = injectWebOrigin(await response.text(), web);
+    const headers = new Headers(response.headers);
+    // 本文を差し替えたので、元の長さは意味を失う。
+    headers.delete("Content-Length");
+    return new Response(html, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   },
 } satisfies ExportedHandler<Env>;

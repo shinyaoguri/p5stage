@@ -7,7 +7,7 @@ p5.js スケッチの開発・共有プラットフォーム。Gist / GitHub 連
 - 実装計画: [docs/roadmap.md](docs/roadmap.md)
 - 設計判断: [docs/decisions/](docs/decisions/)
 
-現在 Phase 0 (基盤) を実装中。
+現在 Phase 1 (エディタコア) を実装中。
 
 ## 構成
 
@@ -20,6 +20,7 @@ npm workspaces のモノレポ (ADR 0005)。
 | `packages/shared` | 両者が使う定義 | — | — |
 
 他者コードを実行するため、実行 iframe は本体と必ず別オリジンに置く (要件 5.1)。
+本体と実行環境は postMessage だけでやり取りする (ADR 0007)。
 
 ## 開発
 
@@ -46,7 +47,10 @@ cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 | `npm test` | Vitest |
 | `npm run build` | 全ワークスペースのビルド |
 
-エディタを触るときは両方を起動する (本体の iframe が実行環境を読み込む)。
+エディタ (http://localhost:4321/edit) を触るときは両方を起動する
+(本体の iframe が実行環境を読み込む)。実行環境はブラウザ側のコード (`apps/preview/client/`)
+を Vite でビルドしてから wrangler が配信するため、`npm run dev:preview` は
+ビルドを挟んでから起動する。
 
 `worker-configuration.d.ts` は `wrangler.jsonc` から自動生成される型で、コミットしない。
 

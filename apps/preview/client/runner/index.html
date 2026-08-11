@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      本体サイトのオリジン。配信時に preview Worker が実値へ置換する
+      (apps/preview/src/inject-origin.ts)。postMessage の相手を決める値なので、
+      クエリ等の外から与えられる経路は用意しない。
+    -->
+    <meta name="p5stage-web-origin" content="__P5STAGE_WEB_ORIGIN__" />
+    <title>p5stage runner</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .sketch-frame {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+
+      .notice {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        margin: 0;
+        padding: 1rem;
+        color: #9a9aa6;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+    </style>
+    <script type="module" src="../src/runner-main.ts"></script>
+  </head>
+  <body></body>
+</html>

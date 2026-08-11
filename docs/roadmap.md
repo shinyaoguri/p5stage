@@ -26,7 +26,7 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 
 - code-editor (透過 Monaco + テーマ) / preview (iframe ダブルバッファ + console / input の 2 ブリッジ) / transitions / settings の移植
 - **実行 iframe を別オリジン配信に載せ替え** (canvastage の same-origin 設計は踏襲しない。
-  postMessage + origin 検証、sandbox 属性の確定)
+  postMessage + origin 検証、sandbox 属性の確定) → **ADR 0007**
 - マルチファイル対応 (既定 3 ファイル + 任意テキストファイルの追加・削除。Monaco はファイルごとにモデルを分け undo 履歴を独立させる)
 - ドラフト自動保存 (IndexedDB) の**新規実装** (canvastage に相当実装は無い。汎用ストア `idb-store.ts` のみ流用)
 - 完了条件: ログイン無しで p5.js スケッチを書き、別オリジン iframe で実行・ドラフト復元できる
