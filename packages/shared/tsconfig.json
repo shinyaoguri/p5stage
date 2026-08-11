@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ブラウザと Workers の両方から使うパッケージなので、両者に共通する
+    // Web 標準 API (URL など) の型だけを当てにする。
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["src", "test"]
+}

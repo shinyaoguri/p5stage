@@ -1,0 +1,48 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+// トップは DB を引かないので静的に出す。
+export const prerender = true;
+---
+
+<BaseLayout title="p5stage">
+  <main>
+    <h1>p5stage</h1>
+    <p class="lead">p5.js スケッチの開発・共有プラットフォーム</p>
+    <p class="note">
+      現在 Phase 0 (基盤) を構築中です。実装計画は
+      <a href="https://github.com/shinyaoguri/p5stage/blob/main/docs/roadmap.md"
+        >roadmap</a
+      >
+      を参照してください。
+    </p>
+  </main>
+</BaseLayout>
+
+<style>
+  main {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 4rem 1.5rem;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    letter-spacing: 0.02em;
+  }
+
+  .lead {
+    margin: 0.5rem 0 2rem;
+    font-size: 1.125rem;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+
+  a {
+    color: var(--accent);
+  }
+</style>

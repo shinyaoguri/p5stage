@@ -1,0 +1,166 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint / typecheck / test / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      # typecheck は wrangler types で worker-configuration.d.ts を生成してから走る
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    name: deploy (cloudflare workers)
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      # Cloudflare 側の準備が済むまでは CI を落とさずスキップする。
+      - name: Cloudflare の資格情報を確認
+        id: guard
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためデプロイをスキップしました"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.guard.outputs.ready == 'true'
+      - uses: actions/setup-node@v6
+        if: steps.guard.outputs.ready == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        if: steps.guard.outputs.ready == 'true'
+      - run: npm run build
+        if: steps.guard.outputs.ready == 'true'
+
+      # 実行環境を先に出す。本体だけ先に上がると iframe の参照先が欠ける。
+      - name: preview (別オリジン実行環境) をデプロイ
+        if: steps.guard.outputs.ready == 'true'
+        run: npx wrangler deploy
+        working-directory: apps/preview
+      - name: web (本体) をデプロイ
+        if: steps.guard.outputs.ready == 'true'
+        run: npx wrangler deploy
+        working-directory: apps/web
+
+  preview-deploy:
+    name: preview deploy (pull request)
+    needs: verify
+    # fork からの PR にはシークレットが渡らないので同一リポジトリの PR に限る。
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Cloudflare の資格情報を確認
+        id: guard
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためプレビューをスキップしました"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.guard.outputs.ready == 'true'
+      - uses: actions/setup-node@v6
+        if: steps.guard.outputs.ready == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        if: steps.guard.outputs.ready == 'true'
+      - run: npm run build
+        if: steps.guard.outputs.ready == 'true'
+
+      # versions upload は本番トラフィックを切り替えず、確認用の URL だけを発行する。
+      - name: preview をバージョンアップロード
+        id: upload-preview
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          output=$(npx wrangler versions upload 2>&1 | tee /dev/stderr)
+          echo "url=$(printf '%s' "$output" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)" >> "$GITHUB_OUTPUT"
+        working-directory: apps/preview
+      - name: web をバージョンアップロード
+        id: upload-web
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          output=$(npx wrangler versions upload 2>&1 | tee /dev/stderr)
+          echo "url=$(printf '%s' "$output" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)" >> "$GITHUB_OUTPUT"
+        working-directory: apps/web
+
+      - name: プレビュー URL を PR にコメント
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/github-script@v9
+        env:
+          WEB_URL: ${{ steps.upload-web.outputs.url }}
+          PREVIEW_URL: ${{ steps.upload-preview.outputs.url }}
+        with:
+          script: |
+            const marker = "## 🚀 Preview Deployment";
+            const fallback = "(URL を取得できませんでした)";
+            const body = [
+              marker,
+              "",
+              `- web (本体): ${process.env.WEB_URL || fallback}`,
+              `- preview (実行環境): ${process.env.PREVIEW_URL || fallback}`,
+              "",
+              `commit: ${context.sha.slice(0, 7)}`,
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.type === "Bot" && c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

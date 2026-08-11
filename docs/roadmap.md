@@ -11,28 +11,30 @@ canvastage からの移植は「動くものを最小変換で持ち込み、p5s
 
 プロジェクトの骨格と、監査で見送った標準項目の解消。
 
-- モノレポ構成の決定 (app / preview / workers の分割方針)
-- フロントエンドフレームワークの選定 (素の DOM 継続 or 導入) → **ADR 0004 として記録**
-- TypeScript + Vite + ESLint + Prettier + Vitest の雛形
-- CI (.github/workflows/ci.yml: lint / typecheck / test) → 監査 deferred の ci-workflow-exists / test-dir-exists を解消
+- モノレポ構成の決定 (app / preview / workers の分割方針) → **ADR 0005**
+- フロントエンドフレームワークの選定 (素の DOM 継続 or 導入) → **ADR 0004**
+- 配信基盤を Pages から Workers (static assets) へ → **ADR 0006**
+- TypeScript + Astro/Vite + ESLint + Prettier + Vitest の雛形
+- CI (.github/workflows/ci.yml: lint / format / typecheck / test / build) → 監査 deferred の ci-workflow-exists / test-dir-exists を解消
 - .github/dependabot.yml → 同 dependabot-config を解消
-- Cloudflare Pages/Workers のデプロイパイプライン (main → 本番 / PR → プレビュー)
+- Cloudflare Workers のデプロイパイプライン (main → 本番 / PR → バージョンプレビュー)
 - 完了条件: 空のアプリが CI green で本番 URL に出る
 
 ## Phase 1: エディタコア (ローカルで完結)
 
 canvastage 移植の中核。保存機能なしで「書いて実行できる」まで。
 
-- code-editor (透過 Monaco + テーマ) / preview (iframe + 3 ブリッジ) / transitions / settings の移植
+- code-editor (透過 Monaco + テーマ) / preview (iframe ダブルバッファ + console / input の 2 ブリッジ) / transitions / settings の移植
 - **実行 iframe を別オリジン配信に載せ替え** (canvastage の same-origin 設計は踏襲しない。
   postMessage + origin 検証、sandbox 属性の確定)
 - マルチファイル対応 (既定 3 ファイル + 任意テキストファイルの追加・削除。Monaco はファイルごとにモデルを分け undo 履歴を独立させる)
-- ドラフト自動保存 (IndexedDB) の移植
+- ドラフト自動保存 (IndexedDB) の**新規実装** (canvastage に相当実装は無い。汎用ストア `idb-store.ts` のみ流用)
 - 完了条件: ログイン無しで p5.js スケッチを書き、別オリジン iframe で実行・ドラフト復元できる
 
 ## Phase 2: 認証と保存 (Gist 正本)
 
-- GitHub OAuth (scope=gist、popup + state 検証。canvastage の実装を移植)。scope の意味の明示 UI
+- GitHub OAuth (scope=gist、popup + state 検証)。クライアント側は canvastage を移植、
+  コールバックは Pages Functions ではなく Astro の API ルートとして書き直す (ADR 0006)。scope の意味の明示 UI
 - Gist create / debounce PATCH / 取り込み / detach (canvastage gist.ts の状態機械を移植・拡張)
 - D1 メタデータ (作品・ユーザー・公開範囲) と作品ページの最小版
 - バックエンドのキャッシュ層 (conditional GET + ETag、リビジョン SHA キーの永続キャッシュ、404 tombstone)
@@ -51,7 +53,7 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 
 - 準リアルタイム同期閲覧: エディタ → Workers 通知 → Durable Objects → SSE/WebSocket 配信 (許容遅延 数秒〜10 秒)
 - フォーク (Gist fork API + メタデータ複製)
-- サムネイル自動取得 (capture-thumbnail 移植 → R2、Cloudflare Images リサイズ)
+- サムネイル自動取得の**新規実装** (canvastage に相当実装は無い。別オリジン iframe から postMessage で受け渡す) → R2、Cloudflare Images リサイズ
 - 限定公開 (secret gist + 注意書き)
 - リビジョン履歴の閲覧 UI
 - 完了条件: 作者がライブコーディングし、閲覧者が数秒遅れで追従できる

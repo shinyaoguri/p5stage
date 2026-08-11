@@ -14,6 +14,7 @@ R2 は egress 無料で、UGC 公開配信の「人気作品で転送課金が�
 ## 決定
 
 - ホスティング / API: Cloudflare Pages + Workers
+  (→ **ADR 0006 で Workers の static assets に更新。Pages は使わない**)
 - メタデータ・アセット台帳: D1
 - アセット blob・キャッシュ (レプリカ): R2 (+ 軽量キャッシュに KV)
 - 準リアルタイム同期の配信 (SSE/WebSocket): Durable Objects
@@ -22,6 +23,7 @@ R2 は egress 無料で、UGC 公開配信の「人気作品で転送課金が�
 
 フロントエンドのフレームワーク選定 (canvastage 同様の素の DOM 継続か、ギャラリー等の
 ページ群にフレームワークを導入するか) は Phase 0 で別 ADR として決める。
+(→ **ADR 0004 で Astro + islands に決定**)
 
 ## 影響
 
