@@ -1,0 +1,221 @@
+---
+import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
+import { env } from "cloudflare:workers";
+
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+// 実行環境のオリジンは実行時に決まるので、このページは静的化しない。
+export const prerender = false;
+
+let previewOrigin: string | null = null;
+let originError: string | null = null;
+try {
+  previewOrigin = resolveOrigins({
+    web: Astro.url.origin,
+    preview: env.PUBLIC_PREVIEW_ORIGIN,
+  }).preview;
+} catch (error) {
+  if (!(error instanceof OriginConfigError)) throw error;
+  originError = error.message;
+}
+---
+
+<BaseLayout title="エディタ | p5stage">
+  {
+    originError !== null ? (
+      <p class="error">実行環境のオリジン設定が不正です: {originError}</p>
+    ) : (
+      <div id="editor-root" data-preview-origin={previewOrigin}>
+        <div id="stage" />
+
+        <div class="panel">
+          {/*
+            Phase 1-1 は別オリジン実行の経路を通すことが目的なので、編集 UI は
+            素の textarea で暫定的に置いている。透過 Monaco とタブは 1-2 / 1-3 で
+            差し替える (Issue #11)。
+          */}
+          <div class="panel-bar">
+            <label class="file-picker">
+              ファイル
+              <select id="file-select" />
+            </label>
+            <button id="run" type="button">
+              実行 (⌘/Ctrl+Enter)
+            </button>
+            <button id="stop" type="button">
+              停止
+            </button>
+            <span id="status" class="status" role="status" />
+          </div>
+          <textarea id="source" spellcheck="false" aria-label="ソースコード" />
+          <ul id="console" class="console" role="log" aria-live="polite" />
+        </div>
+      </div>
+    )
+  }
+</BaseLayout>
+
+<script>
+  import { DEFAULT_SKETCH_FILES, type SketchFiles } from "@p5stage/shared";
+
+  import { PreviewHost } from "../scripts/preview-host";
+
+  const root = document.getElementById("editor-root");
+  const previewOrigin = root?.dataset.previewOrigin;
+  const fileSelect = document.getElementById(
+    "file-select"
+  ) as HTMLSelectElement | null;
+  const source = document.getElementById(
+    "source"
+  ) as HTMLTextAreaElement | null;
+  const stage = document.getElementById("stage");
+  const consoleList = document.getElementById("console");
+  const status = document.getElementById("status");
+
+  if (root && previewOrigin && fileSelect && source && stage && consoleList) {
+    const files: Record<string, string> = { ...DEFAULT_SKETCH_FILES };
+    let current = "sketch.js";
+
+    for (const name of Object.keys(files)) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      option.selected = name === current;
+      fileSelect.appendChild(option);
+    }
+    source.value = files[current] ?? "";
+
+    const setStatus = (text: string) => {
+      if (status) status.textContent = text;
+    };
+
+    const host = new PreviewHost(stage, {
+      previewOrigin,
+      onReady: () => setStatus("実行環境に接続しました"),
+      onRendered: (gen) => setStatus(`実行 #${gen}`),
+      onError: (message) => setStatus(message),
+      onConsole: (level, message) => {
+        const item = document.createElement("li");
+        item.className = `console-line console-${level}`;
+        item.textContent = message;
+        consoleList.appendChild(item);
+        while (consoleList.childElementCount > 100) {
+          consoleList.firstElementChild?.remove();
+        }
+        consoleList.scrollTop = consoleList.scrollHeight;
+      },
+    });
+
+    const run = () => {
+      files[current] = source.value;
+      consoleList.replaceChildren();
+      host.run(files satisfies SketchFiles);
+    };
+
+    fileSelect.addEventListener("change", () => {
+      files[current] = source.value;
+      current = fileSelect.value;
+      source.value = files[current] ?? "";
+    });
+
+    document.getElementById("run")?.addEventListener("click", run);
+    document.getElementById("stop")?.addEventListener("click", () => {
+      host.stop();
+      setStatus("停止しました");
+    });
+
+    // ⌘/Ctrl+Enter で実行。Mac の ⌘ と他 OS の Ctrl を両方拾う。
+    source.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+      // IME 変換中の Enter は確定であって実行ではない。
+      if (event.isComposing) return;
+      event.preventDefault();
+      run();
+    });
+
+    run();
+  }
+</script>
+
+<style>
+  #editor-root {
+    display: grid;
+    grid-template-columns: 1fr min(28rem, 40vw);
+    height: 100dvh;
+  }
+
+  #stage {
+    position: relative;
+    background: #000;
+  }
+
+  #stage :global(.preview-frame) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .panel {
+    display: grid;
+    grid-template-rows: auto 1fr 12rem;
+    min-width: 0;
+    border-left: 1px solid rgb(128 128 128 / 0.3);
+  }
+
+  .panel-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .status {
+    color: var(--muted);
+  }
+
+  textarea {
+    width: 100%;
+    height: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-top: 1px solid rgb(128 128 128 / 0.3);
+    background: transparent;
+    color: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    resize: none;
+  }
+
+  .console {
+    margin: 0;
+    padding: 0.5rem;
+    overflow-y: auto;
+    border-top: 1px solid rgb(128 128 128 / 0.3);
+    list-style: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125rem;
+  }
+
+  .console-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .console-warn {
+    color: #d08700;
+  }
+
+  .console-error {
+    color: var(--accent);
+  }
+
+  .error {
+    padding: 2rem;
+    color: var(--accent);
+  }
+</style>

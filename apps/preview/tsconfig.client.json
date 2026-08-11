@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ランナーはブラウザで動く。Workers 用の型 (worker-configuration.d.ts) とは
+    // グローバルが衝突するため、ワークスペースを分けずに tsconfig だけ分ける。
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["client"]
+}

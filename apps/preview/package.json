@@ -4,15 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "typecheck": "wrangler types && tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "build:client": "vite build",
+    "dev": "npm run build:client && wrangler dev",
+    "build": "npm run build:client && wrangler deploy --dry-run --outdir dist/worker",
+    "typecheck": "wrangler types && tsc --noEmit && tsc --noEmit -p tsconfig.client.json",
+    "deploy": "npm run build:client && wrangler deploy"
   },
   "dependencies": {
     "@p5stage/shared": "*"
   },
   "devDependencies": {
+    "vite": "^7.3.6",
     "wrangler": "^4.120.1"
   }
 }
