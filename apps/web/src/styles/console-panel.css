@@ -1,0 +1,106 @@
+/*
+ * コンソールパネルの見た目。
+ *
+ * パネルは console-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
+ * (file-tabs.css と同じ事情)。位置はページ側が決め、ここは中身だけを持つ。
+ *
+ * スケッチの上に重なるため、枠自体はクリックを透過させ、読むところ・押すところだけ
+ * 操作を受ける。出力が無い間はパネルごと消える (hidden)。
+ */
+
+.console-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  align-items: flex-end;
+  pointer-events: none;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-shadow: 0 0 4px rgb(0 0 0 / 0.9);
+}
+
+.console-panel[hidden] {
+  display: none;
+}
+
+.console-panel-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.console-panel-head button {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgb(255 255 255 / 0.45);
+  font: inherit;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+
+.console-panel-head button:hover,
+.console-panel-head button:focus-visible {
+  color: rgb(255 255 255 / 0.85);
+}
+
+.console-panel-count.has-error {
+  color: #ff8095;
+}
+
+/* 折りたたむと見出しだけが残る。出力が続いていることは件数で分かる。 */
+.console-panel-lines {
+  max-width: min(32rem, 50vw);
+  max-height: 30vh;
+  margin: 0;
+  padding: 0.375rem 0.5rem;
+  overflow-y: auto;
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 0.45);
+  list-style: none;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.console-panel-lines[hidden] {
+  display: none;
+}
+
+.console-line {
+  display: flex;
+  gap: 0.375rem;
+  align-items: baseline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* まとめた回数。1 回だけの行では空になるので、幅も取らせない。 */
+.console-line-count:not(:empty) {
+  flex: 0 0 auto;
+  padding: 0 0.25rem;
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.12);
+  color: rgb(255 255 255 / 0.75);
+  font-size: 0.6875rem;
+}
+
+.console-warn {
+  color: #ffcc66;
+}
+
+.console-error {
+  color: #ff8095;
+}
+
+.console-info {
+  color: #8ec7ff;
+}
+
+.console-debug {
+  color: rgb(255 255 255 / 0.4);
+}

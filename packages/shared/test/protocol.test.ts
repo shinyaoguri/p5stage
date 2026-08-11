@@ -7,6 +7,11 @@ import {
   parseHostMessage,
   parseRunnerMessage,
 } from "../src/protocol";
+import {
+  DEFAULT_TRANSITION_MS,
+  MAX_TRANSITION_MS,
+  MIN_TRANSITION_MS,
+} from "../src/transitions";
 
 const files = { "index.html": "<html></html>" };
 
@@ -16,7 +21,61 @@ describe("parseHostMessage", () => {
       type: "run",
       gen: 3,
       files,
+      transition: null,
     });
+  });
+
+  it("run の演出指定を読み取る", () => {
+    expect(
+      parseHostMessage(
+        envelope({
+          type: "run",
+          gen: 1,
+          files,
+          transition: { id: "dissolve", durationMs: 300 },
+        })
+      )
+    ).toEqual({
+      type: "run",
+      gen: 1,
+      files,
+      transition: { id: "dissolve", durationMs: 300 },
+    });
+  });
+
+  it("演出の長さを扱える範囲に丸める", () => {
+    const parse = (durationMs: unknown) =>
+      parseHostMessage(
+        envelope({
+          type: "run",
+          gen: 1,
+          files,
+          transition: { id: "dissolve", durationMs },
+        })
+      );
+    expect(parse(10)).toMatchObject({
+      transition: { durationMs: MIN_TRANSITION_MS },
+    });
+    expect(parse(999_999)).toMatchObject({
+      transition: { durationMs: MAX_TRANSITION_MS },
+    });
+    expect(parse("400")).toMatchObject({
+      transition: { durationMs: DEFAULT_TRANSITION_MS },
+    });
+  });
+
+  it("未知の演出は即時切替として扱い、実行そのものは通す", () => {
+    for (const transition of [
+      { id: "none", durationMs: 400 },
+      { id: "explode", durationMs: 400 },
+      { durationMs: 400 },
+      "dissolve",
+      null,
+    ]) {
+      expect(
+        parseHostMessage(envelope({ type: "run", gen: 1, files, transition }))
+      ).toEqual({ type: "run", gen: 1, files, transition: null });
+    }
   });
 
   it("stop を読み取る", () => {

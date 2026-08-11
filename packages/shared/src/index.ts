@@ -30,4 +30,25 @@ export type {
   Envelope,
   HostMessage,
   RunnerMessage,
+  TransitionRequest,
 } from "./protocol";
+
+export {
+  DEFAULT_TRANSITION_ID,
+  DEFAULT_TRANSITION_MS,
+  MAX_TRANSITION_MS,
+  MIN_TRANSITION_MS,
+  NO_TRANSITION,
+  TRANSITION_EASING,
+  TRANSITION_OPTIONS,
+  clampTransitionMs,
+  getTransition,
+  isTransitionId,
+} from "./transitions";
+export type {
+  LayerKeyframe,
+  LayerPlan,
+  LayerStyle,
+  PreviewTransition,
+  TransitionPlan,
+} from "./transitions";
