@@ -1,0 +1,119 @@
+/*
+ * ファイルタブの見た目。
+ *
+ * タブは file-tabs.ts が組み立てるので、Astro のスコープ付き CSS は届かない
+ * (エディタ本体の editor-overlay.css と同じ事情)。位置はページ側が決め、
+ * ここは中身の見た目だけを持つ。
+ *
+ * スケッチの上に重なるため、面は張らず文字と影で見せる。選択中だけ薄い面を敷き、
+ * どれを編集しているかが下のスケッチの明暗によらず分かるようにする。
+ */
+
+.file-tabs {
+  display: flex;
+  /* 折り返すと段が増えてエディタに被るので、増えたら横に流す。 */
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 0.8125rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-shadow: 0 0 3px #000;
+}
+
+.file-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.file-tab {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.file-tab:hover {
+  color: rgb(255 255 255 / 0.85);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.file-tab.is-active {
+  border-color: rgb(255 255 255 / 0.25);
+  background: rgb(0 0 0 / 0.4);
+  color: rgb(255 255 255 / 0.95);
+}
+
+/* キーボードで移ってきたときだけ枠を出す (マウス操作では出さない)。 */
+.file-tab:focus {
+  outline: none;
+}
+
+.file-tab:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.6);
+  outline-offset: 1px;
+}
+
+/* 削除ボタン。常時見えると賑やかなので、そのタブに触れている間だけ濃くする。 */
+.file-tab-remove {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  opacity: 0.35;
+  cursor: pointer;
+}
+
+.file-tab:hover .file-tab-remove,
+.file-tab.is-active .file-tab-remove {
+  opacity: 0.7;
+}
+
+.file-tab-remove:hover,
+.file-tab-remove:focus-visible {
+  opacity: 1;
+}
+
+/* 入力中のタブ。幅は文字数に合わせず固定にして、打つたびに並びが揺れないようにする。 */
+.file-tab.is-editing {
+  border-color: rgb(255 255 255 / 0.4);
+  background: rgb(0 0 0 / 0.55);
+}
+
+.file-tab-input {
+  width: 9rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #fff;
+  font: inherit;
+  text-shadow: inherit;
+}
+
+.file-tab-input:focus {
+  outline: none;
+}
+
+.file-tab-add {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 0.3);
+  color: inherit;
+  font: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.file-tab-add:hover {
+  border-color: rgb(255 255 255 / 0.4);
+  color: rgb(255 255 255 / 0.95);
+}

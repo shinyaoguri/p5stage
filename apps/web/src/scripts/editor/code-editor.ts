@@ -13,6 +13,7 @@
 import type { SketchFiles } from "@p5stage/shared";
 
 import "../../styles/editor-overlay.css";
+import { nextActiveFile } from "./file-actions";
 import { javascriptDefaults, monaco } from "./monaco";
 import { resolveLanguage } from "./languages";
 import { isRunShortcut } from "./run-shortcut";
@@ -32,6 +33,8 @@ export interface CodeEditorOptions {
   onRun(): void;
   /** 編集された (引数は編集されたファイル名)。ドラフト保存 (1-6) の受け口。 */
   onChange?(fileName: string): void;
+  /** ファイルの構成か、開いているファイルが変わった。タブの再描画に使う。 */
+  onFilesChanged?(fileNames: readonly string[], activeFile: string): void;
 }
 
 /** エディタの見た目の既定値。設定パネル (1-5) が入るまではこれで固定。 */
@@ -79,11 +82,14 @@ export class CodeEditor {
   /** ファイル名 → カーソル・スクロール位置。切り替えても編集位置が飛ばないようにする。 */
   readonly #viewStates = new Map<string, monaco.editor.ICodeEditorViewState>();
   readonly #disposables: monaco.IDisposable[] = [];
+  readonly #onFilesChanged: CodeEditorOptions["onFilesChanged"];
   #activeFile: string;
 
   constructor(container: HTMLElement, options: CodeEditorOptions) {
     registerThemes();
     configureJavaScriptDiagnostics();
+
+    this.#onFilesChanged = options.onFilesChanged;
 
     const names = Object.keys(options.files);
     if (names.length === 0) {
@@ -183,6 +189,90 @@ export class CodeEditor {
 
     const restored = this.#viewStates.get(fileName);
     if (restored !== undefined) this.#editor.restoreViewState(restored);
+
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
+  }
+
+  /**
+   * ファイルを追加して開く。名前の妥当性は呼び出し側 (file-actions) が済ませる前提で、
+   * ここでは構成を壊す重複だけを拒む。
+   */
+  addFile(fileName: string, content = ""): void {
+    if (this.#models.has(fileName)) {
+      throw new Error(`${fileName} は既にあります`);
+    }
+    this.#models.set(fileName, this.#createModel(fileName, content));
+    this.#activeFile = fileName;
+    this.#editor.setModel(this.#models.get(fileName) ?? null);
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
+  }
+
+  /** ファイルを削除する。開いていたら隣のファイルへ移る。 */
+  removeFile(fileName: string): void {
+    const model = this.#models.get(fileName);
+    if (model === undefined) return;
+
+    const nextFile = nextActiveFile(this.fileNames, fileName);
+    if (nextFile === null) {
+      throw new Error("最後のファイルは削除できません");
+    }
+
+    const wasActive = fileName === this.#activeFile;
+    // setModel より先に破棄すると、破棄済みモデルを指した一瞬が生まれる。
+    if (wasActive) {
+      this.#activeFile = nextFile;
+      this.#editor.setModel(this.#models.get(nextFile) ?? null);
+      const restored = this.#viewStates.get(nextFile);
+      if (restored !== undefined) this.#editor.restoreViewState(restored);
+    }
+
+    this.#models.delete(fileName);
+    this.#viewStates.delete(fileName);
+    model.dispose();
+
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
+  }
+
+  /**
+   * ファイルの名前を変える。並び順は変わらない。
+   *
+   * Monaco のモデル URI は後から変えられないので、内容を移した新しいモデルに
+   * 差し替える。**undo 履歴はここで切れる** (カーソル位置は引き継ぐ)。URI に
+   * ファイル名を残すのは、拡張子を手掛かりにする言語サービスのため。
+   */
+  renameFile(fileName: string, newName: string): void {
+    const model = this.#models.get(fileName);
+    if (model === undefined || fileName === newName) return;
+    if (this.#models.has(newName)) {
+      throw new Error(`${newName} は既にあります`);
+    }
+
+    const wasActive = fileName === this.#activeFile;
+    const state = wasActive
+      ? this.#editor.saveViewState()
+      : (this.#viewStates.get(fileName) ?? null);
+
+    const renamed = this.#createModel(newName, model.getValue());
+
+    // Map は挿入順しか持たないため、並びを保つには作り直すしかない。
+    const entries = [...this.#models].map(
+      ([name, current]): [string, monaco.editor.ITextModel] =>
+        name === fileName ? [newName, renamed] : [name, current]
+    );
+    this.#models.clear();
+    for (const [name, current] of entries) this.#models.set(name, current);
+
+    this.#viewStates.delete(fileName);
+    if (state !== null) this.#viewStates.set(newName, state);
+
+    if (wasActive) {
+      this.#activeFile = newName;
+      this.#editor.setModel(renamed);
+      if (state !== null) this.#editor.restoreViewState(state);
+    }
+    model.dispose();
+
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
   }
 
   /** 現在の編集内容。 */

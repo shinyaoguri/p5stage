@@ -7,6 +7,7 @@ export {
   MAX_FILE_BYTES,
   MAX_FILE_COUNT,
   fileByteLength,
+  fileNameError,
   isValidFileName,
   parseSketchFiles,
   validateSketchFiles,

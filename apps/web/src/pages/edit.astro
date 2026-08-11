@@ -30,15 +30,9 @@ try {
         <div id="stage" />
         <div id="editor" />
 
-        {/*
-          ファイルの切り替えは 1-3 でタブに差し替える。ここでは 1-1 の
-          暫定 UI をそのまま引き継いでいる (Issue #11)。
-        */}
+        <div id="file-tabs" />
+
         <div class="chrome">
-          <label class="file-picker">
-            ファイル
-            <select id="file-select" />
-          </label>
           <button id="run" type="button">
             実行 (⌘/Ctrl+Enter)
           </button>
@@ -58,27 +52,19 @@ try {
   import { DEFAULT_SKETCH_FILES } from "@p5stage/shared";
 
   import { CodeEditor } from "../scripts/editor/code-editor";
+  import { FileTabs } from "../scripts/editor/file-tabs";
   import { isRunShortcut } from "../scripts/editor/run-shortcut";
   import { PreviewHost } from "../scripts/preview-host";
 
   const root = document.getElementById("editor-root");
   const previewOrigin = root?.dataset.previewOrigin;
   const editorHost = document.getElementById("editor");
-  const fileSelect = document.getElementById(
-    "file-select"
-  ) as HTMLSelectElement | null;
+  const tabsHost = document.getElementById("file-tabs");
   const stage = document.getElementById("stage");
   const consoleList = document.getElementById("console");
   const status = document.getElementById("status");
 
-  if (
-    root &&
-    previewOrigin &&
-    editorHost &&
-    fileSelect &&
-    stage &&
-    consoleList
-  ) {
+  if (root && previewOrigin && editorHost && tabsHost && stage && consoleList) {
     const setStatus = (text: string) => {
       if (status) status.textContent = text;
     };
@@ -109,20 +95,38 @@ try {
       files: DEFAULT_SKETCH_FILES,
       activeFile: "sketch.js",
       onRun: run,
+      onFilesChanged: (fileNames, activeFile) =>
+        tabs.render(fileNames, activeFile),
     });
 
-    for (const name of editor.fileNames) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      option.selected = name === editor.activeFile;
-      fileSelect.appendChild(option);
-    }
-
-    fileSelect.addEventListener("change", () => {
-      editor.open(fileSelect.value);
-      editor.focus();
+    const tabs = new FileTabs(tabsHost, {
+      onSelect: (name, { moveFocusToEditor }) => {
+        editor.open(name);
+        if (moveFocusToEditor) editor.focus();
+      },
+      onAdd: (name) => {
+        editor.addFile(name);
+        editor.focus();
+      },
+      onRename: (name, newName) => {
+        editor.renameFile(name, newName);
+        editor.focus();
+      },
+      onRemove: (name) => {
+        // 削除は取り消せない (ドラフト保存は 1-6)。中身があるときだけ確認する。
+        const content = editor.getFiles()[name] ?? "";
+        if (
+          content.trim() !== "" &&
+          !window.confirm(`${name} を削除します。元に戻せません。`)
+        ) {
+          return;
+        }
+        editor.removeFile(name);
+        editor.focus();
+      },
+      onError: setStatus,
     });
+    tabs.render(editor.fileNames, editor.activeFile);
 
     document.getElementById("run")?.addEventListener("click", run);
     document.getElementById("stop")?.addEventListener("click", () => {
@@ -185,13 +189,16 @@ try {
     text-shadow: 0 0 3px #000;
   }
 
-  .file-picker {
-    display: flex;
-    gap: 0.375rem;
-    align-items: center;
+  /* ファイルタブ。左上に置き、右上の実行ボタン群とは重ならない幅に収める。
+     中身の見た目は styles/file-tabs.css (JS が組み立てる DOM に届かせるため)。 */
+  #file-tabs {
+    position: absolute;
+    z-index: 20;
+    top: 0.5rem;
+    left: 0.75rem;
+    max-width: calc(100% - 22rem);
   }
 
-  .chrome select,
   .chrome button {
     padding: 0.25rem 0.5rem;
     border: 1px solid rgb(255 255 255 / 0.25);
