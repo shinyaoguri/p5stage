@@ -13,12 +13,13 @@ p5.js スケッチの開発・共有プラットフォーム (OpenProcessing.org
 npm run lint          # ESLint
 npm run format:check  # Prettier
 npm run typecheck     # wrangler types → 各ワークスペースの型検査
-npm test              # Vitest
+npm test              # Vitest (DOM に依存しない純ロジック)
 npm run build         # 全ワークスペースのビルド
+npm run test:e2e      # Playwright (実ブラウザ。サーバ起動は config が受け持つ)
 ```
 
-CI (.github/workflows/ci.yml) はこの順で実行する。required check は集約ジョブ
-`ci-gate` 1 本。可逆な変更の PR は `gh pr merge <番号> --auto --squash` で
+CI (.github/workflows/ci.yml) は上から順に `verify` ジョブで、`test:e2e` は
+並行する `e2e` ジョブで実行する。required check は集約ジョブ `ci-gate` 1 本。可逆な変更の PR は `gh pr merge <番号> --auto --squash` で
 CI green を待って自動マージする。
 
 ## リポ固有の注意

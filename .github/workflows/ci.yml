@@ -31,9 +31,43 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  e2e:
+    name: e2e (playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # ブラウザ本体は 100MB 超。Playwright のバージョンが変わるまで使い回す。
+      - name: Playwright のブラウザをキャッシュ
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Playwright のブラウザを入れる
+        # キャッシュから戻したときも OS の依存ライブラリは入れ直す必要がある。
+        run: npx playwright install --with-deps chromium
+
+      # サーバ (両アプリの wrangler dev) の起動は playwright.config.ts が受け持つ。
+      - run: npm run test:e2e
+
+      - name: 失敗したときだけレポートを残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   deploy:
     name: deploy (cloudflare workers)
-    needs: verify
+    # 実行が通らないものは出さない。E2E は「別オリジンで実行できる」の最後の砦。
+    needs: [verify, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
@@ -75,6 +109,8 @@ jobs:
 
   preview-deploy:
     name: preview deploy (pull request)
+    # E2E は待たない。落ちたときに実物を見て切り分けられるよう、
+    # 確認用の URL は先に出す。
     needs: verify
     # fork からの PR にはシークレットが渡らないので同一リポジトリの PR に限る。
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -202,7 +238,7 @@ jobs:
   # 永久 pending になり auto-merge が詰まる。
   ci-gate:
     name: ci-gate
-    needs: [verify, deploy, preview-deploy]
+    needs: [verify, e2e, deploy, preview-deploy]
     # 既定では前段が失敗するとこのジョブごと skip され、required check が報告されない
     # まま pending で止まる。always() で必ず走らせ、結果は自前で判定する。
     if: always()

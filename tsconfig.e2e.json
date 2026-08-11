@@ -1,0 +1,10 @@
+{
+  // E2E (Playwright) はワークスペースのどれにも属さないので、ここで型を見る。
+  // ブラウザ側で動く evaluate のコールバックがあるため DOM の型も要る。
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["e2e", "playwright.config.ts"]
+}
