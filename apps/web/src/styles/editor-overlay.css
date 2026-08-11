@@ -1,0 +1,156 @@
+/*
+ * 透過エディタの見た目。
+ *
+ * Monaco は自前の DOM を生成し、その中身にはスコープ付き CSS が届かない。
+ * そのためここはグローバル CSS として持ち、code-editor.ts が読み込む。
+ * 値は CSS 変数に出してあり、設定パネル (Issue #11 の 1-5) はここを書き換える。
+ *
+ * 移植元は canvastage の style.css。スケッチの上で文字が読めるかどうかは
+ * 「背景を透明にする」だけでは決まらず、text-shadow・行番号の薄さ・選択色まで
+ * まとめて 1 つのレシピになっている。個別に外すと読めなくなる。
+ */
+
+:root {
+  --editor-text-opacity: 0.9;
+  --editor-text-shadow-blur: 3px;
+  --editor-text-shadow-color: #000000;
+
+  --editor-line-number-color: rgb(255 255 255 / 0.3);
+
+  --editor-cursor-width: 2px;
+  --editor-cursor-bg: rgb(255 255 255 / 0.8);
+
+  --editor-selection-bg: rgb(255 255 255 / 0.15);
+
+  --editor-current-line-bg: rgb(255 255 255 / 0.05);
+
+  --editor-suggest-bg: rgb(0 0 0 / 0.4);
+  --editor-suggest-blur: 8px;
+  --editor-suggest-text-color: rgb(255 255 255 / 0.5);
+}
+
+/* 背景の透過。Monaco は入れ子の各層が自前の背景色を持つため、まとめて消す。 */
+.monaco-editor,
+.monaco-editor .overflow-guard,
+.monaco-editor .monaco-scrollable-element,
+.monaco-editor .inputarea.ime-input,
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background,
+.monaco-editor .lines-content,
+.monaco-editor .view-lines,
+.monaco-editor .view-line {
+  background: transparent !important;
+}
+
+/* フォーカス枠は透過の上では線だけが浮くので消す。 */
+.monaco-editor,
+.monaco-editor *:focus,
+.monaco-editor *:focus-visible {
+  outline: none !important;
+}
+
+/* 行番号。`.monaco-editor .line-numbers` と同一セレクタにすると CSS の
+   ミニファイアに元の規則とマージされて消えるため、間に一段挟む。 */
+.monaco-editor .margin-view-overlays .line-numbers {
+  color: var(--editor-line-number-color) !important;
+}
+
+.monaco-editor .cursor {
+  width: var(--editor-cursor-width) !important;
+  background: var(--editor-cursor-bg) !important;
+}
+
+/* Monaco の隠し入力欄のネイティブキャレットが二重に見えるのを防ぐ。 */
+.monaco-editor .inputarea,
+.monaco-editor textarea,
+.monaco-editor input,
+.monaco-editor .native-edit-context {
+  caret-color: transparent !important;
+}
+
+/* 文字。影を敷くことで明るいスケッチの上でも輪郭が残る。 */
+.monaco-editor .view-line span {
+  opacity: var(--editor-text-opacity) !important;
+  text-shadow: 0 0 var(--editor-text-shadow-blur)
+    var(--editor-text-shadow-color);
+}
+
+.monaco-editor .selected-text {
+  background: var(--editor-selection-bg) !important;
+}
+
+.monaco-editor .current-line,
+.monaco-editor .view-overlays .current-line {
+  border: none !important;
+  background: var(--editor-current-line-bg) !important;
+}
+
+/* 以下は「スケッチの上に置くと目立つだけの装飾」を消す群。 */
+.monaco-editor .focused .selected-text,
+.monaco-editor .view-overlays .focused-line,
+.monaco-editor .view-overlays .line-insert,
+.monaco-editor .view-overlays .line-delete {
+  border: none !important;
+}
+
+.monaco-editor .wordHighlight,
+.monaco-editor .wordHighlightStrong,
+.monaco-editor .wordHighlightText,
+.monaco-editor .selectionHighlight,
+.monaco-editor .line-decoration,
+.monaco-editor .rangeHighlight,
+.monaco-editor .lineHighlight {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.monaco-editor .findMatch,
+.monaco-editor .findMatchHighlight {
+  border: none !important;
+  background: rgb(255 255 255 / 0.1) !important;
+}
+
+.monaco-editor .view-overlays > div > div {
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+.monaco-editor .monaco-highlighted-label,
+.monaco-editor .detected-link {
+  border: none !important;
+}
+
+/* 補完候補。スケッチが透けると読めないので、ここだけは半透明の面を敷く。 */
+.monaco-editor .suggest-widget {
+  border: 1px solid rgb(255 255 255 / 0.05) !important;
+  background: var(--editor-suggest-bg) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(var(--editor-suggest-blur)) !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list {
+  background: transparent !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row {
+  color: var(--editor-suggest-text-color) !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+  background: rgb(255 255 255 / 0.08) !important;
+  color: rgb(255 255 255 / 0.8) !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row .highlight {
+  color: rgb(255 255 255 / 0.9) !important;
+}
+
+.monaco-editor .suggest-widget .details {
+  border-color: rgb(255 255 255 / 0.05) !important;
+  background: var(--editor-suggest-bg) !important;
+}
+
+.monaco-editor .suggest-widget .details .body {
+  color: var(--editor-suggest-text-color) !important;
+}
