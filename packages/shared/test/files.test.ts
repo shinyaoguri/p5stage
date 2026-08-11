@@ -4,10 +4,27 @@ import {
   ENTRY_FILE,
   MAX_FILE_BYTES,
   MAX_FILE_COUNT,
+  fileNameError,
   isValidFileName,
   parseSketchFiles,
   validateSketchFiles,
 } from "../src/files";
+
+describe("fileNameError", () => {
+  it("使える名前には理由を返さない", () => {
+    expect(fileNameError("sketch.js")).toBeNull();
+  });
+
+  it("理由をファイル名ごとに書き分ける (エディタがそのまま表示する)", () => {
+    // 「なぜ駄目か」が分かる文言であること。文面そのものではなく要点で確かめる。
+    expect(fileNameError("")).toContain("入力");
+    expect(fileNameError(" sketch.js")).toContain("空白");
+    expect(fileNameError("lib/util.js")).toContain("フォルダ");
+    expect(fileNameError("a".repeat(256))).toContain("長すぎ");
+    expect(fileNameError("..")).toContain("使えません");
+    expect(fileNameError(`a${String.fromCharCode(0)}b.js`)).toContain("文字");
+  });
+});
 
 describe("isValidFileName", () => {
   it("通常のファイル名を許す", () => {

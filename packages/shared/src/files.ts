@@ -38,18 +38,31 @@ function hasControlChar(name: string): boolean {
 }
 
 /**
- * ファイル名として使えるか。
+ * ファイル名が使えない理由。使えるなら null。
  *
  * フラット構成なので区切り文字を含む名前は受け付けない。前後の空白を許すと
  * 「見た目が同じ別ファイル」ができてしまうため、トリム済みであることも求める。
+ *
+ * 真偽値ではなく理由を返すのは、エディタのリネーム UI が入力中の名前について
+ * 「なぜ駄目か」をそのまま表示できるようにするため。
  */
+export function fileNameError(name: string): string | null {
+  if (name.length === 0) return "ファイル名を入力してください";
+  if (name !== name.trim()) return "ファイル名の前後に空白は使えません";
+  if (name.length > MAX_FILE_NAME_LENGTH) {
+    return `ファイル名が長すぎます (${MAX_FILE_NAME_LENGTH} 文字まで)`;
+  }
+  if (name === "." || name === "..") return `${name} は名前として使えません`;
+  if (name.includes("/") || name.includes("\\")) {
+    return "フォルダは作れません (/ と \\ は使えません)";
+  }
+  if (hasControlChar(name)) return "ファイル名に使えない文字があります";
+  return null;
+}
+
+/** ファイル名として使えるか。 */
 export function isValidFileName(name: string): boolean {
-  if (name.length === 0 || name.length > MAX_FILE_NAME_LENGTH) return false;
-  if (name !== name.trim()) return false;
-  if (name === "." || name === "..") return false;
-  if (name.includes("/") || name.includes("\\")) return false;
-  if (hasControlChar(name)) return false;
-  return true;
+  return fileNameError(name) === null;
 }
 
 /** 内容のバイト数 (UTF-8)。上限判定は文字数ではなくバイト数で行う。 */
