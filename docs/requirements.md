@@ -30,7 +30,9 @@ OpenProcessing との差別化:
 - 透過 Monaco が実行キャンバスに重なるライブコーディング体験 (canvastage の code-editor / preview / transitions / settings を移植)
 - ファイル構成: index.html / style.css / sketch.js を既定とし、任意のテキストファイルを追加可能 (.js / .glsl / .json / .csv 等)。フォルダは無しのフラット構成 (Gist の制約。OpenProcessing のタブ構成と同等の自由度)
 - Ctrl/⌘+Enter で即時実行、再実行トランジション
-- ドラフト自動保存 (IndexedDB。canvastage の drafts 実装を流用)
+- ドラフト自動保存 (IndexedDB)。canvastage に相当実装は無く新規に作る
+  (あちらの IndexedDB は設定とトークンのみで、コードの永続化は Gist 自動保存が担っている)。
+  汎用ストア `idb-store.ts` は流用できる
 
 ### 3.2 保存・バージョン管理
 
@@ -55,7 +57,9 @@ OpenProcessing との差別化:
 - **準リアルタイム同期閲覧**: 作者の再実行 (Gist リビジョン作成) を数秒〜10 秒の遅延で閲覧者の画面に反映する。経路はエディタ → バックエンド通知 → SSE/WebSocket 配信。完全なリアルタイム性は不要。共同編集はスコープ外
 - 公開範囲: **public** (公開 Gist) / **限定公開** (secret gist。「URL を知る人は誰でも見られる = private ではない」注意書き必須) の 2 段階。真の非公開は要件から除外
 - フォーク: Gist fork API を利用。blob は共有 (コピー不要の O(1))
-- サムネイル: 実行キャンバスから自動取得 (canvastage の capture-thumbnail ブリッジ) → R2 保存、Cloudflare Images でリサイズ配信
+- サムネイル: 実行キャンバスから自動取得 → R2 保存、Cloudflare Images でリサイズ配信。
+  canvastage に相当するブリッジは無く新規に作る (別オリジン iframe からの取得になるため
+  postMessage 越しの設計が必要)
 
 ### 3.5 発見 (ギャラリー)
 
@@ -106,4 +110,6 @@ OpenProcessing との差別化:
 
 - Gist の制約: テキストのみ・フラット (フォルダ無し)・API は 1 ファイル 1MB で truncated (サービス側で 1MB 以下を強制し API 完結)・300 ファイル上限
 - Gist に webhook は無い。更新検出は「自サービスのエディタが PATCH 時にバックエンドへ通知」+「表示時の conditional GET」+「404 時の tombstone 処理」(ユーザーは GitHub 側で直接削除できる)
-- インフラは Cloudflare (ADR 0001)。egress 無料が「バズっても転送費ゼロ」を構造的に保証する
+- インフラは Cloudflare (ADR 0001)。配信は Workers の static assets (ADR 0006)。
+  egress 無料が「バズっても転送費ゼロ」を構造的に保証する
+- フロントエンドは Astro + islands (ADR 0004)、リポジトリは npm workspaces のモノレポ (ADR 0005)
