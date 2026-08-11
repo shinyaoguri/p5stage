@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@p5stage/shared": "*",
+    "idb": "^8.0.3",
     "monaco-editor": "^0.56.0"
   },
   "devDependencies": {

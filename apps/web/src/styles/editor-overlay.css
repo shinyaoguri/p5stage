@@ -3,7 +3,9 @@
  *
  * Monaco は自前の DOM を生成し、その中身にはスコープ付き CSS が届かない。
  * そのためここはグローバル CSS として持ち、code-editor.ts が読み込む。
- * 値は CSS 変数に出してあり、設定パネル (Issue #11 の 1-5) はここを書き換える。
+ * 値は CSS 変数に出してあり、設定パネルが scripts/settings/css-variables.ts 経由で
+ * 書き換える。**`:root` の値は設定が当たるまでの一瞬に効くだけ**で、既定値の正本は
+ * scripts/settings/definitions.ts (両者がずれても見えるのは初回描画の数フレーム)。
  *
  * 移植元は canvastage の style.css。スケッチの上で文字が読めるかどうかは
  * 「背景を透明にする」だけでは決まらず、text-shadow・行番号の薄さ・選択色まで
@@ -17,7 +19,6 @@
 
   --editor-line-number-color: rgb(255 255 255 / 0.3);
 
-  --editor-cursor-width: 2px;
   --editor-cursor-bg: rgb(255 255 255 / 0.8);
 
   --editor-selection-bg: rgb(255 255 255 / 0.15);
@@ -55,8 +56,9 @@
   color: var(--editor-line-number-color) !important;
 }
 
+/* カーソルの色だけをここで持つ。幅は Monaco のオプション (設定の「太さ」) に
+   任せる。CSS で固定すると、形にブロックや下線を選んでも線の幅に潰れる。 */
 .monaco-editor .cursor {
-  width: var(--editor-cursor-width) !important;
   background: var(--editor-cursor-bg) !important;
 }
 
