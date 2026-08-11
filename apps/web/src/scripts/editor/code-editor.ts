@@ -277,6 +277,37 @@ export class CodeEditor {
     this.#onFilesChanged?.(this.fileNames, this.#activeFile);
   }
 
+  /**
+   * ファイル構成をまるごと差し替える (ドラフトの破棄・Phase 2 の作品読み込み)。
+   *
+   * **undo 履歴とカーソル位置は捨てる**。差し替え前の内容へ undo で戻れると、
+   * 「破棄したはずのものが混ざる」ことになる。
+   */
+  setFiles(files: SketchFiles, activeFile?: string): void {
+    const names = Object.keys(files);
+    if (names.length === 0) {
+      throw new Error("ファイルが 1 つもありません");
+    }
+
+    // 表示中のモデルを破棄する前に外す。付けたまま捨てると、破棄済みモデルを
+    // 指した一瞬が生まれる。
+    this.#editor.setModel(null);
+    for (const model of this.#models.values()) model.dispose();
+    this.#models.clear();
+    this.#viewStates.clear();
+
+    for (const name of names) {
+      this.#models.set(name, this.#createModel(name, files[name] ?? ""));
+    }
+    this.#activeFile =
+      activeFile !== undefined && this.#models.has(activeFile)
+        ? activeFile
+        : (names[0] as string);
+    this.#editor.setModel(this.#models.get(this.#activeFile) ?? null);
+
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
+  }
+
   /** 現在の編集内容。 */
   getFiles(): SketchFiles {
     const files: Record<string, string> = {};

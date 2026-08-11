@@ -1,0 +1,54 @@
+/**
+ * ドラフト (保存前の編集内容) の形と検証。
+ *
+ * Phase 1 には作品の保存先が無く、ブラウザを閉じれば書いたものは消える。
+ * ドラフトはその穴を埋めるだけのもので、**正本ではない** (正本は Phase 2 の
+ * Gist)。だから復元できない値に出会っても投げず、扱える形へ倒すか捨てる。
+ *
+ * 検証を設定 (settings.ts) と同じく「壊れているところだけ倒す」方針に揃えてある。
+ * ただしファイルの中身だけは倒しようがないので、構造が壊れていれば
+ * ドラフト全体を捨てて既定のテンプレートで始める。
+ */
+
+import { parseSketchFiles, type SketchFiles } from "@p5stage/shared";
+
+export interface SketchDraft {
+  /** 編集中のファイル一式。 */
+  readonly files: SketchFiles;
+  /** 最後に開いていたファイル。必ず files に含まれる。 */
+  readonly activeFile: string;
+  /** 書き込んだ時刻 (エポックミリ秒)。復元したことを人に伝えるために持つ。 */
+  readonly savedAt: number;
+}
+
+/**
+ * 素性の知れない値をドラフトとして読み取る。読めなければ null。
+ *
+ * ファイル構成の検証は `parseSketchFiles` に任せる (エディタ・ランナー・
+ * ドラフトで判断が割れないよう、正本は `@p5stage/shared`)。サイズ超過は
+ * ここでは弾かない。上限は Gist の制約で、手元の下書きを捨てる理由にはならない。
+ */
+export function parseDraft(value: unknown): SketchDraft | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+
+  const files = parseSketchFiles(source.files);
+  if (files === null) return null;
+
+  // 開いていたファイルが消えている (別タブで消した・手で書き換えた) ことは
+  // ありうる。ドラフト全体を捨てる理由にはならないので先頭のファイルへ倒す。
+  const names = Object.keys(files);
+  const activeFile =
+    typeof source.activeFile === "string" && names.includes(source.activeFile)
+      ? source.activeFile
+      : (names[0] as string);
+
+  const savedAt =
+    typeof source.savedAt === "number" && Number.isFinite(source.savedAt)
+      ? source.savedAt
+      : 0;
+
+  return { files, activeFile, savedAt };
+}

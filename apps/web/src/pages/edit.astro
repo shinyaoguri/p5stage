@@ -32,14 +32,19 @@ try {
 
         <div id="file-tabs" />
 
-        {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。 */}
+        {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。
+            下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。 */}
         <div class="chrome">
+          <span id="draft-status" class="status draft-status" role="status" />
           <span id="status" class="status" role="status" />
           <button id="run" type="button">
             実行 (⌘/Ctrl+Enter)
           </button>
           <button id="stop" type="button">
             停止
+          </button>
+          <button id="new" type="button">
+            新規
           </button>
           <div id="settings" />
         </div>
@@ -57,6 +62,7 @@ try {
     type TransitionRequest,
   } from "@p5stage/shared";
 
+  import { DraftSaver, loadDraft } from "../scripts/draft/draft-store";
   import { CodeEditor } from "../scripts/editor/code-editor";
   import { ConsolePanel } from "../scripts/editor/console-panel";
   import { FileTabs } from "../scripts/editor/file-tabs";
@@ -77,6 +83,19 @@ try {
   const consoleHost = document.getElementById("console");
   const settingsHost = document.getElementById("settings");
   const status = document.getElementById("status");
+  const draftStatus = document.getElementById("draft-status");
+
+  /**
+   * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
+   * ここは実行ボタンと同じ行に出るので、年を出して折り返させない。
+   */
+  const formatSavedAt = (savedAt: number) =>
+    new Date(savedAt).toLocaleString("ja-JP", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   const init = async () => {
     if (
@@ -94,11 +113,22 @@ try {
     const setStatus = (text: string) => {
       if (status) status.textContent = text;
     };
+    const setDraftStatus = (text: string) => {
+      if (draftStatus) draftStatus.textContent = text;
+    };
 
-    // エディタを作る前に設定を読む。後から当てると、初回の描画だけ既定の見た目が
-    // 見えてから切り替わる。
-    let settings = await loadSettings();
+    // エディタを作る前に設定と下書きを読む。後から当てると、初回の描画だけ
+    // 既定の見た目・既定のテンプレートが見えてから切り替わる。
+    // どちらも相手を待つ理由が無いので同時に読む。
+    const [initialSettings, draft] = await Promise.all([
+      loadSettings(),
+      loadDraft(),
+    ]);
+    let settings = initialSettings;
     applyCssVariables(settings);
+    if (draft !== null) {
+      setDraftStatus(`下書きを復元しました (${formatSavedAt(draft.savedAt)})`);
+    }
 
     const consolePanel = new ConsolePanel(consoleHost);
 
@@ -122,26 +152,51 @@ try {
       host.run(editor.getFiles(), selectedTransition());
     };
 
-    const editor = new CodeEditor(editorHost, {
-      files: DEFAULT_SKETCH_FILES,
-      activeFile: "sketch.js",
-      settings,
-      onRun: run,
-      onFilesChanged: (fileNames, activeFile) =>
-        tabs.render(fileNames, activeFile),
+    const draftSaver = new DraftSaver({
+      onSaved: (saved) =>
+        setDraftStatus(`下書きを保存 (${formatSavedAt(saved.savedAt)})`),
+      // 保存できない環境 (IndexedDB が無効・容量超過) は編集を止める理由には
+      // ならないが、黙って失われるのは困るので出したままにする。
+      onError: () => setDraftStatus("下書きを保存できません"),
     });
 
-    const saver = new SettingsSaver();
+    // 下書きは内容の変更 (onChange) だけでなく、ファイルの増減・改名・
+    // 開いているファイルの移動 (onFilesChanged) でも書く。
+    const saveDraft = () =>
+      draftSaver.save(editor.getFiles(), editor.activeFile);
+
+    const editor = new CodeEditor(editorHost, {
+      files: draft?.files ?? DEFAULT_SKETCH_FILES,
+      activeFile: draft?.activeFile ?? "sketch.js",
+      settings,
+      onRun: run,
+      onChange: saveDraft,
+      onFilesChanged: (fileNames, activeFile) => {
+        tabs.render(fileNames, activeFile);
+        saveDraft();
+      },
+    });
+
+    const settingsSaver = new SettingsSaver();
     new SettingsPanel(settingsHost, settings, {
       onChange: (next) => {
         settings = next;
         applyCssVariables(next);
         editor.applySettings(next);
-        saver.save(next);
+        settingsSaver.save(next);
       },
     });
-    // 間引いた書き込みがページを離れるときに残らないようにする。
-    window.addEventListener("pagehide", () => void saver.flush());
+
+    // 間引いた書き込みがページを離れるときに残らないようにする。モバイルでは
+    // pagehide が来ないまま破棄されることがあるので、隠れた時点でも書く。
+    const flushAll = () => {
+      void settingsSaver.flush();
+      void draftSaver.flush();
+    };
+    window.addEventListener("pagehide", flushAll);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushAll();
+    });
 
     const tabs = new FileTabs(tabsHost, {
       onSelect: (name, { moveFocusToEditor }) => {
@@ -157,7 +212,8 @@ try {
         editor.focus();
       },
       onRemove: (name) => {
-        // 削除は取り消せない (ドラフト保存は 1-6)。中身があるときだけ確認する。
+        // 削除は取り消せない (下書きも削除後の姿で上書きされる)。
+        // 中身があるときだけ確認する。
         const content = editor.getFiles()[name] ?? "";
         if (
           content.trim() !== "" &&
@@ -176,6 +232,21 @@ try {
     document.getElementById("stop")?.addEventListener("click", () => {
       host.stop();
       setStatus("停止しました");
+    });
+
+    // 下書きは黙って復元される。戻る道が無いと前回の続きから抜けられないので、
+    // 破棄して最初から始める口をここに置く。
+    document.getElementById("new")?.addEventListener("click", () => {
+      if (!window.confirm("編集中の内容を破棄して新しいスケッチを始めます。")) {
+        return;
+      }
+      // 差し替えで onFilesChanged が走り保存が予約される。その予約ごと
+      // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
+      editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
+      void draftSaver.clear();
+      setDraftStatus("下書きを破棄しました");
+      run();
+      editor.focus();
     });
 
     // エディタの外 (ボタンやファイル選択) にフォーカスがあるときの ⌘/Ctrl+Enter。
@@ -264,6 +335,11 @@ try {
 
   .status {
     color: rgb(255 255 255 / 0.7);
+  }
+
+  /* 下書きの状態は常時出たままになるので、実行の状態より控えめにする。 */
+  .draft-status {
+    color: rgb(255 255 255 / 0.5);
   }
 
   /* コンソール。中身の見た目は styles/console-panel.css (JS が組み立てる DOM に
