@@ -15,10 +15,10 @@
 import { openDB, type IDBPDatabase } from "idb";
 
 const DB_NAME = "p5stage";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** 使うオブジェクトストア。追加時は DB_VERSION も上げる。 */
-const STORE_NAMES = ["settings"] as const;
+const STORE_NAMES = ["settings", "drafts"] as const;
 
 export type StoreName = (typeof STORE_NAMES)[number];
 
