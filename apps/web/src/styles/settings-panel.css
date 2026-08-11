@@ -1,0 +1,178 @@
+/*
+ * 設定パネルの見た目。
+ *
+ * パネルは settings-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
+ * (file-tabs.css・console-panel.css と同じ事情)。位置はページ側が決め、
+ * ここは中身だけを持つ。
+ *
+ * スケッチの上に重なるため、閉じている間はボタン 1 つだけで、開いたときも
+ * 面はパネルの幅に留める。設定は「見た目を見ながら」調整するものなので、
+ * 画面の大半は塞がない。
+ */
+
+/* パネル本体はボタンから浮かせる。ボタンは右上の操作列に並ぶので、
+   開閉のたびに列の高さが変わって実行ボタンが動く、ということが起きない。 */
+.settings-panel {
+  position: relative;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.settings-panel-toggle {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 0.4);
+  color: rgb(255 255 255 / 0.8);
+  font: inherit;
+  text-shadow: 0 0 3px #000;
+  cursor: pointer;
+}
+
+.settings-panel-toggle:hover,
+.settings-panel-toggle:focus-visible {
+  background: rgb(255 255 255 / 0.15);
+  color: #fff;
+}
+
+.settings-panel.is-open .settings-panel-toggle {
+  border-color: rgb(255 255 255 / 0.45);
+}
+
+.settings-panel-body {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 17rem;
+  /* 画面の高さに収め、あふれる分はパネルの中でスクロールさせる。 */
+  max-height: min(70vh, 40rem);
+  padding: 0.75rem;
+  overflow-y: auto;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.375rem;
+  background: rgb(0 0 0 / 0.72);
+  color: rgb(255 255 255 / 0.75);
+  backdrop-filter: blur(10px);
+}
+
+.settings-panel-body[hidden] {
+  display: none;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.settings-group-title {
+  margin: 0;
+  color: rgb(255 255 255 / 0.45);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* 1 項目 = ラベル / 現在値 / コントロール。ラベル列の幅を揃えて縦線を作る。 */
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.5rem;
+  align-items: center;
+}
+
+.settings-row-label {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.settings-row-value {
+  color: rgb(255 255 255 / 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+/* スライダーとテキスト欄は行いっぱいに伸ばし、値は上の行に置く。 */
+.settings-row-number input,
+.settings-row-text input {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.settings-row input[type="range"] {
+  height: 1rem;
+  accent-color: rgb(255 255 255 / 0.85);
+  cursor: pointer;
+}
+
+.settings-row input[type="text"],
+.settings-row select {
+  padding: 0.125rem 0.25rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.25rem;
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  font: inherit;
+}
+
+.settings-row select {
+  max-width: 9rem;
+}
+
+.settings-row input[type="color"] {
+  width: 2rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.25rem;
+  background: none;
+  cursor: pointer;
+}
+
+/* 既定では見本の周りに余白が入り、暗い色を選んでも白い枠に見える。 */
+.settings-row input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-row input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 0.125rem;
+}
+
+.settings-row input[type="checkbox"] {
+  justify-self: end;
+  margin: 0;
+  accent-color: rgb(255 255 255 / 0.85);
+  cursor: pointer;
+}
+
+.settings-row input:focus-visible,
+.settings-row select:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.5);
+  outline-offset: 1px;
+}
+
+.settings-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.settings-panel-reset {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.25rem;
+  background: none;
+  color: rgb(255 255 255 / 0.6);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-panel-reset:hover,
+.settings-panel-reset:focus-visible {
+  border-color: rgb(255 255 255 / 0.4);
+  color: #fff;
+}

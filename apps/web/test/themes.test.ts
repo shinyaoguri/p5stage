@@ -5,6 +5,7 @@ import {
   DEFAULT_THEME_NAME,
   PALETTES,
   THEME_NAMES,
+  THEME_OPTIONS,
   createThemeData,
 } from "../src/scripts/editor/themes";
 
@@ -48,5 +49,13 @@ describe("エディタのテーマ", () => {
     expect(THEME_NAMES[0]).toBe(DEFAULT_THEME_NAME);
     expect(THEME_NAMES).toHaveLength(Object.keys(PALETTES).length + 1);
     expect(new Set(THEME_NAMES).size).toBe(THEME_NAMES.length);
+  });
+
+  it("設定パネルの選択肢は登録済みのテーマと過不足なく一致する", () => {
+    // パレットを足して選択肢に書き忘れると誰も選べず、逆に選択肢だけ足すと
+    // 「選べるのに Monaco に無いテーマ」になってエディタの色が消える。
+    expect(THEME_OPTIONS.map((option) => option.value).sort()).toEqual(
+      [...THEME_NAMES].sort()
+    );
   });
 });

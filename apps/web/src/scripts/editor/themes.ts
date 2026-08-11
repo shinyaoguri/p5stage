@@ -152,6 +152,26 @@ export const PALETTES: Readonly<Record<string, ThemePalette>> = {
   },
 };
 
+/**
+ * 設定パネルに出す選択肢 (既定テーマを先頭に置く)。
+ *
+ * ラベルは配色の通称なので訳さない。既定テーマだけは通称を持たないため、
+ * 何が起きるか (vs-dark の色をそのまま透過背景に載せる) が分かる名前にする。
+ */
+export const THEME_OPTIONS: readonly {
+  readonly value: string;
+  readonly label: string;
+}[] = [
+  { value: DEFAULT_THEME_NAME, label: "既定 (ダーク)" },
+  { value: "monokai", label: "Monokai" },
+  { value: "dracula", label: "Dracula" },
+  { value: "github-dark", label: "GitHub Dark" },
+  { value: "nord", label: "Nord" },
+  { value: "solarized", label: "Solarized" },
+  { value: "one-dark", label: "One Dark" },
+  { value: "cyberpunk", label: "Cyberpunk" },
+];
+
 /** 選べるテーマ名の一覧 (既定テーマを先頭に置く)。 */
 export const THEME_NAMES: readonly string[] = [
   DEFAULT_THEME_NAME,

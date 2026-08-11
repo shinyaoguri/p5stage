@@ -6,13 +6,15 @@
  * - **ファイルごとに `ITextModel` を分ける**。あちらは単一モデルの `setValue` 切替
  *   だったため、タブを移ると undo 履歴が混ざる (別ファイルの編集が戻る) 。
  *   モデルを分けると undo 履歴・カーソル位置・言語がファイル単位で独立する
- * - 見た目の設定は当面ここに固定値で持つ。設定パネル (Issue #11 の 1-5) が
- *   入った時点で、この既定値を上書きする経路を足す
+ * - 見た目の設定は設定パネル (1-5) が持つ。ここは受け取った設定を当てるだけで、
+ *   既定値も範囲も持たない (正本は scripts/settings/definitions.ts)
  */
 
 import type { SketchFiles } from "@p5stage/shared";
 
 import "../../styles/editor-overlay.css";
+import type { EditorSettings } from "../settings/definitions";
+import { editorOptionsFor, modelOptionsFor } from "../settings/editor-options";
 import { nextActiveFile } from "./file-actions";
 import { javascriptDefaults, monaco } from "./monaco";
 import { resolveLanguage } from "./languages";
@@ -29,6 +31,8 @@ export interface CodeEditorOptions {
   readonly files: SketchFiles;
   /** 最初に開くファイル。files に無ければ先頭のファイル。 */
   readonly activeFile?: string;
+  /** 見た目の設定 (検証済みのもの)。 */
+  readonly settings: EditorSettings;
   /** ⌘/Ctrl+Enter が押された。 */
   onRun(): void;
   /** 編集された (引数は編集されたファイル名)。ドラフト保存 (1-6) の受け口。 */
@@ -36,12 +40,6 @@ export interface CodeEditorOptions {
   /** ファイルの構成か、開いているファイルが変わった。タブの再描画に使う。 */
   onFilesChanged?(fileNames: readonly string[], activeFile: string): void;
 }
-
-/** エディタの見た目の既定値。設定パネル (1-5) が入るまではこれで固定。 */
-const EDITOR_FONT_FAMILY = "ui-monospace, SFMono-Regular, Menlo, monospace";
-const EDITOR_FONT_SIZE = 14;
-const EDITOR_LINE_HEIGHT = 1.5;
-const TAB_SIZE = 2;
 
 /** モデルの URI スキーム。実在するファイルではないことを名前で示す。 */
 const MODEL_SCHEME = "inmemory";
@@ -84,12 +82,14 @@ export class CodeEditor {
   readonly #disposables: monaco.IDisposable[] = [];
   readonly #onFilesChanged: CodeEditorOptions["onFilesChanged"];
   #activeFile: string;
+  #settings: EditorSettings;
 
   constructor(container: HTMLElement, options: CodeEditorOptions) {
     registerThemes();
     configureJavaScriptDiagnostics();
 
     this.#onFilesChanged = options.onFilesChanged;
+    this.#settings = options.settings;
 
     const names = Object.keys(options.files);
     if (names.length === 0) {
@@ -110,17 +110,14 @@ export class CodeEditor {
 
     this.#editor = monaco.editor.create(container, {
       model: this.#models.get(this.#activeFile) ?? null,
-      theme: DEFAULT_THEME_NAME,
-      fontFamily: EDITOR_FONT_FAMILY,
-      fontSize: EDITOR_FONT_SIZE,
-      lineHeight: EDITOR_LINE_HEIGHT * EDITOR_FONT_SIZE,
-      tabSize: TAB_SIZE,
+      // 設定で変わる見た目はここでまとめて当てる。以下は設定に出さない固定値
+      // (スケッチの上に重ねる以上、選べても困るだけのもの)。
+      ...editorOptionsFor(this.#settings),
       lineNumbers: "on",
       lineNumbersMinChars: 3,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       automaticLayout: true,
-      wordWrap: "on",
       padding: { top: 12, bottom: 12 },
       renderLineHighlight: "all",
       renderLineHighlightOnlyWhenFocus: false,
@@ -130,19 +127,10 @@ export class CodeEditor {
       folding: false,
       glyphMargin: false,
       lineDecorationsWidth: 10,
-      guides: {
-        indentation: false,
-        bracketPairs: false,
-        highlightActiveIndentation: false,
-        highlightActiveBracketPair: false,
-      },
       bracketPairColorization: { enabled: false },
       overviewRulerLanes: 0,
       hideCursorInOverviewRuler: true,
       overviewRulerBorder: false,
-      // 対応括弧の装飾はこの standalone 構成では描画されない (canvastage で確認済み)。
-      // 設定項目として復活させるのは 1-5。
-      matchBrackets: "never",
       scrollbar: { vertical: "hidden", horizontal: "hidden" },
       contextmenu: false,
     });
@@ -164,6 +152,20 @@ export class CodeEditor {
         })
       );
     }
+  }
+
+  /**
+   * 見た目の設定を当て直す。
+   *
+   * タブ幅はエディタではなくモデルが持つので、開いていないファイルにも当てる
+   * (後で開いたときだけ古い幅、という食い違いを作らない)。
+   */
+  applySettings(settings: EditorSettings): void {
+    this.#settings = settings;
+    this.#editor.updateOptions(editorOptionsFor(settings));
+    const modelOptions = modelOptionsFor(settings);
+    for (const model of this.#models.values())
+      model.updateOptions(modelOptions);
   }
 
   /** いま開いているファイル。 */
@@ -311,7 +313,7 @@ export class CodeEditor {
       resolveLanguage(fileName),
       uri
     );
-    model.updateOptions({ tabSize: TAB_SIZE, insertSpaces: true });
+    model.updateOptions(modelOptionsFor(this.#settings));
     return model;
   }
 }
