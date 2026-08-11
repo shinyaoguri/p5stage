@@ -13,11 +13,11 @@ p5.js スケッチの開発・共有プラットフォーム。Gist / GitHub 連
 
 npm workspaces のモノレポ (ADR 0005)。
 
-| ワークスペース | 役割 |
-|---|---|
-| `apps/web` | 本体。Astro (SSR) + 静的アセット + API。Worker `p5stage-web` |
-| `apps/preview` | 実行 iframe を配信する別オリジン。Worker `p5stage-preview` |
-| `packages/shared` | 両者が使う定義 |
+| ワークスペース | 役割 | Worker | 本番 |
+|---|---|---|---|
+| `apps/web` | 本体。Astro (SSR) + 静的アセット + API | `p5stage-web` | https://p5stage.org |
+| `apps/preview` | 実行 iframe を配信する別オリジン | `p5stage-preview` | https://preview.p5stage.org |
+| `packages/shared` | 両者が使う定義 | — | — |
 
 他者コードを実行するため、実行 iframe は本体と必ず別オリジンに置く (要件 5.1)。
 
@@ -27,6 +27,13 @@ Node は [.nvmrc](.nvmrc) のバージョンを使う。
 
 ```bash
 npm ci
+```
+
+`wrangler.jsonc` の `vars` は本番値なので、ローカルでは `.dev.vars` で上書きする。
+
+```bash
+cp apps/web/.dev.vars.example apps/web/.dev.vars
+cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 ```
 
 | コマンド | 内容 |
@@ -50,3 +57,7 @@ main への push で GitHub Actions が Cloudflare Workers へデプロイする
 
 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が未設定の間はデプロイをスキップする
 (CI は落とさない)。
+
+独自ドメインは各 `wrangler.jsonc` の `routes` に `custom_domain: true` で宣言してあり、
+DNS レコードと証明書は初回デプロイ時に Cloudflare が作る。ダッシュボードでの手作業は要らない
+(ゾーン `p5stage.org` が Cloudflare にあることが前提)。

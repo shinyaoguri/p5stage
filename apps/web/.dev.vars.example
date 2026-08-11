@@ -1,0 +1,3 @@
+# ローカル開発用の変数。`.dev.vars` にコピーして使う (.dev.vars は gitignore 済み)。
+# wrangler.jsonc の vars は本番値なので、ローカルではここで上書きする。
+PUBLIC_PREVIEW_ORIGIN="http://localhost:8788"

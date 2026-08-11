@@ -1,0 +1,4 @@
+# ローカル開発用の変数。`.dev.vars` にコピーして使う (.dev.vars は gitignore 済み)。
+# wrangler.jsonc の vars は本番値なので、ローカルではここで上書きする。
+# astro dev (4321) から埋め込む場合と wrangler dev (8787) から埋め込む場合で本体オリジンが変わる。
+PUBLIC_WEB_ORIGIN="http://localhost:4321"
