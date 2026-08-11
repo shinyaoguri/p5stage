@@ -54,13 +54,40 @@ cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 
 `worker-configuration.d.ts` は `wrangler.jsonc` から自動生成される型で、コミットしない。
 
+## マージ運用
+
+main への required check は集約ジョブ **`ci-gate`** 1 本。`verify` / `deploy` /
+`preview-deploy` の結果を畳み、すべて success か skipped なら成功する。条件付きで
+skip されるジョブを個別に required にすると「実行されない PR」で永久 pending になり
+auto-merge が詰まるため、ゲートを 1 本に集約している。
+
+可逆な変更の PR は CI green を待って自動マージする。
+
+```bash
+gh pr merge <番号> --auto --squash
+```
+
 ## デプロイ
 
 main への push で GitHub Actions が Cloudflare Workers へデプロイする。PR では
 `wrangler versions upload` で確認用 URL を発行し、PR にコメントする。
 
-`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が未設定の間はデプロイをスキップする
-(CI は落とさない)。
+必要な設定 (未設定の間はデプロイ / プレビューをスキップする。CI は落とさない)。
+
+| 種別 | 名前 | 用途 |
+|---|---|---|
+| secret | `CLOUDFLARE_API_TOKEN` | デプロイ・アップロード |
+| secret | `CLOUDFLARE_ACCOUNT_ID` | 同上 |
+| variable | `CLOUDFLARE_WORKERS_SUBDOMAIN` | プレビュー URL の組み立て (`<alias>-<worker 名>.<subdomain>.workers.dev`)。公開 URL の一部なので secret ではなく variable |
+
+PR プレビューは `--preview-alias pr-<番号>` で PR ごとに固定の URL を使い、
+`--var` で両者のオリジンを互いのプレビュー URL に差し替える。本番オリジンのままだと
+実行 iframe が `frame-ancestors` に弾かれて動かないため (ADR 0007)。
+
+プレビュー URL は Cloudflare 側でオプトインが要る。独自ドメインを `routes` で宣言すると
+`workers_dev` が false と推論され、既定ではプレビュー URL も発行されないので、
+両 `wrangler.jsonc` に `preview_urls: true` を明示している。この設定はダッシュボードで
+切り替えても次のデプロイで設定ファイルの値に戻るため、設定ファイル側が正本になる。
 
 独自ドメインは各 `wrangler.jsonc` の `routes` に `custom_domain: true` で宣言してあり、
 DNS レコードと証明書は初回デプロイ時に Cloudflare が作る。ダッシュボードでの手作業は要らない

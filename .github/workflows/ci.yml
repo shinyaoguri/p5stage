@@ -85,16 +85,36 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # workers.dev のサブドメイン名 (例: example-account)。プレビュー URL の組み立てに使う。
+      # 秘密ではない (公開 URL の一部) のでリポジトリ変数に置く。
+      WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
     steps:
-      - name: Cloudflare の資格情報を確認
+      # プレビュー URL は <alias>-<worker 名>.<subdomain>.workers.dev で決まる。
+      # 先に両方の URL を確定させてから、互いのオリジンを var で上書きしてアップロードする。
+      # そうしないと本体は本番の実行環境を指したままになり、実行 iframe が
+      # frame-ancestors に弾かれて動かない (ADR 0007)。
+      - name: プレビューの前提を確認して URL を決める
         id: guard
         run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためプレビューをスキップしました"
+            exit 0
           fi
+          if [ -z "$WORKERS_SUBDOMAIN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::リポジトリ変数 CLOUDFLARE_WORKERS_SUBDOMAIN が未設定のためプレビューをスキップしました"
+            exit 0
+          fi
+
+          # エイリアスは PR 単位。commit ごとに URL が変わらないので PR コメントが陳腐化しない。
+          alias="pr-${{ github.event.pull_request.number }}"
+          {
+            echo "ready=true"
+            echo "alias=$alias"
+            echo "web_url=https://$alias-p5stage-web.$WORKERS_SUBDOMAIN.workers.dev"
+            echo "preview_url=https://$alias-p5stage-preview.$WORKERS_SUBDOMAIN.workers.dev"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
         if: steps.guard.outputs.ready == 'true'
@@ -109,36 +129,48 @@ jobs:
         if: steps.guard.outputs.ready == 'true'
 
       # versions upload は本番トラフィックを切り替えず、確認用の URL だけを発行する。
+      # --var で本番オリジンを PR プレビューのオリジンに差し替える (両 Worker とも
+      # 変数はこれ 1 つだけなので、他の変数を落とす心配は無い)。
       - name: preview をバージョンアップロード
-        id: upload-preview
         if: steps.guard.outputs.ready == 'true'
         run: |
-          output=$(npx wrangler versions upload 2>&1 | tee /dev/stderr)
-          echo "url=$(printf '%s' "$output" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)" >> "$GITHUB_OUTPUT"
+          # pipefail が無いと tee の成功でアップロードの失敗が隠れる。
+          set -o pipefail
+          npx wrangler versions upload \
+            --preview-alias "${{ steps.guard.outputs.alias }}" \
+            --var "PUBLIC_WEB_ORIGIN:${{ steps.guard.outputs.web_url }}" \
+            2>&1 | tee upload.log
+          grep -qF "${{ steps.guard.outputs.preview_url }}" upload.log \
+            || echo "::warning::preview のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
         working-directory: apps/preview
       - name: web をバージョンアップロード
-        id: upload-web
         if: steps.guard.outputs.ready == 'true'
         run: |
-          output=$(npx wrangler versions upload 2>&1 | tee /dev/stderr)
-          echo "url=$(printf '%s' "$output" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          npx wrangler versions upload \
+            --preview-alias "${{ steps.guard.outputs.alias }}" \
+            --var "PUBLIC_PREVIEW_ORIGIN:${{ steps.guard.outputs.preview_url }}" \
+            2>&1 | tee upload.log
+          grep -qF "${{ steps.guard.outputs.web_url }}" upload.log \
+            || echo "::warning::web のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
         working-directory: apps/web
 
       - name: プレビュー URL を PR にコメント
         if: steps.guard.outputs.ready == 'true'
         uses: actions/github-script@v9
         env:
-          WEB_URL: ${{ steps.upload-web.outputs.url }}
-          PREVIEW_URL: ${{ steps.upload-preview.outputs.url }}
+          WEB_URL: ${{ steps.guard.outputs.web_url }}
+          PREVIEW_URL: ${{ steps.guard.outputs.preview_url }}
         with:
           script: |
             const marker = "## 🚀 Preview Deployment";
-            const fallback = "(URL を取得できませんでした)";
             const body = [
               marker,
               "",
-              `- web (本体): ${process.env.WEB_URL || fallback}`,
-              `- preview (実行環境): ${process.env.PREVIEW_URL || fallback}`,
+              `- web (本体): ${process.env.WEB_URL}`,
+              `- preview (実行環境): ${process.env.PREVIEW_URL}`,
+              "",
+              "URL は PR 単位で固定。新しい commit を push すると同じ URL の中身が入れ替わる。",
               "",
               `commit: ${context.sha.slice(0, 7)}`,
             ].join("\n");
@@ -164,3 +196,32 @@ jobs:
                 body,
               });
             }
+
+  # ruleset の required check はこの 1 本に集約する。deploy / preview-deploy は
+  # 条件付きで skip されるので、個別に required にすると「実行されない PR」で
+  # 永久 pending になり auto-merge が詰まる。
+  ci-gate:
+    name: ci-gate
+    needs: [verify, deploy, preview-deploy]
+    # 既定では前段が失敗するとこのジョブごと skip され、required check が報告されない
+    # まま pending で止まる。always() で必ず走らせ、結果は自前で判定する。
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 前段ジョブがすべて success か skipped であることを確かめる
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -eu
+          echo "$NEEDS_JSON"
+          bad=$(printf '%s' "$NEEDS_JSON" \
+            | jq -r 'to_entries[]
+                     | select(.value.result != "success" and .value.result != "skipped")
+                     | .key' \
+            | tr '\n' ' ')
+          if [ -n "${bad% }" ]; then
+            echo "::error::前段ジョブが失敗またはキャンセルされました: ${bad}"
+            exit 1
+          fi
+          echo "OK: 前段ジョブはすべて success または skipped"
