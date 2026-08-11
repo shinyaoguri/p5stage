@@ -5,7 +5,7 @@ p5.js スケッチの開発・共有プラットフォーム (OpenProcessing.org
 将来的にチュートリアル機能・教育向けクラス機能を予定。
 
 要件の正本は `docs/requirements.md`、実装計画は `docs/roadmap.md`。
-進捗と課題は各フェーズの Issue に積む (Phase 0 は #4)。
+進捗と課題は各フェーズの Issue に積む (進行中の Phase 1 は #11)。
 
 ## 検証コマンド
 
