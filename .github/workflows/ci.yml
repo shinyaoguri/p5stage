@@ -116,9 +116,17 @@ jobs:
 
       # スキーマはコードより先に上げる。逆にすると、新しいコードが
       # まだ無いテーブルを引く時間帯ができる。適用済みの分は読み飛ばされる。
+      #
+      # API トークンに D1 の権限が無いと 7403 で落ちる。他の設定不足と同じく
+      # デプロイ全体は止めず、警告にして「何が効いていないか」を残す
+      # (D1 を使うのは認証まわりだけで、他の機能は影響を受けない)。
       - name: D1 のマイグレーションを適用
         if: steps.guard.outputs.ready == 'true'
-        run: npx wrangler d1 migrations apply p5stage --remote
+        run: |
+          if npx wrangler d1 migrations apply p5stage --remote; then
+            exit 0
+          fi
+          echo "::warning::D1 のマイグレーションを適用できませんでした。CLOUDFLARE_API_TOKEN に Account / D1 / Edit の権限が要ります。付与するまで認証 (ログイン) は本番で動きません"
         working-directory: apps/web
 
       - name: web (本体) をデプロイ

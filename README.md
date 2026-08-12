@@ -112,7 +112,7 @@ main への push で GitHub Actions が Cloudflare Workers へデプロイする
 
 | 種別 | 名前 | 用途 |
 |---|---|---|
-| secret | `CLOUDFLARE_API_TOKEN` | デプロイ・アップロード |
+| secret | `CLOUDFLARE_API_TOKEN` | デプロイ・アップロード・D1 のマイグレーション適用 (**Account / D1 / Edit** の権限が要る。無いと migration だけ警告付きでスキップされ、認証が本番で動かない) |
 | secret | `CLOUDFLARE_ACCOUNT_ID` | 同上 |
 | variable | `CLOUDFLARE_WORKERS_SUBDOMAIN` | プレビュー URL の組み立て (`<alias>-<worker 名>.<subdomain>.workers.dev`)。公開 URL の一部なので secret ではなく variable |
 
