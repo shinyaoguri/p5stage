@@ -37,6 +37,7 @@ try {
         <div class="chrome">
           <span id="draft-status" class="status draft-status" role="status" />
           <span id="status" class="status" role="status" />
+          <div id="save-controls" />
           <button id="run" type="button">
             実行 (⌘/Ctrl+Enter)
           </button>
@@ -70,6 +71,16 @@ try {
   import { FileTabs } from "../scripts/editor/file-tabs";
   import { isRunShortcut } from "../scripts/editor/run-shortcut";
   import { PreviewHost } from "../scripts/preview-host";
+  import {
+    chooseStartingPoint,
+    clearSketchIdInUrl,
+    loadSketch,
+    showSketchIdInUrl,
+    SketchLoadError,
+    sketchIdFromUrl,
+  } from "../scripts/sketch/open-sketch";
+  import { SavePanel } from "../scripts/sketch/save-panel";
+  import { SketchSaver } from "../scripts/sketch/sketch-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
   import {
@@ -86,6 +97,7 @@ try {
   const settingsHost = document.getElementById("settings");
   const status = document.getElementById("status");
   const draftStatus = document.getElementById("draft-status");
+  const saveHost = document.getElementById("save-controls");
 
   /**
    * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
@@ -107,7 +119,8 @@ try {
       !tabsHost ||
       !stage ||
       !consoleHost ||
-      !settingsHost
+      !settingsHost ||
+      !saveHost
     ) {
       return;
     }
@@ -119,16 +132,44 @@ try {
       if (draftStatus) draftStatus.textContent = text;
     };
 
-    // エディタを作る前に設定と下書きを読む。後から当てると、初回の描画だけ
-    // 既定の見た目・既定のテンプレートが見えてから切り替わる。
-    // どちらも相手を待つ理由が無いので同時に読む。
-    const [initialSettings, draft] = await Promise.all([
+    // エディタを作る前に設定・下書き・(URL が作品を指していれば) 保存済みの中身を
+    // 読む。後から当てると、初回の描画だけ既定の見た目・既定のテンプレートが
+    // 見えてから切り替わる。互いに待つ理由が無いので同時に読む。
+    const sketchId = sketchIdFromUrl(window.location.search);
+    let loadFailure: string | null = null;
+    const [initialSettings, draft, opened] = await Promise.all([
       loadSettings(),
       loadDraft(),
+      sketchId === null
+        ? Promise.resolve(null)
+        : loadSketch(sketchId).catch((error: unknown) => {
+            // 読めなくてもエディタは開く。開けないと、手元の下書きにしか
+            // 残っていない変更まで触れなくなる。
+            loadFailure =
+              error instanceof SketchLoadError
+                ? error.message
+                : "作品を読み込めませんでした";
+            return null;
+          }),
     ]);
     let settings = initialSettings;
     applyCssVariables(settings);
-    if (draft !== null) {
+
+    const start = chooseStartingPoint({
+      sketchId,
+      draft,
+      remoteFiles: opened?.files ?? null,
+    });
+    // 知らせは 1 行しか無いので、重い順に 1 つだけ出す。実行の状態 (右隣) は
+    // 接続や実行のたびに上書きされるので、残したい知らせはこちらへ。
+    if (loadFailure !== null) {
+      setDraftStatus(loadFailure);
+    } else if (opened !== null && opened.truncated.length > 0) {
+      // 中身を取れていないファイルをそのまま保存すると、その中身が失われる。
+      setDraftStatus(
+        `次のファイルは大きすぎて読み込めませんでした: ${opened.truncated.join(", ")}`
+      );
+    } else if (start.source === "draft" && draft !== null) {
       setDraftStatus(`下書きを復元しました (${formatSavedAt(draft.savedAt)})`);
     }
 
@@ -152,6 +193,9 @@ try {
     const run = () => {
       consolePanel.clear();
       host.run(editor.getFiles(), selectedTransition());
+      // 保存済みの作品は、実行のたびに間引いて Gist へ書く (要件 3.2)。
+      // リビジョンが「動かした形」の履歴になる。
+      saver.scheduleSave();
     };
 
     const draftSaver = new DraftSaver({
@@ -165,19 +209,48 @@ try {
     // 下書きは内容の変更 (onChange) だけでなく、ファイルの増減・改名・
     // 開いているファイルの移動 (onFilesChanged) でも書く。
     const saveDraft = () =>
-      draftSaver.save(editor.getFiles(), editor.activeFile);
+      draftSaver.save(
+        editor.getFiles(),
+        editor.activeFile,
+        saver.state.sketchId
+      );
+
+    // 手元 (下書き) と正本 (Gist) の両方に「変わった」を伝える。伝え先が
+    // 別々なので、片方だけ呼ぶ経路を作らないようここで束ねる。
+    const onEdited = () => {
+      saveDraft();
+      saver.markDirty();
+    };
 
     const editor = new CodeEditor(editorHost, {
-      files: draft?.files ?? DEFAULT_SKETCH_FILES,
-      activeFile: draft?.activeFile ?? "sketch.js",
+      files: start.files,
+      activeFile: start.activeFile,
       settings,
       onRun: run,
-      onChange: saveDraft,
+      onChange: onEdited,
       onFilesChanged: (fileNames, activeFile) => {
         tabs.render(fileNames, activeFile);
-        saveDraft();
+        onEdited();
       },
     });
+
+    const savePanel = new SavePanel(saveHost, {
+      onSave: (meta) => void saver.saveNow(meta),
+    });
+    const saver = new SketchSaver({
+      sketchId,
+      getFiles: () => editor.getFiles(),
+      onState: (state) => savePanel.render(state),
+      onCreated: showSketchIdInUrl,
+    });
+
+    if (sketchId !== null) {
+      saver.adopt(sketchId, opened?.gist ?? null);
+      // 下書きから始めた = 保存済みの中身より新しい変更が手元にある。
+      if (start.source === "draft") saver.markDirty();
+    } else {
+      savePanel.render(saver.state);
+    }
 
     const settingsSaver = new SettingsSaver();
     new SettingsPanel(settingsHost, settings, {
@@ -194,6 +267,9 @@ try {
     const flushAll = () => {
       void settingsSaver.flush();
       void draftSaver.flush();
+      // Gist への保存は往復が要るので、離脱間際に始めても着地しない。予約は
+      // 捨てて未保存のままにする (中身は下書きに残るので次に開けば続けられる)。
+      saver.cancelScheduled();
     };
     window.addEventListener("pagehide", flushAll);
     document.addEventListener("visibilitychange", () => {
@@ -246,6 +322,10 @@ try {
       // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
       editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
       void draftSaver.clear();
+      // 開いていた作品から切り離す。ここを忘れると、新しく書き始めた内容が
+      // 前の作品の Gist を上書きする。
+      saver.detach();
+      clearSketchIdInUrl();
       setDraftStatus("下書きを破棄しました");
       run();
       editor.focus();

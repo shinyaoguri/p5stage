@@ -64,6 +64,7 @@ export interface DraftSaverOptions {
 interface PendingDraft {
   readonly files: SketchDraft["files"];
   readonly activeFile: string;
+  readonly sketchId: string | null;
 }
 
 export class DraftSaver {
@@ -83,8 +84,12 @@ export class DraftSaver {
   }
 
   /** 保存を予約する。連続して呼ばれた分は最後の 1 つにまとまる。 */
-  save(files: SketchDraft["files"], activeFile: string): void {
-    this.#pending = { files, activeFile };
+  save(
+    files: SketchDraft["files"],
+    activeFile: string,
+    sketchId: string | null = null
+  ): void {
+    this.#pending = { files, activeFile, sketchId };
 
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {

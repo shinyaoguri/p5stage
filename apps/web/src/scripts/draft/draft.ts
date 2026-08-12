@@ -19,6 +19,13 @@ export interface SketchDraft {
   readonly activeFile: string;
   /** 書き込んだ時刻 (エポックミリ秒)。復元したことを人に伝えるために持つ。 */
   readonly savedAt: number;
+  /**
+   * どの作品の下書きか。まだ保存していなければ null。
+   *
+   * 別の作品を開いたときに、前の作品の下書きをその中身として復元しないために持つ
+   * (Phase 2-3)。作品ごとに下書きを持ち分けるのは、作品を切り替える導線ができてから。
+   */
+  readonly sketchId: string | null;
 }
 
 /**
@@ -50,5 +57,12 @@ export function parseDraft(value: unknown): SketchDraft | null {
       ? source.savedAt
       : 0;
 
-  return { files, activeFile, savedAt };
+  // 作品 ID が読めないものは「まだ保存していない下書き」として扱う。保存済みの
+  // 作品の中身として復元するより、行き場の無い下書きにしておく方が害が小さい。
+  const sketchId =
+    typeof source.sketchId === "string" && source.sketchId !== ""
+      ? source.sketchId
+      : null;
+
+  return { files, activeFile, savedAt, sketchId };
 }

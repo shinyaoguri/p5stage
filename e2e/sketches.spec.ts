@@ -90,6 +90,43 @@ test.describe("作品 API", () => {
     expect(await response.json()).toMatchObject({ error: "not_found" });
   });
 
+  test("未ログインでは中身を保存できない", async ({ page }) => {
+    await page.goto("/");
+
+    // ボディを付けないのは #38 の回避。ログインの確認は本文を読むより先なので、
+    // 付けなくても見たいところは通る。
+    const result = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/sketches/${id}/files`, {
+        method: "PUT",
+      });
+      return { status: response.status, body: await response.json() };
+    }, ABSENT_ID);
+
+    expect(result.status).toBe(401);
+    expect(result.body).toMatchObject({ error: "unauthorized" });
+  });
+
+  test("実行オリジンからの保存は 403 で弾く", async ({ page }) => {
+    // 他者コードが動くオリジンは same-site なので cookie が付く。ここで止まらな
+    // ければ、ログイン中の利用者の Gist を書き換えられる (ADR 0008)。
+    const response = await page.request.put(
+      `/api/sketches/${ABSENT_ID}/files`,
+      {
+        headers: { Origin: PREVIEW_ORIGIN, "Content-Type": "application/json" },
+      }
+    );
+
+    // 401 ではなく 403。出どころの確認はログインの確認より先に来る。
+    expect(response.status()).toBe(403);
+  });
+
+  test("未ログインでは中身を読めない", async ({ page }) => {
+    // 閲覧者への配信はキャッシュ層 (2-5) の担当で、この口は所有者専用。
+    const response = await page.request.get(`/api/sketches/${ABSENT_ID}/files`);
+
+    expect(response.status()).toBe(401);
+  });
+
   test("作品の取得は共有キャッシュに載せない", async ({ page }) => {
     // 限定公開の URL がキャッシュに載ると、ID を知らない相手にも届きうる。
     const response = await page.request.get(`/api/sketches/${ABSENT_ID}`);

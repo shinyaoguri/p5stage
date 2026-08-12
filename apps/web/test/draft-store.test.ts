@@ -65,11 +65,13 @@ describe("ドラフトの読み込み", () => {
       files: FILES,
       activeFile: "sketch.js",
       savedAt: 5,
+      sketchId: null,
     });
     expect(await loadDraft(fake.store)).toEqual({
       files: FILES,
       activeFile: "sketch.js",
       savedAt: 5,
+      sketchId: null,
     });
   });
 
