@@ -25,6 +25,7 @@ import {
   updateGist,
   type GistRevision,
 } from "../../../../lib/github/gist";
+import { fromGistError } from "../../../../lib/github/gist-http";
 import {
   jsonError,
   readJsonBody,
@@ -38,12 +39,11 @@ import {
   unsavableFileNames,
 } from "../../../../lib/sketches/gist-payload";
 import { isSketchId } from "../../../../lib/sketches/id";
-import { putRevision } from "../../../../lib/sketches/revision-store";
+import { publishRevision } from "../../../../lib/sketches/publish";
 import type { Sketch } from "../../../../lib/sketches/sketch";
 import {
   attachGist,
   getSketch,
-  setCurrentRevision,
   touchSketch,
 } from "../../../../lib/sketches/store";
 
@@ -59,32 +59,6 @@ function noStore(body: unknown, status = 200): Response {
     status,
     headers: { "Cache-Control": "private, no-store" },
   });
-}
-
-/**
- * GitHub 起因の失敗を HTTP に移す。
- *
- * 種類ごとに分けるのは、利用者の次の一手が違うため (ログインし直す / 待つ / 直す)。
- * 中身の分からない 500 にまとめると、どれも「もう一度試す」しかなくなる。
- */
-function fromGistError(error: GistError): Response {
-  switch (error.kind) {
-    case "auth":
-      return jsonError(401, "github_auth", error.message);
-    case "rate_limit":
-      return jsonError(429, "github_rate_limit", error.message);
-    case "rejected":
-      return jsonError(422, "github_rejected", error.message);
-    case "not_found":
-      // 作品はあるが Gist が無い = GitHub 側で消された。作り直す口は 2-6 (detach)。
-      return jsonError(
-        409,
-        "gist_missing",
-        "GitHub 側で Gist が見つかりません。削除された可能性があります"
-      );
-    default:
-      return jsonError(502, "github_unavailable", error.message);
-  }
 }
 
 /** 所有者として作品を引く。持ち主でなければ null (「無い」と区別しない)。 */
@@ -192,38 +166,6 @@ async function updateAttached(
   return revision;
 }
 
-/**
- * 保存した中身を配信側へ渡す (ADR 0011)。
- *
- * ここが**配信の主経路**。保存の瞬間は中身が手元にあるので、R2 へ書いてポインタを
- * 進めておけば、閲覧者は GitHub を 1 回も叩かずに読める。
- *
- * 失敗しても保存は成功のまま返す。Gist (正本) には既に書けているので、ここで
- * 失敗を返すと利用者が同じ保存を繰り返すことになる。配信側は次の閲覧で
- * 自分で埋め直す (`resolveSketchContent` の fill 経路)。
- */
-async function publish(
-  sketchId: string,
-  gistId: string,
-  revision: GistRevision,
-  files: SketchFiles
-): Promise<boolean> {
-  try {
-    await putRevision(env.CONTENT, gistId, revision.revision, files);
-    // ETag は保存の応答からは取れない。次の再検証で埋まる。
-    await setCurrentRevision(
-      env.DB,
-      sketchId,
-      revision.revision,
-      null,
-      Date.now()
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export const PUT: APIRoute = async ({ request, url, params }) => {
   const foreign = rejectForeignOrigin(request, url);
   if (foreign !== null) return foreign;
@@ -251,10 +193,10 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
         read.files
       );
       if ("response" in created) return created.response;
-      const published = await publish(
+      const published = await publishRevision(
         sketch.id,
         created.revision.id,
-        created.revision,
+        created.revision.revision,
         read.files
       );
       return noStore({
@@ -270,10 +212,10 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
       auth.session.token,
       read.files
     );
-    const published = await publish(
+    const published = await publishRevision(
       sketch.id,
       sketch.gistId,
-      revision,
+      revision.revision,
       read.files
     );
     return noStore({ sketch, gist: revision, published });

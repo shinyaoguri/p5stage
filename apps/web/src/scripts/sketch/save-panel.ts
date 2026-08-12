@@ -7,11 +7,28 @@
  * (要件 3.4)。
  */
 
+import "../../styles/dialog.css";
 import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
 
 import type { SaveState, SketchMeta } from "./sketch-saver";
+
+/**
+ * 切り離しの確認文。
+ *
+ * **削除ではないこと**を最初の行に置く。「外す」も「切り離す」も、消えるのだと
+ * 読まれうる語なので、押す前に打ち消しておく必要がある。作品ページから中身が
+ * 消えること (ADR 0012) も、知らずに押すと取り返しの付かない驚きになる。
+ */
+const DETACH_CONFIRM = [
+  "この作品と Gist の紐付けを外します (どちらも削除しません)。",
+  "",
+  "・GitHub の Gist はそのまま残ります",
+  "・この作品もエディタの中身もそのまま残ります",
+  "・作品ページは「まだ保存されていません」に戻ります",
+  "・次に保存すると新しい Gist が作られます",
+].join("\n");
 
 const VISIBILITY_LABELS: Record<SketchMeta["visibility"], string> = {
   unlisted: "限定公開 — URL を知っている人だけが見られます",
@@ -48,15 +65,19 @@ function describe(state: SaveState): string {
 export interface SavePanelOptions {
   /** 保存が押された。初回だけ `meta` が付く。 */
   onSave(meta: SketchMeta | null): void;
+  /** 切り離しが確認された (Phase 2-6)。 */
+  onDetach(): void;
 }
 
 export class SavePanel {
   readonly #host: HTMLElement;
   readonly #onSave: SavePanelOptions["onSave"];
+  readonly #onDetach: SavePanelOptions["onDetach"];
   readonly #button: HTMLButtonElement;
   readonly #status: HTMLElement;
   readonly #link: HTMLAnchorElement;
   readonly #pageLink: HTMLAnchorElement;
+  readonly #detach: HTMLButtonElement;
   readonly #dialog: HTMLDialogElement;
   readonly #titleInput: HTMLInputElement;
   #state: SaveState | null = null;
@@ -64,6 +85,7 @@ export class SavePanel {
   constructor(host: HTMLElement, options: SavePanelOptions) {
     this.#host = host;
     this.#onSave = options.onSave;
+    this.#onDetach = options.onDetach;
     this.#host.classList.add("save-panel");
 
     this.#button = document.createElement("button");
@@ -94,6 +116,19 @@ export class SavePanel {
     this.#pageLink.textContent = "作品ページ";
     this.#pageLink.hidden = true;
 
+    // 正本を差し替える口 (Phase 2-6)。GitHub 側で Gist を消してしまった作品を
+    // 作り直す道でもあるので、Gist が付いている間はいつでも押せる場所に置く。
+    this.#detach = document.createElement("button");
+    this.#detach.type = "button";
+    this.#detach.id = "detach";
+    this.#detach.className = "save-detach";
+    this.#detach.textContent = "Gist を外す";
+    this.#detach.hidden = true;
+    this.#detach.addEventListener("click", () => {
+      if (!window.confirm(DETACH_CONFIRM)) return;
+      this.#onDetach();
+    });
+
     this.#titleInput = document.createElement("input");
     this.#dialog = this.#buildDialog();
 
@@ -101,6 +136,7 @@ export class SavePanel {
       this.#status,
       this.#pageLink,
       this.#link,
+      this.#detach,
       this.#button,
       this.#dialog,
     ]) {
@@ -127,6 +163,9 @@ export class SavePanel {
       this.#pageLink.href = sketchPermalink(state.sketchId);
     }
 
+    // 切り離せるのは正本が付いている間だけ。付いていなければ操作そのものが無い。
+    this.#detach.hidden = state.gist === null;
+
     if (state.gist === null) {
       this.#link.hidden = true;
       return;
@@ -147,14 +186,14 @@ export class SavePanel {
 
   #buildDialog(): HTMLDialogElement {
     const dialog = document.createElement("dialog");
-    dialog.className = "save-dialog";
+    dialog.className = "app-dialog";
     dialog.id = "save-dialog";
 
     const heading = document.createElement("h2");
     heading.textContent = "あなたの Gist に保存します";
 
     const titleLabel = document.createElement("label");
-    titleLabel.className = "save-field";
+    titleLabel.className = "app-field";
     titleLabel.textContent = "タイトル";
     this.#titleInput.type = "text";
     this.#titleInput.id = "save-title";
@@ -165,12 +204,12 @@ export class SavePanel {
     const visibility = this.#buildVisibilityChoice();
 
     const note = document.createElement("p");
-    note.className = "save-note";
+    note.className = "app-note";
     note.textContent =
       "公開範囲は保存後に変更できません (GitHub の Gist は作成後に公開範囲を変えられないため)。変えたいときは別の作品として作り直してください。";
 
     const actions = document.createElement("div");
-    actions.className = "save-dialog-actions";
+    actions.className = "app-dialog-actions";
 
     const cancel = document.createElement("button");
     cancel.type = "button";
@@ -180,7 +219,7 @@ export class SavePanel {
     const proceed = document.createElement("button");
     proceed.type = "button";
     proceed.id = "save-confirm";
-    proceed.className = "save-dialog-proceed";
+    proceed.className = "app-dialog-proceed";
     proceed.textContent = "保存";
     proceed.addEventListener("click", () => {
       const selected = visibility.querySelector<HTMLInputElement>(

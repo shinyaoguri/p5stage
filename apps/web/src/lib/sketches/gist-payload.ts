@@ -8,10 +8,15 @@
 
 import type { SketchFiles } from "@p5stage/shared";
 
+import { DEFAULT_TITLE, TITLE_MAX_LENGTH } from "./sketch";
+
 /** Gist の files パラメータ。null を送ったファイルは Gist から削除される。 */
 export type GistFilePayload = Readonly<
   Record<string, { content: string } | null>
 >;
+
+/** description に付ける印。付ける側と剥がす側で形がずれないよう 1 か所に置く。 */
+const DESCRIPTION_SUFFIX = " — p5stage";
 
 /**
  * Gist の description。
@@ -22,7 +27,29 @@ export type GistFilePayload = Readonly<
  * スケッチに混ざる**うえに、作品名は D1 にあって Gist から復元する必要が無い。
  */
 export function gistDescription(title: string): string {
-  return `${title} — p5stage`;
+  return `${title}${DESCRIPTION_SUFFIX}`;
+}
+
+/**
+ * description から作品名を復元する (取り込み — Phase 2-6)。
+ *
+ * 自分が付けた印だけを剥がす。それ以外の description は**そのまま作品名にする** —
+ * 他所で作られた Gist に p5stage の書式を期待しても仕方がないし、書いた本人には
+ * その文字列が作品名として最も近い。
+ *
+ * 長すぎる値は弾かずに切る。取り込みは「相手の持ち物を受け入れる」操作なので、
+ * 直せる程度のずれで断らない (入力欄から来る値とは扱いが違う)。
+ */
+export function titleFromDescription(description: string): string {
+  const stripped = description.endsWith(DESCRIPTION_SUFFIX)
+    ? description.slice(0, -DESCRIPTION_SUFFIX.length)
+    : description;
+
+  const collapsed = stripped.replace(/\s+/g, " ").trim();
+  if (collapsed === "") return DEFAULT_TITLE;
+  return collapsed.length > TITLE_MAX_LENGTH
+    ? collapsed.slice(0, TITLE_MAX_LENGTH).trimEnd()
+    : collapsed;
 }
 
 /**

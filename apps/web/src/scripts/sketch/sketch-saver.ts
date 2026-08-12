@@ -131,6 +131,26 @@ export class SketchSaver {
     this.#emit("unsaved");
   }
 
+  /**
+   * Gist から切り離された (Phase 2-6)。作品はそのまま、正本だけ無くなる。
+   *
+   * 作品 ID は残す。**同じ作品の続き**であって、別の作品に移ったのではない
+   * (`detach` との違いはそこ)。次の保存で新しい Gist ができて紐付く。
+   *
+   * 未保存の印を立てるのは、手元の内容がどの Gist にも書けていない状態だから。
+   * 予約中の自動保存は捨て、飛んでいる保存の応答も世代で無効にする — 切り離す前に
+   * 走り出した保存が着地すると、消えたはずの Gist の姿で「保存しました」と出る。
+   */
+  forgetGist(): void {
+    this.#clearTimer();
+    this.#generation += 1;
+    this.#gist = null;
+    this.#savedAt = null;
+    this.#dirty = true;
+    this.#again = false;
+    this.#emit("unsaved");
+  }
+
   /** 内容が変わった。ここでは送らない (送るのは実行か明示の保存)。 */
   markDirty(): void {
     this.#dirty = true;

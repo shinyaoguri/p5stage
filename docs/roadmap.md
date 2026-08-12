@@ -38,7 +38,11 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 - セッションは `__Host-` プレフィックスの cookie に限り、状態を変える API は
   `Origin` / `Sec-Fetch-Site` を検証する (実行オリジンが same-site サブドメインで
   `SameSite` に頼れないため) → **ADR 0008**
-- Gist create / debounce PATCH / 取り込み / detach (canvastage gist.ts の状態機械を移植・拡張)
+- Gist create / debounce PATCH (canvastage gist.ts の状態機械を移植・拡張)
+- 正本の出入り: **外部にある自分の Gist をそのまま正本として取り込む** (adopt) と、
+  作品を Gist から切り離す (detach)。切り離しは配信のポインタごと外し、次の保存で
+  新しい Gist を作る。他人の作品を持ち込む道は fork と D1 の系譜が受け持つ
+  (Phase 4 / #44) → **ADR 0012**
 - D1 メタデータ (作品・ユーザー・公開範囲) と作品ページ
 - **配信層と作品ページは一体で作る** (当初は「作品ページの最小版」と「キャッシュ層」に
   分けていたが、配信の骨格が無いと作品ページは必ず一度壊れた形で本番に出るため統合した)。

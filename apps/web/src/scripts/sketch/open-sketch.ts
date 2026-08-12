@@ -110,7 +110,8 @@ export interface StartingPoint {
   readonly source: "draft" | "sketch" | "default";
 }
 
-function firstFile(files: SketchFiles): string {
+/** 最初に見せるファイル。`sketch.js` があればそれ、無ければ先頭。 */
+export function preferredActiveFile(files: SketchFiles): string {
   const names = Object.keys(files);
   return names.includes(PREFERRED_ACTIVE_FILE)
     ? PREFERRED_ACTIVE_FILE
@@ -137,7 +138,7 @@ export function chooseStartingPoint(input: StartingPointInput): StartingPoint {
   if (remoteFiles !== null) {
     return {
       files: remoteFiles,
-      activeFile: firstFile(remoteFiles),
+      activeFile: preferredActiveFile(remoteFiles),
       source: "sketch",
     };
   }

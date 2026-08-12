@@ -250,3 +250,59 @@ describe("別の作品へ切り替えたとき", () => {
     expect(saver.state.gist).toBeNull();
   });
 });
+
+describe("Gist を外したとき (Phase 2-6)", () => {
+  it("作品は残したまま未保存に戻す", () => {
+    const { saver } = createSaver({ sketchId: "SKETCH0000000000" });
+    saver.adopt("SKETCH0000000000", GIST);
+
+    saver.forgetGist();
+
+    // 別の作品に移ったのではない。同じ作品の続きを、正本の無い状態で書いている。
+    expect(saver.state.sketchId).toBe("SKETCH0000000000");
+    expect(saver.state.gist).toBeNull();
+    expect(saver.state.status).toBe("unsaved");
+  });
+
+  it("外した後の保存は新しい Gist を作りに行く", async () => {
+    const calls = stubApi();
+    const { saver } = createSaver({ sketchId: "SKETCH0000000000" });
+    saver.adopt("SKETCH0000000000", GIST);
+
+    saver.forgetGist();
+    await saver.saveNow();
+
+    // 器は既にあるので作り直さない。中身を送れば、サーバ側が新しい Gist を作る。
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      "PUT /api/sketches/SKETCH0000000000/files",
+    ]);
+  });
+
+  it("予約していた自動保存は消えた Gist へ飛ばない", async () => {
+    const calls = stubApi();
+    const { saver } = createSaver({ sketchId: "SKETCH0000000000" });
+    saver.adopt("SKETCH0000000000", GIST);
+    saver.markDirty();
+    saver.scheduleSave();
+
+    saver.forgetGist();
+    await vi.runAllTimersAsync();
+
+    expect(calls).toEqual([]);
+  });
+
+  it("飛んでいた保存の結果で保存済みに戻さない", async () => {
+    stubApi();
+    const { saver } = createSaver({ sketchId: "SKETCH0000000000" });
+    saver.adopt("SKETCH0000000000", GIST);
+    saver.markDirty();
+
+    const saving = saver.saveNow();
+    saver.forgetGist();
+    await saving;
+
+    // 外す前に走り出した保存が着地しても、その Gist はもう正本ではない。
+    expect(saver.state.gist).toBeNull();
+    expect(saver.state.status).toBe("unsaved");
+  });
+});

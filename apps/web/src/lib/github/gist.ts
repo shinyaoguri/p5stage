@@ -55,6 +55,20 @@ export interface GistContent extends GistRevision {
    */
   readonly truncated: readonly string[];
   readonly description: string;
+  /**
+   * 持ち主 (GitHub の数値 ID)。読めなければ null。
+   *
+   * login ではなく数値で持つ。改名で変わらないので、セッションの利用者
+   * (`users.id` = GitHub の数値 ID) とそのまま比べられる。
+   */
+  readonly ownerId: number | null;
+  /**
+   * 公開 Gist か。
+   *
+   * **作成後に変えられない値** (ADR 0010) なので、取り込むときは作品の公開範囲を
+   * これに合わせるしかない。
+   */
+  readonly isPublic: boolean;
 }
 
 const API_ROOT = "https://api.github.com";
@@ -173,6 +187,20 @@ interface RawGist {
   description?: unknown;
   history?: unknown;
   files?: unknown;
+  owner?: unknown;
+  public?: unknown;
+}
+
+/**
+ * 持ち主の数値 ID。読めなければ null。
+ *
+ * 匿名 Gist には `owner` が無い。読めないことを 0 や「自分」に倒すと、
+ * 取り込みの所有者確認がすり抜ける。**分からないときは分からないまま返す**。
+ */
+function parseOwnerId(value: unknown): number | null {
+  if (typeof value !== "object" || value === null) return null;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === "number" ? id : null;
 }
 
 /**
@@ -228,6 +256,10 @@ export function parseGistContent(value: unknown): GistContent {
     files,
     truncated,
     description: typeof gist.description === "string" ? gist.description : "",
+    ownerId: parseOwnerId(gist.owner),
+    // 読めなければ secret 扱い。**公開の側へは倒さない** (誤りが「意図しない公開」に
+    // ならない向きを選ぶ)。
+    isPublic: gist.public === true,
   };
 }
 

@@ -4,8 +4,8 @@
  * パネルは save-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
  * (account-panel.css と同じ事情)。置き場所はページ側が決め、ここは中身だけを持つ。
  *
- * 平常時はスケッチの上に重なる操作列の一員として控えめに。読ませる面は初回の
- * ダイアログだけで、そこは不透明にして読み飛ばされないようにする。
+ * 平常時はスケッチの上に重なる操作列の一員として控えめに。読ませる面である
+ * ダイアログの意匠は dialog.css (取り込みと共通)。
  */
 
 .save-panel {
@@ -27,41 +27,9 @@
   color: rgb(255 255 255 / 0.7);
 }
 
-.save-dialog {
-  max-width: min(32rem, calc(100vw - 2rem));
-  padding: 1.25rem;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  border-radius: 0.5rem;
-  background: #14141a;
-  color: #f2f2f5;
-  font-size: 0.875rem;
-  line-height: 1.7;
-}
-
-.save-dialog::backdrop {
-  background: rgb(0 0 0 / 0.6);
-}
-
-.save-dialog h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
-}
-
-.save-field {
-  display: block;
-  margin-bottom: 1rem;
-}
-
-.save-field input {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  padding: 0.375rem 0.5rem;
-  border: 1px solid rgb(255 255 255 / 0.25);
-  border-radius: 0.25rem;
-  background: rgb(255 255 255 / 0.06);
-  color: inherit;
-  font: inherit;
+/* 切り離しは戻せない操作なので、保存と同じ重みでは出さない。 */
+.save-detach {
+  color: rgb(255 255 255 / 0.7);
 }
 
 .save-visibility {
@@ -75,39 +43,4 @@
   display: flex;
   gap: 0.5rem;
   align-items: baseline;
-}
-
-/* 後から変えられない選択なので、注意書きは選択肢のすぐ下に置く。 */
-.save-note {
-  margin: 0;
-  color: rgb(255 255 255 / 0.6);
-}
-
-.save-dialog-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: 1rem;
-}
-
-.save-dialog-actions button {
-  padding: 0.375rem 0.75rem;
-  border: 1px solid rgb(255 255 255 / 0.25);
-  border-radius: 0.25rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.save-dialog-proceed {
-  border-color: transparent;
-  background: #2f6feb;
-  color: #fff;
-  font-weight: 600;
-}
-
-.save-dialog-proceed:hover {
-  background: #3b7ef5;
 }

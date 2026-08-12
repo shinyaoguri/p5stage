@@ -116,6 +116,76 @@ export async function createSketch(
 }
 
 /**
+ * 既にある Gist を正本として作品を作る (取り込み — Phase 2-6)。
+ *
+ * `createSketch` + `attachGist` の 2 手ではなく 1 文にする。間に挟まる隙が無くなるので、
+ * **Gist の付いていない作品が取り込みの失敗跡として残らない**。
+ *
+ * 同じ Gist が別の作品に付いていれば `gist_id` の UNIQUE 制約で落ちる。呼び出し側は
+ * それを先に引いて (`getSketchByGistId`) 案内に変える。
+ */
+export async function createSketchFromGist(
+  db: D1Database,
+  ownerId: number,
+  input: SketchInput,
+  gistId: string,
+  now: number
+): Promise<Sketch> {
+  const id = generateSketchId();
+
+  await db
+    .prepare(
+      `INSERT INTO sketches
+         (id, owner_id, gist_id, title, description, visibility, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      ownerId,
+      gistId,
+      input.title,
+      input.description,
+      input.visibility,
+      now,
+      now
+    )
+    .run();
+
+  return {
+    id,
+    ownerId,
+    gistId,
+    title: input.title,
+    description: input.description,
+    visibility: input.visibility,
+    createdAt: now,
+    updatedAt: now,
+    currentRevision: null,
+    revisionEtag: null,
+    revisionCheckedAt: null,
+    gistDeletedAt: null,
+  };
+}
+
+/**
+ * Gist から作品を引く。同じ Gist を二度取り込もうとしたときの案内に使う。
+ *
+ * 所有者で絞らない。**他人が既に取り込んでいる Gist**も見えないと、UNIQUE 制約の
+ * 違反として落ちるだけで理由を返せない。
+ */
+export async function getSketchByGistId(
+  db: D1Database,
+  gistId: string
+): Promise<Sketch | null> {
+  const row = await db
+    .prepare(`SELECT ${COLUMNS} FROM sketches WHERE gist_id = ?`)
+    .bind(gistId)
+    .first<SketchRow>();
+
+  return row === null ? null : toSketch(row);
+}
+
+/**
  * 作品を作者ごと引く。作品ページが要るのはこの形 (ログイン不要 — 要件 3.4)。
  *
  * 引く鍵は sketchId だけ。URL に載る login は表示のための飾りで、検索条件にしない
@@ -270,6 +340,39 @@ export async function attachGist(
     .run();
 
   return result.meta.changes > 0;
+}
+
+/**
+ * 作品を Gist から切り離す (Phase 2-6 / ADR 0012)。
+ *
+ * **配信のポインタも一緒に落とす**。切り離した中身を閲覧者に配り続けると、
+ * 「切り離した」が閲覧者から見て何も起きていないのと同じになる。作品ページは
+ * 「まだ保存されていません」に戻り、次の保存で新しい Gist ができて復活する。
+ *
+ * tombstone も外す。「作者が GitHub 側で消した」という事実は、その Gist に付いて
+ * いたもので、切り離した後の作品には掛からない。
+ *
+ * GitHub には何もしない。利用者の Gist は利用者のもので、こちらが消す筋合いは無い。
+ */
+export async function detachGist(
+  db: D1Database,
+  id: string,
+  ownerId: number,
+  now: number
+): Promise<Sketch | null> {
+  const result = await db
+    .prepare(
+      `UPDATE sketches
+          SET gist_id = NULL, current_revision = NULL, revision_etag = NULL,
+              revision_checked_at = NULL, gist_deleted_at = NULL, updated_at = ?
+        WHERE id = ? AND owner_id = ? AND gist_id IS NOT NULL`
+    )
+    .bind(now, id, ownerId)
+    .run();
+
+  // 0 行なら「無い」「他人のもの」「既に切り離されている」。呼び出し側の扱いは同じ。
+  if (result.meta.changes === 0) return null;
+  return getSketch(db, id);
 }
 
 /**
