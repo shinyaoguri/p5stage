@@ -29,10 +29,16 @@ export interface OAuthConfig {
  *
  * 本番は `wrangler.jsonc` の vars と Workers の secret、ローカルは `.dev.vars`。
  * どちらも同じ名前なので、ここでは区別しない。
+ *
+ * 型を通さずに読むのは、**secret が `wrangler types` の生成物に現れないため**。
+ * `wrangler.jsonc` に secret は書けず、手元では `.dev.vars` から拾われて型が付く一方、
+ * CI には `.dev.vars` が無いので型が消える (= 手元で通る型検査が CI で落ちる)。
+ * 環境によって有無が変わる値なので、型に頼らずここで 1 度だけ実体を確かめる。
  */
 export function readOAuthConfig(): OAuthConfig {
-  const clientId = env.GITHUB_CLIENT_ID;
-  const clientSecret = env.GITHUB_CLIENT_SECRET;
+  const values = env as unknown as Record<string, string | undefined>;
+  const clientId = values.GITHUB_CLIENT_ID;
+  const clientSecret = values.GITHUB_CLIENT_SECRET;
 
   if (!clientId) throw new AuthConfigError("GITHUB_CLIENT_ID");
   if (!clientSecret) throw new AuthConfigError("GITHUB_CLIENT_SECRET");

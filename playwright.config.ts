@@ -64,9 +64,12 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
+      // セッションは D1 に置くので、起動前にローカルの D1 へスキーマを当てる
+      // (CI の使い捨て環境には何も無い状態で来る)。適用済みの分は読み飛ばされる。
+      //
       // OAuth の値もここで渡す。本物の GitHub へは行かない (認可画面の手前までしか
       // 見ない) ので、素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
-      command: `npm run build && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret`,
+      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
