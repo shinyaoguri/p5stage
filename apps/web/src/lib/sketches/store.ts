@@ -159,10 +159,31 @@ export async function updateSketch(
 }
 
 /**
- * Gist を紐付ける (2-3 で使う)。
+ * 更新時刻だけを進める。Gist へ書き出したときに使う。
+ *
+ * メタデータは変わらないが、一覧の並び (updated_at DESC) は「最後に手を入れた順」で
+ * ないと役に立たない。持ち主でなければ何も起きない。
+ */
+export async function touchSketch(
+  db: D1Database,
+  id: string,
+  ownerId: number,
+  now: number
+): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE sketches SET updated_at = ? WHERE id = ? AND owner_id = ?")
+    .bind(now, id, ownerId)
+    .run();
+
+  return result.meta.changes > 0;
+}
+
+/**
+ * Gist を紐付ける。
  *
  * 既に紐付いている作品は上書きしない。付け替えは detach を経由させたいので、
- * ここは「まだ無いときだけ書く」に限る。
+ * ここは「まだ無いときだけ書く」に限る。**別タブが先に紐付けていたときに
+ * 気付ける**ようにもなっている (false が返る)。
  */
 export async function attachGist(
   db: D1Database,

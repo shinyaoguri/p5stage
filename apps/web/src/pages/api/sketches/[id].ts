@@ -62,6 +62,27 @@ export const PATCH: APIRoute = async ({ request, url, params }) => {
 
   try {
     const patch = parseSketchPatch(parsed.body);
+
+    // 公開範囲は Gist を作った時点で固定される。GitHub は後から public / secret を
+    // 変えられないので、D1 だけ書き換えると「限定公開にしたのに Gist は公開のまま」
+    // という嘘になる (ADR 0010)。所有の確認は下の UPDATE が SQL でやるので、
+    // ここで引くのは**この制約を説明するため**だけ。
+    if (patch.visibility !== undefined) {
+      const current = await getSketch(env.DB, id);
+      if (
+        current !== null &&
+        current.ownerId === auth.session.user.id &&
+        current.gistId !== null &&
+        current.visibility !== patch.visibility
+      ) {
+        return jsonError(
+          409,
+          "visibility_locked",
+          "保存済みの作品は公開範囲を変えられません (GitHub の Gist は作成後に公開範囲を変更できないため)"
+        );
+      }
+    }
+
     const sketch = await updateSketch(
       env.DB,
       id,

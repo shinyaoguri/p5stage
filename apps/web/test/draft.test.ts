@@ -7,8 +7,25 @@ const FILES = { "index.html": "<!doctype html>", "sketch.js": "// hi" };
 describe("ドラフトの読み取り", () => {
   it("書いたとおりに読み戻せる", () => {
     expect(
-      parseDraft({ files: FILES, activeFile: "sketch.js", savedAt: 1234 })
-    ).toEqual({ files: FILES, activeFile: "sketch.js", savedAt: 1234 });
+      parseDraft({
+        files: FILES,
+        activeFile: "sketch.js",
+        savedAt: 1234,
+        sketchId: "AAAAAAAAAAAAAAAA",
+      })
+    ).toEqual({
+      files: FILES,
+      activeFile: "sketch.js",
+      savedAt: 1234,
+      sketchId: "AAAAAAAAAAAAAAAA",
+    });
+  });
+
+  it("作品 ID が無ければ「まだ保存していない下書き」として読む", () => {
+    // 保存済みの作品の中身として復元されると、開いた作品を別物で上書きしうる。
+    expect(parseDraft({ files: FILES, savedAt: 1 })?.sketchId).toBeNull();
+    expect(parseDraft({ files: FILES, sketchId: 42 })?.sketchId).toBeNull();
+    expect(parseDraft({ files: FILES, sketchId: "" })?.sketchId).toBeNull();
   });
 
   it("ファイル構成が読めないものは捨てる", () => {

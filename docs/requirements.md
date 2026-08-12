@@ -108,7 +108,7 @@ OpenProcessing との差別化:
 
 ## 6. 制約・前提
 
-- Gist の制約: テキストのみ・フラット (フォルダ無し)・API は 1 ファイル 1MB で truncated (サービス側で 1MB 以下を強制し API 完結)・300 ファイル上限
+- Gist の制約: テキストのみ・フラット (フォルダ無し)・API は 1 ファイル 1MB で truncated (サービス側で 1MB 以下を強制し API 完結)・300 ファイル上限・**中身が空 (空白のみ) のファイルは作れない** (422)・**公開範囲は作成時に固定** (public / secret を後から変更できない → ADR 0010)
 - Gist に webhook は無い。更新検出は「自サービスのエディタが PATCH 時にバックエンドへ通知」+「表示時の conditional GET」+「404 時の tombstone 処理」(ユーザーは GitHub 側で直接削除できる)
 - インフラは Cloudflare (ADR 0001)。配信は Workers の static assets (ADR 0006)。
   egress 無料が「バズっても転送費ゼロ」を構造的に保証する
