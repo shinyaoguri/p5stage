@@ -1,0 +1,297 @@
+---
+/**
+ * 作品ページ (Phase 2-4)。閲覧にログインは要らない (要件 3.4)。
+ *
+ * 正典 URL は `/@<login>/<sketchId>`。引く鍵は sketchId だけで、**login は表示の
+ * ための飾り**。違っていれば正典へ 302 する (`users.login` は改名で変わるため。
+ * Gist は同じ形で 404 になるが、こちらはそうならない — ADR 0011)。
+ *
+ * 中身は D1 のポインタ → R2 の不変オブジェクトで解決する。閲覧が GitHub を
+ * 叩かないので、レート制限が閲覧数に比例しない。
+ */
+import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
+import { env } from "cloudflare:workers";
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import {
+  initialFileName,
+  isCanonicalLogin,
+  orderedFileNames,
+  sketchPath,
+} from "../../lib/sketches/content";
+import { resolveSketchContent } from "../../lib/sketches/delivery";
+import { isSketchId } from "../../lib/sketches/id";
+import { getSketchWithOwner } from "../../lib/sketches/store";
+
+export const prerender = false;
+
+const login = Astro.params.login ?? "";
+const id = Astro.params.id ?? "";
+
+// 形が違う値を D1 まで持って行かない。存在の確認ではなく足切り。
+const sketch = isSketchId(id) ? await getSketchWithOwner(env.DB, id) : null;
+
+// 見つからないときも、他人のものだったときも同じ 404 (存在を漏らさない)。
+if (sketch === null) {
+  return new Response(null, { status: 404 });
+}
+
+// 正典 URL は 302 の飛び先であり、`<link rel="canonical">` の値でもある。
+// `/s/:id` からも同じ作品に来られるので、検索エンジンにはこちらを正として伝える。
+const canonicalUrl = new URL(
+  sketchPath(sketch.ownerLogin, sketch.id),
+  Astro.url.origin
+).href;
+
+if (!isCanonicalLogin(login, sketch.ownerLogin)) {
+  return Astro.redirect(canonicalUrl, 302);
+}
+
+const content = await resolveSketchContent(sketch, Date.now());
+
+const files = content.kind === "ready" ? content.files : null;
+const fileNames = files === null ? [] : orderedFileNames(files);
+const activeFile = files === null ? null : initialFileName(files);
+
+// 実行環境のオリジン (要件 5.1 / ADR 0007)。
+let previewOrigin: string | null = null;
+let originError: string | null = null;
+try {
+  previewOrigin = resolveOrigins({
+    web: Astro.url.origin,
+    preview: env.PUBLIC_PREVIEW_ORIGIN,
+  }).preview;
+} catch (error) {
+  if (!(error instanceof OriginConfigError)) throw error;
+  originError = error.message;
+}
+
+// 限定公開の URL が共有キャッシュに載ると、ID を知らない相手にも届きうる。
+// 公開作品はエッジに載せる — 閲覧が伸びても Worker まで来る回数が増えない。
+Astro.response.headers.set(
+  "Cache-Control",
+  sketch.visibility === "public"
+    ? "public, max-age=0, s-maxage=60"
+    : "private, no-store"
+);
+
+const updatedAt = new Date(sketch.updatedAt).toLocaleString("ja-JP", {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const gistUrl =
+  sketch.gistId === null
+    ? null
+    : `https://gist.github.com/${sketch.ownerLogin}/${sketch.gistId}`;
+
+/** 中身が出せないときに、閲覧者へ見せる説明。 */
+const notice = (() => {
+  switch (content.kind) {
+    case "ready":
+      return null;
+    case "unsaved":
+      return "この作品はまだ保存されていません。";
+    case "deleted":
+      return "この作品の元になった Gist は作者によって削除されました。";
+    case "unavailable":
+      return `いま中身を表示できません (${content.reason})。`;
+  }
+})();
+---
+
+<BaseLayout
+  title={`${sketch.title} | p5stage`}
+  description={sketch.description || `${sketch.ownerLogin} の p5.js スケッチ`}
+  noindex={sketch.visibility === "unlisted"}
+  canonical={canonicalUrl}
+>
+  <main
+    class="sketch-page"
+    data-preview-origin={previewOrigin}
+    data-active-file={activeFile}
+  >
+    <header class="sketch-header">
+      <h1>{sketch.title}</h1>
+      <p class="sketch-meta">
+        <a class="sketch-author" href={`/@${sketch.ownerLogin}`}>
+          {
+            sketch.ownerAvatarUrl !== null && (
+              <img
+                class="sketch-avatar"
+                src={sketch.ownerAvatarUrl}
+                alt=""
+                width="24"
+                height="24"
+                loading="lazy"
+              />
+            )
+          }
+          {sketch.ownerLogin}
+        </a>
+        <span class="sketch-updated">更新 {updatedAt}</span>
+        {
+          gistUrl !== null && (
+            <a href={gistUrl} target="_blank" rel="noopener noreferrer">
+              Gist
+            </a>
+          )
+        }
+      </p>
+      {
+        sketch.description !== "" && (
+          <p class="sketch-description">{sketch.description}</p>
+        )
+      }
+      {
+        sketch.visibility === "unlisted" && (
+          <p class="sketch-warning">
+            限定公開 — この URL を知っている人は誰でも見られます
+            (非公開ではありません)。
+          </p>
+        )
+      }
+    </header>
+
+    {
+      originError !== null ? (
+        <p class="sketch-notice">
+          実行環境のオリジン設定が不正です: {originError}
+        </p>
+      ) : (
+        notice !== null && <p class="sketch-notice">{notice}</p>
+      )
+    }
+
+    {
+      files !== null && originError === null && (
+        <div class="sketch-stage" id="stage" />
+      )
+    }
+
+    {
+      files !== null && (
+        <section class="sketch-code">
+          <h2 class="sketch-code-heading">コード</h2>
+          {/* タブは JS が作る。中身は最初から DOM にあるので、JS 無しでも読める */}
+          <div class="sketch-tabs" id="sketch-tabs" />
+          {/* 中身は set:text で 1 要素に閉じる。子要素を挟むと整形が要素の間に
+              改行を入れ、その空白がコードの一部として実行にも回ってしまう。
+              set:text は値をエスケープするので、他者のコードを埋めても安全。 */}
+          {fileNames.map((name) => (
+            <pre
+              class="sketch-file"
+              data-file={name}
+              hidden={name !== activeFile}
+              set:text={files[name]}
+            />
+          ))}
+        </section>
+      )
+    }
+  </main>
+</BaseLayout>
+
+<script>
+  import { SketchView } from "../../scripts/sketch/sketch-view";
+
+  const root = document.querySelector<HTMLElement>(".sketch-page");
+  if (root) new SketchView(root);
+</script>
+
+<style>
+  .sketch-page {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 1.75rem;
+  }
+
+  .sketch-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin: 0.5rem 0 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .sketch-author {
+    display: inline-flex;
+    gap: 0.375rem;
+    align-items: center;
+    color: inherit;
+  }
+
+  .sketch-avatar {
+    border-radius: 50%;
+  }
+
+  .sketch-meta a,
+  .sketch-description a {
+    color: var(--accent);
+  }
+
+  .sketch-description {
+    margin: 1rem 0 0;
+    white-space: pre-wrap;
+  }
+
+  /* 限定公開が private ではないことの明示 (要件 3.4)。 */
+  .sketch-warning {
+    margin: 1rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .sketch-notice {
+    margin: 1.5rem 0 0;
+    color: var(--muted);
+  }
+
+  /* 実行面。作品が縦横どちらでも収まるよう 16:10 の枠に収める。 */
+  .sketch-stage {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    margin: 1.5rem 0 0;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: #000;
+  }
+
+  .sketch-stage :global(.preview-frame) {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .sketch-code {
+    margin: 2rem 0 0;
+  }
+
+  .sketch-code-heading {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+  }
+
+  .sketch-file {
+    margin: 0;
+    padding: 1rem;
+    overflow-x: auto;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--fg) 6%, transparent);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    tab-size: 2;
+  }
+</style>

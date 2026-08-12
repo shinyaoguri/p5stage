@@ -2,10 +2,23 @@
 interface Props {
   title: string;
   description?: string;
+  /**
+   * 検索エンジンに載せない。
+   *
+   * 限定公開の作品ページで立てる。「URL を知る人だけが見られる」という約束は、
+   * 検索結果に出た時点で崩れる (要件 3.4)。
+   */
+  noindex?: boolean;
+  /** 同じ内容に複数の URL があるページで、正とみなす URL。 */
+  canonical?: string;
 }
 
-const { title, description = "p5.js スケッチの開発・共有プラットフォーム" } =
-  Astro.props;
+const {
+  title,
+  description = "p5.js スケッチの開発・共有プラットフォーム",
+  noindex = false,
+  canonical,
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -15,6 +28,8 @@ const { title, description = "p5.js スケッチの開発・共有プラット�
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {canonical !== undefined && <link rel="canonical" href={canonical} />}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />

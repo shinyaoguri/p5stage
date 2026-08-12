@@ -7,7 +7,13 @@
  */
 
 import { generateSketchId } from "./id";
-import type { Sketch, SketchInput, SketchPatch, Visibility } from "./sketch";
+import type {
+  Sketch,
+  SketchInput,
+  SketchPatch,
+  SketchWithOwner,
+  Visibility,
+} from "./sketch";
 
 interface SketchRow {
   readonly id: string;
@@ -18,10 +24,36 @@ interface SketchRow {
   readonly visibility: string;
   readonly created_at: number;
   readonly updated_at: number;
+  readonly current_revision: string | null;
+  readonly revision_etag: string | null;
+  readonly revision_checked_at: number | null;
+  readonly gist_deleted_at: number | null;
 }
 
-const COLUMNS = `id, owner_id, gist_id, title, description, visibility,
-                 created_at, updated_at`;
+interface SketchWithOwnerRow extends SketchRow {
+  readonly owner_login: string;
+  readonly owner_avatar_url: string | null;
+}
+
+const COLUMN_NAMES = [
+  "id",
+  "owner_id",
+  "gist_id",
+  "title",
+  "description",
+  "visibility",
+  "created_at",
+  "updated_at",
+  "current_revision",
+  "revision_etag",
+  "revision_checked_at",
+  "gist_deleted_at",
+] as const;
+
+const COLUMNS = COLUMN_NAMES.join(", ");
+
+/** 結合したときに列名がぶつからないよう、表の別名を付けた並び。 */
+const SKETCH_COLUMNS = COLUMN_NAMES.map((name) => `s.${name}`).join(", ");
 
 function toSketch(row: SketchRow): Sketch {
   return {
@@ -34,6 +66,10 @@ function toSketch(row: SketchRow): Sketch {
     visibility: row.visibility as Visibility,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    currentRevision: row.current_revision,
+    revisionEtag: row.revision_etag,
+    revisionCheckedAt: row.revision_checked_at,
+    gistDeletedAt: row.gist_deleted_at,
   };
 }
 
@@ -72,6 +108,39 @@ export async function createSketch(
     visibility: input.visibility,
     createdAt: now,
     updatedAt: now,
+    currentRevision: null,
+    revisionEtag: null,
+    revisionCheckedAt: null,
+    gistDeletedAt: null,
+  };
+}
+
+/**
+ * 作品を作者ごと引く。作品ページが要るのはこの形 (ログイン不要 — 要件 3.4)。
+ *
+ * 引く鍵は sketchId だけ。URL に載る login は表示のための飾りで、検索条件にしない
+ * (`users.login` は改名で変わるため — ADR 0011)。
+ */
+export async function getSketchWithOwner(
+  db: D1Database,
+  id: string
+): Promise<SketchWithOwner | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${SKETCH_COLUMNS},
+              u.login AS owner_login, u.avatar_url AS owner_avatar_url
+         FROM sketches s
+         JOIN users u ON u.id = s.owner_id
+        WHERE s.id = ?`
+    )
+    .bind(id)
+    .first<SketchWithOwnerRow>();
+
+  if (row === null) return null;
+  return {
+    ...toSketch(row),
+    ownerLogin: row.owner_login,
+    ownerAvatarUrl: row.owner_avatar_url,
   };
 }
 
@@ -201,4 +270,64 @@ export async function attachGist(
     .run();
 
   return result.meta.changes > 0;
+}
+
+/**
+ * 配信するリビジョンを進める (ADR 0011)。
+ *
+ * 所有者で絞らない。**これは持ち主が決める値ではなく、GitHub にある事実の写し**で、
+ * 保存経路だけでなく閲覧時の再検証からも書かれる (そこにログイン中の人はいない)。
+ * 書き換えの入口は id を自分で引き当てた経路に限られる。
+ *
+ * tombstone も一緒に外す。消えたと判断した Gist が読めたなら、その判断は誤りだった
+ * (作者が復元した・一時的な 404 だった) ことになる。
+ */
+export async function setCurrentRevision(
+  db: D1Database,
+  id: string,
+  revision: string,
+  etag: string | null,
+  now: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sketches
+          SET current_revision = ?, revision_etag = ?, revision_checked_at = ?,
+              gist_deleted_at = NULL
+        WHERE id = ?`
+    )
+    .bind(revision, etag, now, id)
+    .run();
+}
+
+/** 突き合わせたが変わっていなかった。次に確かめるまでの時計を進めるだけ。 */
+export async function markRevisionChecked(
+  db: D1Database,
+  id: string,
+  now: number
+): Promise<void> {
+  await db
+    .prepare("UPDATE sketches SET revision_checked_at = ? WHERE id = ?")
+    .bind(now, id)
+    .run();
+}
+
+/**
+ * Gist が GitHub 側で消えた印を立てる (要件 6 の tombstone)。
+ *
+ * 既に立っていれば時刻を動かさない。「いつ消えたか」は最初に気付いた時点が正しく、
+ * 閲覧のたびに更新すると意味を失う。
+ */
+export async function markGistDeleted(
+  db: D1Database,
+  id: string,
+  now: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sketches SET gist_deleted_at = ?, revision_checked_at = ?
+        WHERE id = ? AND gist_deleted_at IS NULL`
+    )
+    .bind(now, now, id)
+    .run();
 }

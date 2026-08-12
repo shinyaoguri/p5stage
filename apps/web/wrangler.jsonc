@@ -26,6 +26,15 @@
       "database_id": "f487a38f-365d-46d9-b150-ce53774b4fb3",
     },
   ],
+  // 配信用の不変オブジェクト (リビジョン SHA をキーにしたスケッチの中身)。
+  // 閲覧経路から GitHub を外すための置き場で、正本ではない (ADR 0011)。
+  // Phase 3 のアセット (ADR 0003) も R2 だが、寿命も GC の規則も違うのでバケットを分ける。
+  "r2_buckets": [
+    {
+      "binding": "CONTENT",
+      "bucket_name": "p5stage-content",
+    },
+  ],
   "vars": {
     // 実行 iframe を配信する別オリジン (要件 5.1)。
     // ここは本番値。ローカルは .dev.vars で上書きする (.dev.vars.example 参照)。

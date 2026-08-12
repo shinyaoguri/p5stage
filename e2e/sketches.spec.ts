@@ -121,7 +121,8 @@ test.describe("作品 API", () => {
   });
 
   test("未ログインでは中身を読めない", async ({ page }) => {
-    // 閲覧者への配信はキャッシュ層 (2-5) の担当で、この口は所有者専用。
+    // 閲覧者への配信は作品ページが別経路で受け持つので (ADR 0011)、この口は
+    // 所有者専用のまま。開けると閲覧のたびに GitHub を叩く形に戻る。
     const response = await page.request.get(`/api/sketches/${ABSENT_ID}/files`);
 
     expect(response.status()).toBe(401);
