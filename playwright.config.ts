@@ -69,6 +69,16 @@ const SEED_OBJECTS = ["e2e-gist-public", "e2e-gist-unlisted"]
   .join(" && ");
 const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS}`;
 
+/**
+ * ビルド成果物から `routes` を外す (#38 / `e2e/strip-dev-routes.ts`)。
+ *
+ * 本番のドメインが付いたままだと `wrangler dev` がそれをリクエスト URL のホストに
+ * してしまい、OAuth の戻り先が本番のドメインになる。`--local-upstream` でも直せるが、
+ * **渡すと E2E の途中で wrangler dev が落ちる** (#38) ので、ルートごと外す。
+ */
+const STRIP_ROUTES =
+  "node ../../e2e/strip-dev-routes.ts dist/server/wrangler.json";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -98,11 +108,10 @@ export default defineConfig({
       // OAuth の値もここで渡す。GitHub の宛先は偽 GitHub (下の webServer) へ向けるので、
       // 素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
       //
-      // `--local-upstream` が要るのは、**wrangler dev が routes の custom_domain
-      // (p5stage.org) をリクエスト URL のホストとして使う**ため。そのままだと
-      // Worker から見た `url.origin` が本番のドメインになり、OAuth の `redirect_uri`
-      // が `http://p5stage.org/api/auth/callback` になって認可から戻れない。
-      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --local-upstream localhost:${WEB_PORT} --upstream-protocol http --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
+      // ビルドの後に `routes` を外す (下の STRIP_ROUTES)。付いたままだと
+      // `wrangler dev` がその custom_domain をリクエスト URL のホストとして使い、
+      // OAuth の `redirect_uri` が本番のドメインになって認可から戻れない。
+      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
