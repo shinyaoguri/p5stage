@@ -35,6 +35,9 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 
 - GitHub OAuth (scope=gist、popup + state 検証)。クライアント側は canvastage を移植、
   コールバックは Pages Functions ではなく Astro の API ルートとして書き直す (ADR 0006)。scope の意味の明示 UI
+- セッションは `__Host-` プレフィックスの cookie に限り、状態を変える API は
+  `Origin` / `Sec-Fetch-Site` を検証する (実行オリジンが same-site サブドメインで
+  `SameSite` に頼れないため) → **ADR 0008**
 - Gist create / debounce PATCH / 取り込み / detach (canvastage gist.ts の状態機械を移植・拡張)
 - D1 メタデータ (作品・ユーザー・公開範囲) と作品ページの最小版
 - バックエンドのキャッシュ層 (conditional GET + ETag、リビジョン SHA キーの永続キャッシュ、404 tombstone)
