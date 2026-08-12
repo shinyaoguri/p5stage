@@ -88,6 +88,35 @@ describe("parseGistContent", () => {
     expect(content.files).toEqual({ "sketch.js": "// hi" });
     expect(content.truncated).toEqual(["big.csv"]);
   });
+
+  it("持ち主と公開範囲を読む (取り込みの判断材料)", () => {
+    const content = parseGistContent({
+      id: "abc",
+      html_url: "https://x",
+      history: [{ version: "v1" }],
+      files: { "sketch.js": { content: "// hi" } },
+      owner: { id: 4242, login: "someone" },
+      public: true,
+    });
+
+    expect(content.ownerId).toBe(4242);
+    expect(content.isPublic).toBe(true);
+  });
+
+  it("持ち主が読めなければ null (自分のものに倒さない)", () => {
+    // 匿名 Gist には owner が無い。ここを 0 や「自分」に倒すと、取り込みの
+    // 所有者確認がすり抜ける。
+    const content = parseGistContent({
+      id: "abc",
+      html_url: "https://x",
+      history: [{ version: "v1" }],
+      files: { "sketch.js": { content: "// hi" } },
+    });
+
+    expect(content.ownerId).toBeNull();
+    // 公開の側へも倒さない (誤りが意図しない公開にならない向き)。
+    expect(content.isPublic).toBe(false);
+  });
 });
 
 describe("createGist", () => {

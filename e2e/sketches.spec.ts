@@ -128,6 +128,56 @@ test.describe("作品 API", () => {
     expect(response.status()).toBe(401);
   });
 
+  test("未ログインでは Gist を取り込めない", async ({ page }) => {
+    // 取り込みは利用者のトークンで GitHub を読む。ログインの確認が外れると、
+    // 誰のものでもないトークンで叩くことになる。
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      const response = await fetch("/api/sketches/adopt", { method: "POST" });
+      return { status: response.status, body: await response.json() };
+    });
+
+    expect(result.status).toBe(401);
+    expect(result.body).toMatchObject({ error: "unauthorized" });
+  });
+
+  test("実行オリジンからの取り込みは 403 で弾く", async ({ page }) => {
+    // 他者コードが動くオリジンは same-site なので cookie が付く。ここで止まらな
+    // ければ、ログイン中の利用者の名前で作品を作られる (ADR 0008)。
+    const response = await page.request.post("/api/sketches/adopt", {
+      headers: { Origin: PREVIEW_ORIGIN, "Content-Type": "application/json" },
+    });
+
+    expect(response.status()).toBe(403);
+  });
+
+  test("未ログインでは Gist を外せない", async ({ page }) => {
+    await page.goto("/");
+
+    const result = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/sketches/${id}/detach`, {
+        method: "POST",
+      });
+      return { status: response.status, body: await response.json() };
+    }, ABSENT_ID);
+
+    expect(result.status).toBe(401);
+    expect(result.body).toMatchObject({ error: "unauthorized" });
+  });
+
+  test("実行オリジンからの切り離しは 403 で弾く", async ({ page }) => {
+    // ここが通ると、他者コードからログイン中の利用者の作品の正本を外せる。
+    const response = await page.request.post(
+      `/api/sketches/${ABSENT_ID}/detach`,
+      {
+        headers: { Origin: PREVIEW_ORIGIN, "Content-Type": "application/json" },
+      }
+    );
+
+    expect(response.status()).toBe(403);
+  });
+
   test("作品の取得は共有キャッシュに載せない", async ({ page }) => {
     // 限定公開の URL がキャッシュに載ると、ID を知らない相手にも届きうる。
     const response = await page.request.get(`/api/sketches/${ABSENT_ID}`);

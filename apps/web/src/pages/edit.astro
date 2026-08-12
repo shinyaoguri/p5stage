@@ -47,6 +47,8 @@ try {
           <button id="new" type="button">
             新規
           </button>
+          {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
+          <div id="adopt-controls" />
           <div id="settings" />
           <div id="account" />
         </div>
@@ -71,10 +73,17 @@ try {
   import { FileTabs } from "../scripts/editor/file-tabs";
   import { isRunShortcut } from "../scripts/editor/run-shortcut";
   import { PreviewHost } from "../scripts/preview-host";
+  import { AdoptPanel } from "../scripts/sketch/adopt-panel";
+  import {
+    adoptGist,
+    detachSketchGist,
+    GistAdoptError,
+  } from "../scripts/sketch/gist-adopt";
   import {
     chooseStartingPoint,
     clearSketchIdInUrl,
     loadSketch,
+    preferredActiveFile,
     showSketchIdInUrl,
     SketchLoadError,
     sketchIdFromUrl,
@@ -98,6 +107,7 @@ try {
   const status = document.getElementById("status");
   const draftStatus = document.getElementById("draft-status");
   const saveHost = document.getElementById("save-controls");
+  const adoptHost = document.getElementById("adopt-controls");
 
   /**
    * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
@@ -120,7 +130,8 @@ try {
       !stage ||
       !consoleHost ||
       !settingsHost ||
-      !saveHost
+      !saveHost ||
+      !adoptHost
     ) {
       return;
     }
@@ -236,12 +247,67 @@ try {
 
     const savePanel = new SavePanel(saveHost, {
       onSave: (meta) => void saver.saveNow(meta),
+      onDetach: () => void detachCurrentSketch(),
     });
     const saver = new SketchSaver({
       sketchId,
       getFiles: () => editor.getFiles(),
       onState: (state) => savePanel.render(state),
       onCreated: showSketchIdInUrl,
+    });
+
+    /**
+     * 今の作品を Gist から切り離す (Phase 2-6)。
+     *
+     * 手元の内容には手を付けない。**正本が外れるだけ**で、続きはそのまま書ける。
+     * 次の保存で新しい Gist ができる。
+     */
+    const detachCurrentSketch = async () => {
+      const current = saver.state.sketchId;
+      if (current === null) return;
+      try {
+        await detachSketchGist(current);
+      } catch (error) {
+        setDraftStatus(
+          error instanceof GistAdoptError
+            ? error.message
+            : "切り離せませんでした"
+        );
+        return;
+      }
+      saver.forgetGist();
+      setDraftStatus(
+        "Gist から切り離しました (保存すると新しい Gist を作ります)"
+      );
+    };
+
+    /**
+     * 既にある自分の Gist を取り込んで、その続きから始める (Phase 2-6)。
+     *
+     * 取り込めた中身は応答に入っているので、開き直さずそのままエディタへ流し込む。
+     * 中身の差し替えで自動保存が予約されるので、下書きを捨てるのは**入れ替えた後**
+     * (「新規」と同じ順序)。
+     */
+    new AdoptPanel(adoptHost, {
+      onAdopt: async (ref) => {
+        let adopted;
+        try {
+          adopted = await adoptGist(ref);
+        } catch (error) {
+          return error instanceof GistAdoptError
+            ? error.message
+            : "取り込めませんでした";
+        }
+
+        editor.setFiles(adopted.files, preferredActiveFile(adopted.files));
+        void draftSaver.clear();
+        saver.adopt(adopted.sketchId, adopted.gist);
+        showSketchIdInUrl(adopted.sketchId);
+        setDraftStatus("Gist から取り込みました");
+        run();
+        editor.focus();
+        return null;
+      },
     });
 
     if (sketchId !== null) {
@@ -397,19 +463,31 @@ try {
     right: 0;
     display: flex;
     flex-wrap: wrap;
+    /* 折り返しても右端に揃える。左へ伸びた部分は空きになり、下のファイルタブが
+       見えたまま残る。 */
+    justify-content: flex-end;
     gap: 0.75rem;
     align-items: center;
     padding: 0.5rem 0.75rem;
     color: #fff;
     font-size: 0.8125rem;
     text-shadow: 0 0 3px #000;
+    /* その空きはクリックも通す。操作列は右上に浮いているだけで、左上のタブを
+       覆う面ではない (覆うと、タブが見えているのに押せない状態になる)。 */
+    pointer-events: none;
+  }
+
+  .chrome > * {
+    pointer-events: auto;
   }
 
   /* ファイルタブ。左上に置き、右上の実行ボタン群とは重ならない幅に収める。
      中身の見た目は styles/file-tabs.css (JS が組み立てる DOM に届かせるため)。 */
   #file-tabs {
     position: absolute;
-    z-index: 20;
+    /* 操作列 (z-index: 20) より上。操作列は状態の文言で幅が伸び縮みし、伸びた分が
+       タブの上に来ることがある。押せる面はタブの側なので、そちらを上に置く。 */
+    z-index: 21;
     top: 0.5rem;
     left: 0.75rem;
     max-width: calc(100% - 22rem);
