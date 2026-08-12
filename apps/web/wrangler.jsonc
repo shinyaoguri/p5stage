@@ -19,9 +19,25 @@
   "observability": {
     "enabled": true,
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "p5stage",
+      "database_id": "f487a38f-365d-46d9-b150-ce53774b4fb3",
+    },
+  ],
   "vars": {
     // 実行 iframe を配信する別オリジン (要件 5.1)。
     // ここは本番値。ローカルは .dev.vars で上書きする (.dev.vars.example 参照)。
     "PUBLIC_PREVIEW_ORIGIN": "https://preview.p5stage.org",
+    // GitHub OAuth App (本番) の Client ID。公開値なのでコミットしてよい。
+    // 対になる Client Secret は `wrangler secret put GITHUB_CLIENT_SECRET` で入れる。
+    // OAuth App は callback URL を 1 つしか持てないため、ローカルは別アプリを作り
+    // .dev.vars で上書きする。GitHub App ではなく OAuth App なのは、GitHub App が
+    // Gist API に対応していないため (ADR 0002 の Gist 正本と噛み合わない)。
+    //
+    // `PUBLIC_` を付けないのは、この値をクライアントへ配らないため。認可画面への
+    // リダイレクトはサーバ側で組み立てる (ADR 0009)。
+    "GITHUB_CLIENT_ID": "Ov23liIO80s6PkcxBQLI",
   },
 }

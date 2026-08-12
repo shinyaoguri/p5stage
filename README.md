@@ -37,6 +37,19 @@ cp apps/web/.dev.vars.example apps/web/.dev.vars
 cp apps/preview/.dev.vars.example apps/preview/.dev.vars
 ```
 
+GitHub OAuth を使う (ログイン・保存) なら、`apps/web/.dev.vars` の
+`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` にローカル用の OAuth App の値を入れる。
+OAuth App は callback URL を 1 つしか持てないので、本番とは別のアプリを作り、
+callback URL は `http://localhost:4321/api/auth/callback` にする
+(`apps/web/.dev.vars.example` に手順あり)。
+
+セッションは D1 に置くので、ローカルの D1 にスキーマを当てる。
+本番への適用は CI (deploy ジョブ) が `--remote` で行うので、手で流す必要は無い。
+
+```bash
+npx wrangler d1 migrations apply p5stage --local --cwd apps/web
+```
+
 | コマンド | 内容 |
 |---|---|
 | `npm run dev` | 本体の開発サーバ (http://localhost:4321) |

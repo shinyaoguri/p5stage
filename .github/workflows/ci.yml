@@ -64,6 +64,17 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+      # サーバ (wrangler dev) が落ちると、Playwright 側には接続拒否しか残らない。
+      # 落ちた理由は wrangler のログにしか出ないので、失敗時だけ持ち帰る。
+      - name: 失敗したときだけ wrangler のログを残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrangler-logs
+          path: ~/.config/.wrangler/logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
   deploy:
     name: deploy (cloudflare workers)
     # 実行が通らないものは出さない。E2E は「別オリジンで実行できる」の最後の砦。
@@ -102,6 +113,14 @@ jobs:
         if: steps.guard.outputs.ready == 'true'
         run: npx wrangler deploy
         working-directory: apps/preview
+
+      # スキーマはコードより先に上げる。逆にすると、新しいコードが
+      # まだ無いテーブルを引く時間帯ができる。適用済みの分は読み飛ばされる。
+      - name: D1 のマイグレーションを適用
+        if: steps.guard.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply p5stage --remote
+        working-directory: apps/web
+
       - name: web (本体) をデプロイ
         if: steps.guard.outputs.ready == 'true'
         run: npx wrangler deploy

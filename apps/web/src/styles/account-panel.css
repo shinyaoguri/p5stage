@@ -1,0 +1,104 @@
+/*
+ * ログイン導線の見た目。
+ *
+ * パネルは account-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
+ * (settings-panel.css・file-tabs.css と同じ事情)。置き場所はページ側が決め、
+ * ここは中身だけを持つ。
+ *
+ * スケッチの上に重なる操作列の一員なので、平常時は文字とボタンだけに留める。
+ * 説明を見せるのはダイアログを開いたときだけ (要件 3.6 の明示はそちらが担う)。
+ */
+
+.account-panel {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.account-signed-in {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.account-avatar {
+  border-radius: 50%;
+  /* 読み込めなかったときに枠だけが残らないようにする。 */
+  background: rgb(255 255 255 / 0.15);
+}
+
+.account-login-name {
+  color: rgb(255 255 255 / 0.7);
+}
+
+/* 認可の失敗はその場で気付けるよう、操作列から改行して出す。 */
+.account-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--accent, #ff8fb1);
+}
+
+/*
+ * 同意ダイアログ。
+ *
+ * ここだけは「読ませる」面なので、操作列の透過的な見た目から離して不透明にする。
+ * gist scope の意味を読み飛ばされると要件 3.6 を満たしたことにならない。
+ */
+.account-consent {
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.5rem;
+  background: #14141a;
+  color: #f2f2f5;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.account-consent::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.account-consent h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.account-consent p {
+  margin: 0 0 0.75rem;
+}
+
+.account-consent-note {
+  color: rgb(255 255 255 / 0.6);
+}
+
+.account-consent-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.account-consent-actions button {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.account-consent-proceed {
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.25rem;
+  background: #2f6feb;
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.account-consent-proceed:hover {
+  background: #3b7ef5;
+}

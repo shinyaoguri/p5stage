@@ -12,6 +12,15 @@
 export const WEB_PORT = 8790;
 export const PREVIEW_PORT = 8791;
 
+/**
+ * `wrangler dev` が開くデバッガの受け口。
+ *
+ * 既定は両方とも 9229 で、2 つ同時に立てると**後から起動した方が取り合いに負ける**。
+ * サーバの片方が黙って落ちる形になり、症状は「途中まで通ってから接続拒否」になる。
+ */
+export const WEB_INSPECTOR_PORT = 9230;
+export const PREVIEW_INSPECTOR_PORT = 9231;
+
 /** 本体 (エディタ・ギャラリー・API)。 */
 export const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 

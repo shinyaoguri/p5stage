@@ -3,8 +3,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  PREVIEW_INSPECTOR_PORT,
   PREVIEW_ORIGIN,
   PREVIEW_PORT,
+  WEB_INSPECTOR_PORT,
   WEB_ORIGIN,
   WEB_PORT,
 } from "./e2e/origins";
@@ -64,20 +66,31 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: `npm run build && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN}`,
+      // セッションは D1 に置くので、起動前にローカルの D1 へスキーマを当てる
+      // (CI の使い捨て環境には何も無い状態で来る)。適用済みの分は読み飛ばされる。
+      //
+      // OAuth の値もここで渡す。本物の GitHub へは行かない (認可画面の手前までしか
+      // 見ない) ので、素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
+      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
       timeout: SERVER_TIMEOUT_MS,
       env: { WRANGLER_SEND_METRICS: "false" },
+      // 既定 (ignore) だとサーバが落ちた理由が握り潰され、Playwright 側には
+      // 接続拒否しか残らない。原因を追える形で出す。
+      stdout: "pipe",
+      stderr: "pipe",
     },
     {
-      command: `npm run build:client && npx wrangler dev --port ${PREVIEW_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_WEB_ORIGIN:${WEB_ORIGIN}`,
+      command: `npm run build:client && npx wrangler dev --port ${PREVIEW_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_WEB_ORIGIN:${WEB_ORIGIN} --inspector-port ${PREVIEW_INSPECTOR_PORT}`,
       cwd: appDir("preview"),
       url: `${PREVIEW_ORIGIN}/runner/`,
       reuseExistingServer: !isCI,
       timeout: SERVER_TIMEOUT_MS,
       env: { WRANGLER_SEND_METRICS: "false" },
+      stdout: "pipe",
+      stderr: "pipe",
     },
   ],
 });
