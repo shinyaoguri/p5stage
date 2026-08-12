@@ -155,9 +155,11 @@ test.describe("認証エンドポイント", () => {
   });
 
   test("ログアウトは本体オリジンからなら通る", async ({ page }) => {
-    await openEditor(page);
+    // 本体オリジンのページの中から呼べれば、ブラウザが Origin と Sec-Fetch-Site を
+    // 正しく付ける。エディタである必要は無いので、軽いトップページで足りる
+    // (Monaco を読み込む必要が無いぶん速く、CI での揺れも小さい)。
+    await page.goto("/");
 
-    // ページの中から呼ぶ = ブラウザが Origin と Sec-Fetch-Site を正しく付ける。
     const status = await page.evaluate(async () => {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       return response.status;
