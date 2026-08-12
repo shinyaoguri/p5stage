@@ -8,6 +8,11 @@
  * - Worker が実際に返す `Set-Cookie` が `__Host-` の要件を満たしていること (ADR 0008)。
  *   属性を 1 つ落とすとサブドメインから cookie を上書きできてしまう
  * - 状態を変える口が、実行オリジン (same-site) からの要求を弾くこと
+ *
+ * 弾かれる要求に**ボディを付けない**のは、`wrangler dev` の都合。ボディを読まないまま
+ * 403 で捨てる要求が続くと、CI (ubuntu) の `wrangler dev` が本文の無い `✘ [ERROR]` を
+ * 出して落ちる (手元の macOS では再現しない)。ここで確かめたいのは `Content-Type` の
+ * 種類で Astro の保護の効き方が変わることなので、ヘッダだけで足りる。
  */
 
 import { expect, test } from "@playwright/test";
@@ -134,7 +139,6 @@ test.describe("認証エンドポイント", () => {
         Origin: PREVIEW_ORIGIN,
         "Content-Type": "application/json",
       },
-      data: {},
     });
 
     expect(response.status()).toBe(403);
@@ -148,7 +152,6 @@ test.describe("認証エンドポイント", () => {
         "Content-Type": "application/json",
         "Sec-Fetch-Site": "same-site",
       },
-      data: {},
     });
 
     expect(response.status()).toBe(403);
