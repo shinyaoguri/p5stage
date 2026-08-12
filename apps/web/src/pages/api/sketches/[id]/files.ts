@@ -4,8 +4,9 @@
  * 正本は作者自身の Gist で、ここはその代理をする口 (ADR 0002 / 0010)。D1 に入るのは
  * `gist_id` だけで、コードは通り過ぎるだけ。
  *
- * **どちらも所有者に限る**。閲覧者への配信はキャッシュ層 (2-5) の担当で、ここを匿名に
- * 開けると Workers の共有 IP で GitHub の匿名レート制限 (60 回/時) を焼いてしまう。
+ * **どちらも所有者に限る**。閲覧者への配信は別経路 (D1 のポインタ → R2 の不変
+ * オブジェクト — ADR 0011) が受け持つ。ここを匿名に開けると、閲覧のたびに
+ * GitHub を叩く形に戻ってしまう。
  */
 
 import { env } from "cloudflare:workers";
@@ -37,10 +38,12 @@ import {
   unsavableFileNames,
 } from "../../../../lib/sketches/gist-payload";
 import { isSketchId } from "../../../../lib/sketches/id";
+import { putRevision } from "../../../../lib/sketches/revision-store";
 import type { Sketch } from "../../../../lib/sketches/sketch";
 import {
   attachGist,
   getSketch,
+  setCurrentRevision,
   touchSketch,
 } from "../../../../lib/sketches/store";
 
@@ -174,7 +177,8 @@ async function updateAttached(
 ): Promise<GistRevision> {
   // 今 Gist にあるファイル名を先に見る。PATCH は**送らなかったファイルを残す**ので、
   // これが無いとエディタで消したファイルが Gist に残り、次に開くと甦る。
-  // 条件付き GET で往復を省くのはキャッシュ層 (2-5) の担当。
+  // ここは所有者の保存経路なので条件付き GET にしない。差分を作るには
+  // 「今 Gist にある名前」が要り、304 では手に入らない。
   const current = await fetchGist(token, gistId);
 
   const revision = await updateGist({
@@ -186,6 +190,38 @@ async function updateAttached(
 
   await touchSketch(env.DB, sketch.id, sketch.ownerId, Date.now());
   return revision;
+}
+
+/**
+ * 保存した中身を配信側へ渡す (ADR 0011)。
+ *
+ * ここが**配信の主経路**。保存の瞬間は中身が手元にあるので、R2 へ書いてポインタを
+ * 進めておけば、閲覧者は GitHub を 1 回も叩かずに読める。
+ *
+ * 失敗しても保存は成功のまま返す。Gist (正本) には既に書けているので、ここで
+ * 失敗を返すと利用者が同じ保存を繰り返すことになる。配信側は次の閲覧で
+ * 自分で埋め直す (`resolveSketchContent` の fill 経路)。
+ */
+async function publish(
+  sketchId: string,
+  gistId: string,
+  revision: GistRevision,
+  files: SketchFiles
+): Promise<boolean> {
+  try {
+    await putRevision(env.CONTENT, gistId, revision.revision, files);
+    // ETag は保存の応答からは取れない。次の再検証で埋まる。
+    await setCurrentRevision(
+      env.DB,
+      sketchId,
+      revision.revision,
+      null,
+      Date.now()
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const PUT: APIRoute = async ({ request, url, params }) => {
@@ -215,9 +251,16 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
         read.files
       );
       if ("response" in created) return created.response;
+      const published = await publish(
+        sketch.id,
+        created.revision.id,
+        created.revision,
+        read.files
+      );
       return noStore({
         sketch: { ...sketch, gistId: created.revision.id },
         gist: created.revision,
+        published,
       });
     }
 
@@ -227,7 +270,13 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
       auth.session.token,
       read.files
     );
-    return noStore({ sketch, gist: revision });
+    const published = await publish(
+      sketch.id,
+      sketch.gistId,
+      revision,
+      read.files
+    );
+    return noStore({ sketch, gist: revision, published });
   } catch (error) {
     if (error instanceof GistError) return fromGistError(error);
     throw error;

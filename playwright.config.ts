@@ -44,6 +44,29 @@ const SERVER_TIMEOUT_MS = 180_000;
  */
 const PERSIST_DIR = ".wrangler/e2e";
 
+/**
+ * 作品ページ用の種を蒔く。
+ *
+ * 作品を作るには GitHub の認可が要り、E2E では踏めない。しかし作品ページの
+ * 表示・正典 URL への 302・キャッシュヘッダ・別オリジンでの実行は**作品が
+ * 1 件も無いと確かめられない**。D1 と R2 に直に置いて、配信経路
+ * (D1 のポインタ → R2 の中身) をそのまま踏ませる (ADR 0011)。
+ *
+ * 種の `revision_checked_at` は今なので再検証の間隔に入らない。
+ * つまりこのテストの間、Worker から GitHub へは出ていかない。
+ *
+ * パスは apps/web から見た相対 (このコマンドは cwd: apps/web で走る)。
+ */
+const SEED_SQL = "../../e2e/seed.sql";
+const SEED_CONTENT = "../../e2e/seed-content.json";
+const SEED_OBJECTS = ["e2e-gist-public", "e2e-gist-unlisted"]
+  .map(
+    (gistId) =>
+      `npx wrangler r2 object put p5stage-content/gists/${gistId}/e2erev01.json --file=${SEED_CONTENT} --content-type=application/json --local --persist-to ${PERSIST_DIR}`
+  )
+  .join(" && ");
+const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -68,10 +91,11 @@ export default defineConfig({
     {
       // セッションは D1 に置くので、起動前にローカルの D1 へスキーマを当てる
       // (CI の使い捨て環境には何も無い状態で来る)。適用済みの分は読み飛ばされる。
+      // 続けて作品ページ用の種を蒔く (下の SEED_COMMANDS)。
       //
       // OAuth の値もここで渡す。本物の GitHub へは行かない (認可画面の手前までしか
       // 見ない) ので、素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
-      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --inspector-port ${WEB_INSPECTOR_PORT}`,
+      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,

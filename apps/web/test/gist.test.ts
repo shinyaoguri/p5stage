@@ -9,12 +9,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  appAuth,
+  authorizationValue,
   createGist,
   fetchGist,
+  fetchGistForDelivery,
   GistError,
   parseGistContent,
   parseGistRevision,
   updateGist,
+  userAuth,
 } from "../src/lib/github/gist";
 
 afterEach(() => {
@@ -174,5 +178,89 @@ describe("失敗の分け方", () => {
     stubFetch(new Response("<html>", { status: 200 }));
 
     await expect(fetchGist("t", "abc")).rejects.toMatchObject({ kind: "api" });
+  });
+});
+
+describe("authorizationValue", () => {
+  it("利用者のトークンは Bearer", () => {
+    expect(authorizationValue(userAuth("gho_secret"))).toBe(
+      "Bearer gho_secret"
+    );
+  });
+
+  it("app の client credentials は Basic (匿名にしない)", () => {
+    // 匿名は 60 回/時/IP で、Workers の出口 IP は多数の利用者と共有される。
+    // 認証付きにすると 5,000 回/時/app になり、304 もレート制限を消費しなくなる。
+    expect(authorizationValue(appAuth("Ov23li", "secret"))).toBe(
+      `Basic ${btoa("Ov23li:secret")}`
+    );
+  });
+});
+
+describe("fetchGistForDelivery", () => {
+  const auth = appAuth("Ov23li", "secret");
+
+  it("ETag があれば条件付き GET にする", async () => {
+    const impl = stubFetch(gistJson());
+
+    await fetchGistForDelivery(auth, "abc", '"v1"');
+
+    const init = impl.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("If-None-Match")).toBe('"v1"');
+  });
+
+  it("ETag が無ければ条件を付けない", async () => {
+    const impl = stubFetch(gistJson());
+
+    await fetchGistForDelivery(auth, "abc", null);
+
+    const init = impl.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).has("If-None-Match")).toBe(false);
+  });
+
+  it("304 は unchanged (中身は来ない)", async () => {
+    stubFetch(new Response(null, { status: 304 }));
+
+    await expect(fetchGistForDelivery(auth, "abc", '"v1"')).resolves.toEqual({
+      kind: "unchanged",
+    });
+  });
+
+  it("変わっていれば中身と次の ETag を返す", async () => {
+    stubFetch(
+      Response.json(
+        {
+          id: "abc123",
+          html_url: "https://gist.github.com/u/abc123",
+          history: [{ version: "cafe1234" }],
+          files: { "sketch.js": { filename: "sketch.js", content: "// hi" } },
+        },
+        { headers: { ETag: '"v2"' } }
+      )
+    );
+
+    const result = await fetchGistForDelivery(auth, "abc", '"v1"');
+
+    expect(result).toMatchObject({
+      kind: "changed",
+      etag: '"v2"',
+      content: { revision: "cafe1234", files: { "sketch.js": "// hi" } },
+    });
+  });
+
+  it("404 は not_found (作者が消した = tombstone の材料)", async () => {
+    stubFetch(new Response("", { status: 404 }));
+
+    await expect(fetchGistForDelivery(auth, "abc", null)).rejects.toMatchObject(
+      { kind: "not_found" }
+    );
+  });
+
+  it("届かなければ network", async () => {
+    stubFetch(new TypeError("failed to fetch"));
+
+    await expect(
+      fetchGistForDelivery(auth, "abc", null)
+    ).rejects.toBeInstanceOf(GistError);
   });
 });

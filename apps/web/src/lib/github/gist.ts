@@ -59,10 +59,42 @@ export interface GistContent extends GistRevision {
 
 const API_ROOT = "https://api.github.com";
 
+/**
+ * どの資格で GitHub を叩くか。
+ *
+ * - `user` 利用者自身のトークン。**書き込みは必ずこちら** (要件 5.2)。5,000 回/時/人
+ * - `app` OAuth App の client credentials。**公開情報の読み出し専用**。
+ *   5,000 回/時/app。閲覧経路の再検証に使う (ADR 0011)
+ *
+ * 匿名 (資格なし) は選択肢に入れない。60 回/時/IP で、Workers の出口 IP は
+ * 多数の利用者と共有される。304 がレート制限を消費しなくなるのも認証付きの場合だけ。
+ */
+export type GistAuth =
+  | { readonly kind: "user"; readonly token: string }
+  | {
+      readonly kind: "app";
+      readonly clientId: string;
+      readonly clientSecret: string;
+    };
+
+export function userAuth(token: string): GistAuth {
+  return { kind: "user", token };
+}
+
+export function appAuth(clientId: string, clientSecret: string): GistAuth {
+  return { kind: "app", clientId, clientSecret };
+}
+
+/** 資格を `Authorization` の値へ移す。 */
+export function authorizationValue(auth: GistAuth): string {
+  if (auth.kind === "user") return `Bearer ${auth.token}`;
+  return `Basic ${btoa(`${auth.clientId}:${auth.clientSecret}`)}`;
+}
+
 /** User-Agent は GitHub API の要件 (無いと 403)。 */
-function headers(token: string): HeadersInit {
+function headers(auth: GistAuth): HeadersInit {
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: authorizationValue(auth),
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "p5stage",
@@ -121,7 +153,7 @@ async function callGistApi(
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, headers: headers(token) });
+    response = await fetch(url, { ...init, headers: headers(userAuth(token)) });
   } catch {
     throw new GistError("network", "GitHub に接続できませんでした");
   }
@@ -261,7 +293,7 @@ export async function deleteGist(token: string, gistId: string): Promise<void> {
   try {
     response = await fetch(`${API_ROOT}/gists/${encodeURIComponent(gistId)}`, {
       method: "DELETE",
-      headers: headers(token),
+      headers: headers(userAuth(token)),
     });
   } catch {
     throw new GistError("network", "GitHub に接続できませんでした");
@@ -272,11 +304,13 @@ export async function deleteGist(token: string, gistId: string): Promise<void> {
 }
 
 /**
- * Gist を読む。
+ * 所有者として Gist を読む (編集の再開・保存前の差分作り)。
  *
  * トークンを付けて読む。secret gist は URL を知っていれば匿名でも読めるが、匿名の
  * レート制限は IP ごと 60 回/時で、Workers の出口 IP は多数の利用者で共有される。
  * 認証付きなら利用者ごと 5000 回/時になるので、**読みも本人のトークンで**行う。
+ *
+ * 閲覧者への配信はこの口を使わない (トークンを持つ人がいない) → `fetchGistForDelivery`。
  */
 export async function fetchGist(
   token: string,
@@ -288,4 +322,59 @@ export async function fetchGist(
     { method: "GET" }
   );
   return parseGistContent(body);
+}
+
+/** 条件付き GET の結果。変わっていなければ中身は来ない。 */
+export type ConditionalGist =
+  | { readonly kind: "unchanged" }
+  | {
+      readonly kind: "changed";
+      readonly content: GistContent;
+      /** 次の問い合わせに付ける値。無ければ次は無条件の GET になる。 */
+      readonly etag: string | null;
+    };
+
+/**
+ * 配信のために Gist を読み直す (ADR 0011)。
+ *
+ * 閲覧者はログインしていないので、**利用者のトークンは使えない**。OAuth App の
+ * client credentials で叩き、5,000 回/時/app の枠に載せる。
+ *
+ * `etag` を渡すと条件付き GET になる。**変わっていなければ 304 で、認証付きなら
+ * レート制限を消費しない**。これが効くおかげで、GitHub の消費が閲覧数ではなく
+ * 「実際に中身が変わった回数」に比例する形になる。
+ */
+export async function fetchGistForDelivery(
+  auth: GistAuth,
+  gistId: string,
+  etag: string | null
+): Promise<ConditionalGist> {
+  const requestHeaders = new Headers(headers(auth));
+  if (etag !== null) requestHeaders.set("If-None-Match", etag);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_ROOT}/gists/${encodeURIComponent(gistId)}`, {
+      method: "GET",
+      headers: requestHeaders,
+    });
+  } catch {
+    throw new GistError("network", "GitHub に接続できませんでした");
+  }
+
+  if (response.status === 304) return { kind: "unchanged" };
+  if (!response.ok) throw await toGistError(response);
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new GistError("api", "GitHub の応答を解釈できませんでした");
+  }
+
+  return {
+    kind: "changed",
+    content: parseGistContent(body),
+    etag: response.headers.get("etag"),
+  };
 }

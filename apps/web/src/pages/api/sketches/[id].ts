@@ -41,7 +41,8 @@ export const GET: APIRoute = async ({ params }) => {
     { sketch },
     {
       // 限定公開の URL が共有キャッシュに載ると、ID を知らない相手にも届きうる。
-      // 公開作品の配信キャッシュは Phase 2-5 でキャッシュ層ごと設計する。
+      // この口は公開範囲を見ずに答えるので、まとめて載せない。エッジに載せるのは
+      // 公開範囲を分かって描く作品ページの方 (ADR 0011)。
       headers: { "Cache-Control": "private, no-store" },
     }
   );

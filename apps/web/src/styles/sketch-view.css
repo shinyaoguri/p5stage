@@ -1,0 +1,29 @@
+/* 作品ページのファイルタブ。JS が組み立てる DOM に届かせるため、
+   ページの <style> ではなくここに置く (file-tabs.css と同じ理由)。 */
+
+.sketch-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.sketch-tab {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--fg) 15%, transparent);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.sketch-tab:hover {
+  color: var(--fg);
+}
+
+.sketch-tab[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--fg);
+}

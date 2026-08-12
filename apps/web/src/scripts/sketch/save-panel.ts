@@ -9,6 +9,8 @@
 
 import "../../styles/save-panel.css";
 
+import { sketchPermalink } from "../../lib/sketches/content";
+
 import type { SaveState, SketchMeta } from "./sketch-saver";
 
 const VISIBILITY_LABELS: Record<SketchMeta["visibility"], string> = {
@@ -54,6 +56,7 @@ export class SavePanel {
   readonly #button: HTMLButtonElement;
   readonly #status: HTMLElement;
   readonly #link: HTMLAnchorElement;
+  readonly #pageLink: HTMLAnchorElement;
   readonly #dialog: HTMLDialogElement;
   readonly #titleInput: HTMLInputElement;
   #state: SaveState | null = null;
@@ -82,10 +85,25 @@ export class SavePanel {
     this.#link.textContent = "Gist";
     this.#link.hidden = true;
 
+    // 人に見せる URL。login を含まない恒久リンクを出す (作者が GitHub で改名しても
+    // 生きる。開くと正典 URL へ飛ぶ — ADR 0011)。
+    this.#pageLink = document.createElement("a");
+    this.#pageLink.className = "save-gist-link";
+    this.#pageLink.target = "_blank";
+    this.#pageLink.rel = "noopener noreferrer";
+    this.#pageLink.textContent = "作品ページ";
+    this.#pageLink.hidden = true;
+
     this.#titleInput = document.createElement("input");
     this.#dialog = this.#buildDialog();
 
-    for (const node of [this.#status, this.#link, this.#button, this.#dialog]) {
+    for (const node of [
+      this.#status,
+      this.#pageLink,
+      this.#link,
+      this.#button,
+      this.#dialog,
+    ]) {
       this.#host.appendChild(node);
     }
   }
@@ -99,6 +117,15 @@ export class SavePanel {
       state.status === "error"
     );
     this.#button.disabled = state.status === "saving";
+
+    // 作品ページは Gist より先に成立する (器ができた時点で URL が決まる)。
+    // 中身がまだ無い状態でも「まだ保存されていません」と出るので、出したままでよい。
+    if (state.sketchId === null) {
+      this.#pageLink.hidden = true;
+    } else {
+      this.#pageLink.hidden = false;
+      this.#pageLink.href = sketchPermalink(state.sketchId);
+    }
 
     if (state.gist === null) {
       this.#link.hidden = true;

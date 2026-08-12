@@ -26,6 +26,23 @@ export interface Sketch {
   readonly visibility: Visibility;
   readonly createdAt: number;
   readonly updatedAt: number;
+  /**
+   * 配信するリビジョン (Gist の SHA)。R2 のキーになる (ADR 0011)。
+   * まだ書き出していない間は null。
+   */
+  readonly currentRevision: string | null;
+  /** 最後に GitHub と突き合わせたときの ETag。条件付き GET に使う。 */
+  readonly revisionEtag: string | null;
+  /** 最後に突き合わせた時刻。 */
+  readonly revisionCheckedAt: number | null;
+  /** 作者が GitHub 側で Gist を消した時刻 (要件 6 の tombstone)。 */
+  readonly gistDeletedAt: number | null;
+}
+
+/** 作品と、その作者の見せる情報。作品ページが要るのはこの形。 */
+export interface SketchWithOwner extends Sketch {
+  readonly ownerLogin: string;
+  readonly ownerAvatarUrl: string | null;
 }
 
 /** タイトルの上限。Gist のファイル名にも使うので、極端に長い値を持ち込ませない。 */
