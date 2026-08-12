@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
-  FAKE_GITHUB_ORIGIN,
   FAKE_GITHUB_PORT,
   PREVIEW_INSPECTOR_PORT,
   PREVIEW_ORIGIN,
@@ -81,6 +80,8 @@ const STRIP_ROUTES =
 
 export default defineConfig({
   testDir: "./e2e",
+  // 切り分け実験 (#38): #46 以前の構成に戻して落ちるか見る。
+  testIgnore: ["**/flow.spec.ts"],
   fullyParallel: true,
   // .only の消し忘れで CI が一部しか回らないのを防ぐ。
   forbidOnly: isCI,
@@ -111,7 +112,7 @@ export default defineConfig({
       // ビルドの後に `routes` を外す (下の STRIP_ROUTES)。付いたままだと
       // `wrangler dev` がその custom_domain をリクエスト URL のホストとして使い、
       // OAuth の `redirect_uri` が本番のドメインになって認可から戻れない。
-      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
+      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
