@@ -13,6 +13,7 @@ import { buildStateCookie } from "../../../lib/session/cookie";
 import {
   AuthConfigError,
   callbackUrl,
+  githubOrigins,
   readOAuthConfig,
 } from "../../../lib/session/context";
 
@@ -37,6 +38,7 @@ export const GET: APIRoute = ({ url }) => {
     clientId: config.clientId,
     redirectUri: callbackUrl(url),
     state,
+    webOrigin: githubOrigins().web,
   });
 
   return new Response(null, {

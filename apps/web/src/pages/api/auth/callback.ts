@@ -24,6 +24,7 @@ import {
 import {
   AuthConfigError,
   callbackUrl,
+  githubOrigins,
   readOAuthConfig,
   tokenKey,
 } from "../../../lib/session/context";
@@ -74,14 +75,17 @@ export const GET: APIRoute = async ({ request, url }) => {
     throw error;
   }
 
+  const origins = githubOrigins();
+
   try {
     const token = await exchangeCodeForToken({
       clientId: config.clientId,
       clientSecret: config.clientSecret,
       code,
       redirectUri: callbackUrl(url),
+      webOrigin: origins.web,
     });
-    const viewer = await fetchViewer(token);
+    const viewer = await fetchViewer(origins.api, token);
 
     const rawId = await createSession(
       env.DB,

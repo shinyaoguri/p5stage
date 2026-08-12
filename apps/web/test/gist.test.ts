@@ -21,6 +21,9 @@ import {
   userAuth,
 } from "../src/lib/github/gist";
 
+/** 本物の宛先。差し替えの仕組みは origins.test.ts が見る。 */
+const API = "https://api.github.com";
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -124,6 +127,7 @@ describe("createGist", () => {
     const fetchMock = stubFetch(gistJson());
 
     const revision = await createGist({
+      apiOrigin: API,
       token: "t",
       files: { "sketch.js": { content: "// hi" } },
       description: "波紋 — p5stage",
@@ -131,8 +135,8 @@ describe("createGist", () => {
     });
 
     expect(revision.revision).toBe("cafe1234");
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.github.com/gists");
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("https://api.github.com/gists");
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toMatchObject({ public: false });
   });
@@ -143,16 +147,33 @@ describe("updateGist", () => {
     const fetchMock = stubFetch(gistJson());
 
     await updateGist({
+      apiOrigin: API,
       token: "t",
       gistId: "abc123",
       files: { "old.js": null },
       description: "波紋 — p5stage",
     });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.github.com/gists/abc123");
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("https://api.github.com/gists/abc123");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(String(init.body)).files).toEqual({ "old.js": null });
+  });
+
+  it("宛先は引数で決まる (E2E がテストダブルを指せる)", async () => {
+    const fetchMock = stubFetch(gistJson());
+
+    await updateGist({
+      apiOrigin: "http://localhost:8792",
+      token: "t",
+      gistId: "abc123",
+      files: { "sketch.js": { content: "// hi" } },
+      description: "波紋 — p5stage",
+    });
+
+    // ここが定数に戻ると、E2E が本物の GitHub を叩きにいく (ADR 0013)。
+    const [url] = fetchMock.mock.calls[0] as [URL];
+    expect(String(url)).toBe("http://localhost:8792/gists/abc123");
   });
 });
 
@@ -160,7 +181,7 @@ describe("失敗の分け方", () => {
   it("401 は auth", async () => {
     stubFetch(new Response("", { status: 401 }));
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
       kind: "auth",
     });
   });
@@ -168,7 +189,7 @@ describe("失敗の分け方", () => {
   it("404 は not_found", async () => {
     stubFetch(new Response("", { status: 404 }));
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
       kind: "not_found",
     });
   });
@@ -181,7 +202,7 @@ describe("失敗の分け方", () => {
       })
     );
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
       kind: "rate_limit",
     });
   });
@@ -189,7 +210,7 @@ describe("失敗の分け方", () => {
   it("422 は rejected (送った内容の問題)", async () => {
     stubFetch(Response.json({ message: "Validation Failed" }, { status: 422 }));
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
       kind: "rejected",
       message: "Validation Failed",
     });
@@ -198,7 +219,7 @@ describe("失敗の分け方", () => {
   it("届かなければ network", async () => {
     stubFetch(new TypeError("failed to fetch"));
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
       kind: "network",
     });
   });
@@ -206,7 +227,9 @@ describe("失敗の分け方", () => {
   it("JSON でない 200 は api", async () => {
     stubFetch(new Response("<html>", { status: 200 }));
 
-    await expect(fetchGist("t", "abc")).rejects.toMatchObject({ kind: "api" });
+    await expect(fetchGist(API, "t", "abc")).rejects.toMatchObject({
+      kind: "api",
+    });
   });
 });
 
@@ -232,7 +255,7 @@ describe("fetchGistForDelivery", () => {
   it("ETag があれば条件付き GET にする", async () => {
     const impl = stubFetch(gistJson());
 
-    await fetchGistForDelivery(auth, "abc", '"v1"');
+    await fetchGistForDelivery(API, auth, "abc", '"v1"');
 
     const init = impl.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).get("If-None-Match")).toBe('"v1"');
@@ -241,7 +264,7 @@ describe("fetchGistForDelivery", () => {
   it("ETag が無ければ条件を付けない", async () => {
     const impl = stubFetch(gistJson());
 
-    await fetchGistForDelivery(auth, "abc", null);
+    await fetchGistForDelivery(API, auth, "abc", null);
 
     const init = impl.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).has("If-None-Match")).toBe(false);
@@ -250,7 +273,9 @@ describe("fetchGistForDelivery", () => {
   it("304 は unchanged (中身は来ない)", async () => {
     stubFetch(new Response(null, { status: 304 }));
 
-    await expect(fetchGistForDelivery(auth, "abc", '"v1"')).resolves.toEqual({
+    await expect(
+      fetchGistForDelivery(API, auth, "abc", '"v1"')
+    ).resolves.toEqual({
       kind: "unchanged",
     });
   });
@@ -268,7 +293,7 @@ describe("fetchGistForDelivery", () => {
       )
     );
 
-    const result = await fetchGistForDelivery(auth, "abc", '"v1"');
+    const result = await fetchGistForDelivery(API, auth, "abc", '"v1"');
 
     expect(result).toMatchObject({
       kind: "changed",
@@ -280,16 +305,16 @@ describe("fetchGistForDelivery", () => {
   it("404 は not_found (作者が消した = tombstone の材料)", async () => {
     stubFetch(new Response("", { status: 404 }));
 
-    await expect(fetchGistForDelivery(auth, "abc", null)).rejects.toMatchObject(
-      { kind: "not_found" }
-    );
+    await expect(
+      fetchGistForDelivery(API, auth, "abc", null)
+    ).rejects.toMatchObject({ kind: "not_found" });
   });
 
   it("届かなければ network", async () => {
     stubFetch(new TypeError("failed to fetch"));
 
     await expect(
-      fetchGistForDelivery(auth, "abc", null)
+      fetchGistForDelivery(API, auth, "abc", null)
     ).rejects.toBeInstanceOf(GistError);
   });
 });

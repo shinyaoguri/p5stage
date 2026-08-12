@@ -15,11 +15,16 @@ import {
   OAUTH_SCOPE,
 } from "../src/lib/github/oauth";
 
+/** 本物の宛先。差し替えの仕組みは origins.test.ts が見る。 */
+const API = "https://api.github.com";
+const WEB = "https://github.com";
+
 const OPTIONS = {
   clientId: "Iv1.test",
   clientSecret: "secret",
   code: "the-code",
   redirectUri: "https://p5stage.org/api/auth/callback",
+  webOrigin: WEB,
 };
 
 afterEach(() => {
@@ -41,6 +46,7 @@ describe("buildAuthorizeUrl", () => {
         clientId: OPTIONS.clientId,
         redirectUri: OPTIONS.redirectUri,
         state: "the-state",
+        webOrigin: WEB,
       })
     );
 
@@ -55,6 +61,7 @@ describe("buildAuthorizeUrl", () => {
         clientId: OPTIONS.clientId,
         redirectUri: OPTIONS.redirectUri,
         state: "the-state",
+        webOrigin: WEB,
       })
     );
 
@@ -68,6 +75,7 @@ describe("buildAuthorizeUrl", () => {
         clientId: OPTIONS.clientId,
         redirectUri: OPTIONS.redirectUri,
         state: "the-state",
+        webOrigin: WEB,
       })
     );
 
@@ -125,7 +133,7 @@ describe("fetchViewer", () => {
       })
     );
 
-    await expect(fetchViewer("gho_example")).resolves.toEqual({
+    await expect(fetchViewer(API, "gho_example")).resolves.toEqual({
       id: 1234,
       login: "octocat",
       avatarUrl: "https://example.test/a.png",
@@ -135,7 +143,7 @@ describe("fetchViewer", () => {
   it("アバターが無くても通る", async () => {
     stubFetch(Response.json({ id: 1234, login: "octocat" }));
 
-    await expect(fetchViewer("gho_example")).resolves.toMatchObject({
+    await expect(fetchViewer(API, "gho_example")).resolves.toMatchObject({
       avatarUrl: null,
     });
   });
@@ -143,7 +151,7 @@ describe("fetchViewer", () => {
   it("解釈できない応答は失敗にする", async () => {
     stubFetch(Response.json({ login: "octocat" }));
 
-    await expect(fetchViewer("gho_example")).rejects.toBeInstanceOf(
+    await expect(fetchViewer(API, "gho_example")).rejects.toBeInstanceOf(
       GitHubOAuthError
     );
   });
@@ -151,7 +159,7 @@ describe("fetchViewer", () => {
   it("認証に失敗したら失敗にする", async () => {
     stubFetch(new Response("", { status: 401 }));
 
-    await expect(fetchViewer("gho_example")).rejects.toBeInstanceOf(
+    await expect(fetchViewer(API, "gho_example")).rejects.toBeInstanceOf(
       GitHubOAuthError
     );
   });

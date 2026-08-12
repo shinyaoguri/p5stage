@@ -23,11 +23,13 @@ export interface AuthorizeUrlOptions {
   readonly clientId: string;
   readonly redirectUri: string;
   readonly state: string;
+  /** GitHub の web 側 (`origins.ts`)。 */
+  readonly webOrigin: string;
 }
 
 /** 認可画面の URL を組み立てる。 */
 export function buildAuthorizeUrl(options: AuthorizeUrlOptions): string {
-  const url = new URL("https://github.com/login/oauth/authorize");
+  const url = new URL("/login/oauth/authorize", options.webOrigin);
   url.searchParams.set("client_id", options.clientId);
   url.searchParams.set("redirect_uri", options.redirectUri);
   url.searchParams.set("scope", OAUTH_SCOPE);
@@ -40,6 +42,8 @@ export interface ExchangeCodeOptions {
   readonly clientSecret: string;
   readonly code: string;
   readonly redirectUri: string;
+  /** GitHub の web 側 (`origins.ts`)。トークン交換は API 側ではない。 */
+  readonly webOrigin: string;
 }
 
 /**
@@ -51,7 +55,8 @@ export interface ExchangeCodeOptions {
 export async function exchangeCodeForToken(
   options: ExchangeCodeOptions
 ): Promise<string> {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
+  const url = new URL("/login/oauth/access_token", options.webOrigin);
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -98,8 +103,11 @@ export interface GitHubViewer {
  *
  * User-Agent は GitHub API の要件 (無いと 403)。
  */
-export async function fetchViewer(token: string): Promise<GitHubViewer> {
-  const response = await fetch("https://api.github.com/user", {
+export async function fetchViewer(
+  apiOrigin: string,
+  token: string
+): Promise<GitHubViewer> {
+  const response = await fetch(new URL("/user", apiOrigin), {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",

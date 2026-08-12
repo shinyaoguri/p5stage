@@ -38,6 +38,7 @@ import {
   replaceableNames,
   unsavableFileNames,
 } from "../../../../lib/sketches/gist-payload";
+import { githubOrigins } from "../../../../lib/session/context";
 import { isSketchId } from "../../../../lib/sketches/id";
 import { publishRevision } from "../../../../lib/sketches/publish";
 import type { Sketch } from "../../../../lib/sketches/sketch";
@@ -105,11 +106,13 @@ function readFiles(
 
 /** 初回。Gist を作って作品に紐付ける。 */
 async function createAndAttach(
+  apiOrigin: string,
   sketch: Sketch,
   token: string,
   files: SketchFiles
 ): Promise<{ revision: GistRevision } | { response: Response }> {
   const revision = await createGist({
+    apiOrigin,
     token,
     files: buildGistFiles(files),
     description: gistDescription(sketch.title),
@@ -129,7 +132,7 @@ async function createAndAttach(
   // 別タブが先に紐付けた。こちらが作った Gist は行き場が無いので片付ける
   // (残すと利用者の GitHub に誰も辿れない Gist が溜まる)。
   try {
-    await deleteGist(token, revision.id);
+    await deleteGist(apiOrigin, token, revision.id);
   } catch {
     // 消せなくても、この保存が失敗したことに変わりはない。
   }
@@ -144,6 +147,7 @@ async function createAndAttach(
 
 /** 2 回目以降。今の Gist との差分を作って PATCH する。 */
 async function updateAttached(
+  apiOrigin: string,
   sketch: Sketch,
   gistId: string,
   token: string,
@@ -153,9 +157,10 @@ async function updateAttached(
   // これが無いとエディタで消したファイルが Gist に残り、次に開くと甦る。
   // ここは所有者の保存経路なので条件付き GET にしない。差分を作るには
   // 「今 Gist にある名前」が要り、304 では手に入らない。
-  const current = await fetchGist(token, gistId);
+  const current = await fetchGist(apiOrigin, token, gistId);
 
   const revision = await updateGist({
+    apiOrigin,
     token,
     gistId,
     files: buildGistFiles(files, replaceableNames(current)),
@@ -185,9 +190,12 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
   const sketch = await ownedSketch(id, auth.session.user.id);
   if (sketch === null) return notFound();
 
+  const apiOrigin = githubOrigins().api;
+
   try {
     if (sketch.gistId === null) {
       const created = await createAndAttach(
+        apiOrigin,
         sketch,
         auth.session.token,
         read.files
@@ -207,6 +215,7 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
     }
 
     const revision = await updateAttached(
+      apiOrigin,
       sketch,
       sketch.gistId,
       auth.session.token,
@@ -241,7 +250,11 @@ export const GET: APIRoute = async ({ request, params }) => {
   }
 
   try {
-    const content = await fetchGist(auth.session.token, sketch.gistId);
+    const content = await fetchGist(
+      githubOrigins().api,
+      auth.session.token,
+      sketch.gistId
+    );
     return noStore({
       sketch,
       gist: { id: content.id, url: content.url, revision: content.revision },

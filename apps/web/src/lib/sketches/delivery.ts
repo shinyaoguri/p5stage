@@ -18,7 +18,11 @@ import {
   GistError,
   type GistAuth,
 } from "../github/gist";
-import { AuthConfigError, readOAuthConfig } from "../session/context";
+import {
+  AuthConfigError,
+  githubOrigins,
+  readOAuthConfig,
+} from "../session/context";
 
 import { planDelivery } from "./delivery-plan";
 import { getRevision, putRevision } from "./revision-store";
@@ -55,7 +59,12 @@ async function fill(
 ): Promise<SketchContent> {
   // 手元に中身が無いので条件付きにしない (304 は「手元のものを使え」の意味で、
   // ここでは使えるものが無い)。
-  const result = await fetchGistForDelivery(deliveryAuth(), gistId, null);
+  const result = await fetchGistForDelivery(
+    githubOrigins().api,
+    deliveryAuth(),
+    gistId,
+    null
+  );
   if (result.kind === "unchanged") {
     return {
       kind: "unavailable",
@@ -87,6 +96,7 @@ async function revalidate(sketch: Sketch, now: number): Promise<void> {
 
   try {
     const result = await fetchGistForDelivery(
+      githubOrigins().api,
       deliveryAuth(),
       sketch.gistId,
       sketch.revisionEtag

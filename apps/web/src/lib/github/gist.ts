@@ -71,7 +71,16 @@ export interface GistContent extends GistRevision {
   readonly isPublic: boolean;
 }
 
-const API_ROOT = "https://api.github.com";
+/**
+ * Gist 1 件の URL。
+ *
+ * 宛先を定数で持たず引数で受けるのは、E2E がテストダブルを指せるようにするため
+ * (`origins.ts` / ADR 0013)。**省略できるようにはしない** — 渡し忘れが
+ * 「テストのつもりで本物の GitHub を叩いていた」に化けるのを型で止める。
+ */
+function gistUrl(apiOrigin: string, gistId: string): URL {
+  return new URL(`/gists/${encodeURIComponent(gistId)}`, apiOrigin);
+}
 
 /**
  * どの資格で GitHub を叩くか。
@@ -161,7 +170,7 @@ async function toGistError(response: Response): Promise<GistError> {
 }
 
 async function callGistApi(
-  url: string,
+  url: URL,
   token: string,
   init: RequestInit
 ): Promise<unknown> {
@@ -264,6 +273,8 @@ export function parseGistContent(value: unknown): GistContent {
 }
 
 export interface CreateGistOptions {
+  /** GitHub API の宛先 (`origins.ts`)。 */
+  readonly apiOrigin: string;
   readonly token: string;
   readonly files: GistFilePayload;
   readonly description: string;
@@ -279,18 +290,24 @@ export interface CreateGistOptions {
 export async function createGist(
   options: CreateGistOptions
 ): Promise<GistRevision> {
-  const body = await callGistApi(`${API_ROOT}/gists`, options.token, {
-    method: "POST",
-    body: JSON.stringify({
-      description: options.description,
-      public: options.isPublic,
-      files: options.files,
-    }),
-  });
+  const body = await callGistApi(
+    new URL("/gists", options.apiOrigin),
+    options.token,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        description: options.description,
+        public: options.isPublic,
+        files: options.files,
+      }),
+    }
+  );
   return parseGistRevision(body);
 }
 
 export interface UpdateGistOptions {
+  /** GitHub API の宛先 (`origins.ts`)。 */
+  readonly apiOrigin: string;
   readonly token: string;
   readonly gistId: string;
   readonly files: GistFilePayload;
@@ -301,7 +318,7 @@ export async function updateGist(
   options: UpdateGistOptions
 ): Promise<GistRevision> {
   const body = await callGistApi(
-    `${API_ROOT}/gists/${encodeURIComponent(options.gistId)}`,
+    gistUrl(options.apiOrigin, options.gistId),
     options.token,
     {
       method: "PATCH",
@@ -320,10 +337,14 @@ export async function updateGist(
  * 使うのは**作ったばかりの Gist の後始末**だけ (作品に紐付ける競争に負けたとき)。
  * 利用者の Gist を消す操作なので、それ以外の用途で呼ばない。
  */
-export async function deleteGist(token: string, gistId: string): Promise<void> {
+export async function deleteGist(
+  apiOrigin: string,
+  token: string,
+  gistId: string
+): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${API_ROOT}/gists/${encodeURIComponent(gistId)}`, {
+    response = await fetch(gistUrl(apiOrigin, gistId), {
       method: "DELETE",
       headers: headers(userAuth(token)),
     });
@@ -345,14 +366,13 @@ export async function deleteGist(token: string, gistId: string): Promise<void> {
  * 閲覧者への配信はこの口を使わない (トークンを持つ人がいない) → `fetchGistForDelivery`。
  */
 export async function fetchGist(
+  apiOrigin: string,
   token: string,
   gistId: string
 ): Promise<GistContent> {
-  const body = await callGistApi(
-    `${API_ROOT}/gists/${encodeURIComponent(gistId)}`,
-    token,
-    { method: "GET" }
-  );
+  const body = await callGistApi(gistUrl(apiOrigin, gistId), token, {
+    method: "GET",
+  });
   return parseGistContent(body);
 }
 
@@ -377,6 +397,7 @@ export type ConditionalGist =
  * 「実際に中身が変わった回数」に比例する形になる。
  */
 export async function fetchGistForDelivery(
+  apiOrigin: string,
   auth: GistAuth,
   gistId: string,
   etag: string | null
@@ -386,7 +407,7 @@ export async function fetchGistForDelivery(
 
   let response: Response;
   try {
-    response = await fetch(`${API_ROOT}/gists/${encodeURIComponent(gistId)}`, {
+    response = await fetch(gistUrl(apiOrigin, gistId), {
       method: "GET",
       headers: requestHeaders,
     });
