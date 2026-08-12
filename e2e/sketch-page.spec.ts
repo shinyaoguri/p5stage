@@ -5,9 +5,10 @@
  * **正典 URL に寄せる 302**、そして**閲覧者の画面でも別オリジンの iframe で
  * スケッチが動くこと** (要件 3.4 / 5.1)。
  *
- * 作品は playwright.config.ts が D1 と R2 に直に置いている (作るには GitHub の
- * 認可が要り、E2E では踏めないため)。種の `revision_checked_at` は今なので
- * 再検証の間隔に入らず、**このテストの間 Worker から GitHub へは出ていかない**。
+ * 作品は playwright.config.ts が D1 と R2 に直に置いている。保存して作る道は
+ * `flow.spec.ts` が踏むが (Phase 2-7)、限定公開・404・302 のような**多様な状態**を
+ * 揃えるには種の方が安い。種の `revision_checked_at` は今なので再検証の間隔に入らず、
+ * **このテストの間 Worker から GitHub へは出ていかない**。
  */
 
 import { expect, test } from "@playwright/test";

@@ -4,7 +4,10 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    // 偽 GitHub は Node が直接実行する (型注釈は実行時に落ちる)。Node の解決には
+    // 拡張子付きの相対 import が要るので、それを型検査にも許す。
+    "allowImportingTsExtensions": true
   },
   "include": ["e2e", "playwright.config.ts"]
 }

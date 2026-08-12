@@ -13,6 +13,14 @@ export const WEB_PORT = 8790;
 export const PREVIEW_PORT = 8791;
 
 /**
+ * 偽 GitHub (`fake-github/server.ts`)。
+ *
+ * ログインと保存の通しを踏むには GitHub の往復が要り、それは Worker の中で起きる
+ * (ADR 0010 / 0013)。本体の `GITHUB_TEST_ORIGIN` をここへ向ける。
+ */
+export const FAKE_GITHUB_PORT = 8792;
+
+/**
  * `wrangler dev` が開くデバッガの受け口。
  *
  * 既定は両方とも 9229 で、2 つ同時に立てると**後から起動した方が取り合いに負ける**。
@@ -26,3 +34,11 @@ export const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 
 /** 実行 iframe を配信するオリジン。 */
 export const PREVIEW_ORIGIN = `http://localhost:${PREVIEW_PORT}`;
+
+/**
+ * GitHub の代わりに答えるオリジン。
+ *
+ * 本体はループバック宛てしか受け付けないので (`lib/github/origins.ts`)、
+ * ここを別ホストに変えると差し替えごと無効になり、本物の GitHub を叩きにいく。
+ */
+export const FAKE_GITHUB_ORIGIN = `http://localhost:${FAKE_GITHUB_PORT}`;

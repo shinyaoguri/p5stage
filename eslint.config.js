@@ -30,5 +30,10 @@ export default tseslint.config(
     files: ["**/*.config.{js,mjs,ts}"],
     languageOptions: { globals: globals.node },
   },
+  // E2E は Playwright (Node) が動かす。偽 GitHub (e2e/fake-github) も同じ。
+  {
+    files: ["e2e/**/*.ts"],
+    languageOptions: { globals: globals.node },
+  },
   prettier
 );

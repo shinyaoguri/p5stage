@@ -97,6 +97,65 @@ export async function typeIntoEditor(page: Page, code: string): Promise<void> {
   await page.keyboard.type(code);
 }
 
+/**
+ * ログインする (Phase 2-7)。
+ *
+ * 認可の往復は偽 GitHub が受ける (`fake-github/server.ts` / ADR 0013)。**押す順序も
+ * 含めて本物と同じ道**を通る — 同意を読んでから GitHub へ進み、`state` を持って戻り、
+ * `__Host-` の cookie でログイン済みになる。
+ */
+export async function login(page: Page): Promise<void> {
+  await page.locator("#login").click();
+  // ここはリンク (トップレベル遷移で cookie を確実に載せるため)。
+  await page.locator("#login-consent .account-consent-proceed").click();
+
+  await expect(page.locator("#logout")).toBeVisible();
+}
+
+/** 保存パネルの状態表示。 */
+export function saveStatus(page: Page): Locator {
+  return page.locator("#save-status");
+}
+
+/**
+ * 初回の保存。作品 ID を返す。
+ *
+ * 初回だけタイトルと公開範囲を尋ねられる (公開範囲は後から変えられない — ADR 0010)。
+ */
+export async function saveNewSketch(
+  page: Page,
+  title: string,
+  visibility: "public" | "unlisted"
+): Promise<string> {
+  await page.locator("#save").click();
+  await page.locator("#save-title").fill(title);
+  await page
+    .locator(`#save-dialog input[name="visibility"][value="${visibility}"]`)
+    .check();
+  await page.locator("#save-confirm").click();
+
+  await expect(saveStatus(page)).toContainText("保存しました");
+
+  // 保存できると URL に作品 ID が載る (open-sketch.ts)。
+  const id = new URL(page.url()).searchParams.get("sketch");
+  if (id === null) throw new Error("保存後の URL に作品 ID がありません");
+  return id;
+}
+
+/**
+ * 2 回目以降の保存 (尋ねられることは無い)。**保存すべきものがある状態で呼ぶ**。
+ *
+ * 押す前に「保存しました」が消えていることを確かめるのは、前回の保存と区別するため。
+ * 表示は時刻しか変わらないので、それを見ないと押す前の状態のまま通ってしまう。
+ * 消えた後の文言は経緯で変わる (編集後なら「未保存の変更があります」、Gist を
+ * 外した後なら「未保存」) ので、消えたことだけを見る。
+ */
+export async function saveAgain(page: Page): Promise<void> {
+  await expect(saveStatus(page)).not.toContainText("保存しました");
+  await page.locator("#save").click();
+  await expect(saveStatus(page)).toContainText("保存しました");
+}
+
 /** ファイルタブ (name はファイル名)。 */
 export function fileTab(page: Page, name: string): Locator {
   return page.locator(`#file-tabs [role="tab"][data-file="${name}"]`);
