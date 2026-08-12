@@ -47,6 +47,7 @@ try {
             新規
           </button>
           <div id="settings" />
+          <div id="account" />
         </div>
 
         <div id="console" />
@@ -62,6 +63,7 @@ try {
     type TransitionRequest,
   } from "@p5stage/shared";
 
+  import { AccountPanel } from "../scripts/auth/account-panel";
   import { DraftSaver, loadDraft } from "../scripts/draft/draft-store";
   import { CodeEditor } from "../scripts/editor/code-editor";
   import { ConsolePanel } from "../scripts/editor/console-panel";
@@ -262,7 +264,24 @@ try {
     editor.focus();
   };
 
+  /**
+   * ログイン状態はエディタの初期化と独立に描く。
+   *
+   * 実行環境のオリジン設定が壊れていてもログインの導線は出したいし、
+   * 逆にログイン状態の取得に失敗してもエディタは動くべきなので、互いに待たない。
+   */
+  const initAccount = async () => {
+    const accountHost = document.getElementById("account");
+    if (!accountHost) return;
+
+    const panel = new AccountPanel(accountHost);
+    // 認可から戻った直後の失敗はここで拾う (成功時は何も出さない)。
+    panel.setMessage(AccountPanel.takeFailureMessage());
+    await panel.refresh();
+  };
+
   void init();
+  void initAccount();
 </script>
 
 <style>

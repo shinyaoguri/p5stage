@@ -11,6 +11,11 @@ export default defineConfig({
     imageService: "passthrough",
   }),
   output: "server",
+  // 既定でも有効だが、CSRF の一次防御を設定の既定値に委ねない。
+  // ただしこれが弾くのは「フォーム系の Content-Type か Content-Type 無し」の要求だけで、
+  // `application/json` は素通りする (astro/dist/core/app/origin-check.js)。
+  // JSON で叩く API は lib/http/origin-guard.ts が守る (ADR 0008)。
+  security: { checkOrigin: true },
   // セッションは GitHub OAuth を入れる Phase 2 で設計する。
   // それまで SESSION KV バインディングを要求させない。
   session: false,

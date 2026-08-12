@@ -1,3 +1,12 @@
 # ローカル開発用の変数。`.dev.vars` にコピーして使う (.dev.vars は gitignore 済み)。
 # wrangler.jsonc の vars は本番値なので、ローカルではここで上書きする。
 PUBLIC_PREVIEW_ORIGIN="http://localhost:8788"
+
+# GitHub OAuth App。OAuth App は callback URL を 1 つしか持てないので、
+# 本番 (https://p5stage.org/api/auth/callback) とは別に、ローカル用のアプリを
+# https://github.com/settings/developers で作る。
+# callback URL は `http://localhost:4321/api/auth/callback` (astro dev のポート)。
+#
+# Client ID は公開値。Secret は絶対にコミットしない (.dev.vars は gitignore 済み)。
+GITHUB_CLIENT_ID="ローカル用アプリの Client ID"
+GITHUB_CLIENT_SECRET="ローカル用アプリの Client Secret"
