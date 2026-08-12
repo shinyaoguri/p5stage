@@ -54,7 +54,23 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # サーバ (両アプリの wrangler dev) の起動は playwright.config.ts が受け持つ。
-      - run: npm run test:e2e
+      #
+      # web の wrangler dev が E2E の途中で**プロセスごと落ちる**ことがある (#38)。
+      # workerd 側のクラッシュで、中身の無い `✘ [ERROR]` しか残らない。以降のテストは
+      # 全部 ECONNREFUSED になるので、**テストの失敗とは意味が違う**。
+      #
+      # そこだけ 1 度やり直す。テスト自体の失敗はやり直さない (揺れは Playwright の
+      # retries が受け持つ)。**これは #38 を隠しているだけ**で、直ったわけではない。
+      - name: E2E (サーバが落ちたときだけやり直す)
+        run: |
+          set -o pipefail
+          if npm run test:e2e 2>&1 | tee "$RUNNER_TEMP/e2e.log"; then exit 0; fi
+          if ! grep -q "ECONNREFUSED" "$RUNNER_TEMP/e2e.log"; then
+            echo "::error::E2E が落ちました (サーバの死亡ではなくテストの失敗です)"
+            exit 1
+          fi
+          echo "::warning::wrangler dev が落ちたので E2E をやり直します (#38)"
+          npm run test:e2e
 
       - name: 失敗したときだけレポートを残す
         if: failure()
