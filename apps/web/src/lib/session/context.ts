@@ -7,6 +7,8 @@
 
 import { env } from "cloudflare:workers";
 
+import { resolveGitHubOrigins, type GitHubOrigins } from "../github/origins";
+
 import { deriveTokenKey } from "./crypto";
 import { readCookie, SESSION_COOKIE } from "./cookie";
 import { readSession, type ActiveSession } from "./store";
@@ -44,6 +46,16 @@ export function readOAuthConfig(): OAuthConfig {
   if (!clientSecret) throw new AuthConfigError("GITHUB_CLIENT_SECRET");
 
   return { clientId, clientSecret };
+}
+
+/**
+ * GitHub の宛先。既定は本物で、差し替えが効くのはローカル向けだけ (ADR 0013)。
+ *
+ * `GITHUB_TEST_ORIGIN` は **E2E 専用**。本番の `wrangler.jsonc` には置かない。
+ */
+export function githubOrigins(): GitHubOrigins {
+  const values = env as unknown as Record<string, string | undefined>;
+  return resolveGitHubOrigins(values.GITHUB_TEST_ORIGIN);
 }
 
 /** 認可の戻り先。GitHub の OAuth App に登録した URL と**完全一致**する必要がある。 */

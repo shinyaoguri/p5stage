@@ -25,6 +25,7 @@ import {
   rejectForeignOrigin,
   requireSession,
 } from "../../../lib/http/api";
+import { githubOrigins } from "../../../lib/session/context";
 import {
   planGistAdoption,
   type AdoptionRejectionReason,
@@ -81,7 +82,7 @@ export const POST: APIRoute = async ({ request, url }) => {
   try {
     // 本人のトークンで読む。secret gist も自分のものなら読めるうえ、レート制限も
     // 本人の枠に載る (ADR 0010)。
-    content = await fetchGist(auth.session.token, ref);
+    content = await fetchGist(githubOrigins().api, auth.session.token, ref);
   } catch (error) {
     if (error instanceof GistError) {
       return fromGistError(

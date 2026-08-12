@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  FAKE_GITHUB_ORIGIN,
+  FAKE_GITHUB_PORT,
   PREVIEW_INSPECTOR_PORT,
   PREVIEW_ORIGIN,
   PREVIEW_PORT,
@@ -93,9 +95,14 @@ export default defineConfig({
       // (CI の使い捨て環境には何も無い状態で来る)。適用済みの分は読み飛ばされる。
       // 続けて作品ページ用の種を蒔く (下の SEED_COMMANDS)。
       //
-      // OAuth の値もここで渡す。本物の GitHub へは行かない (認可画面の手前までしか
-      // 見ない) ので、素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
-      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --inspector-port ${WEB_INSPECTOR_PORT}`,
+      // OAuth の値もここで渡す。GitHub の宛先は偽 GitHub (下の webServer) へ向けるので、
+      // 素性の分かるダミーで足りる。手元の .dev.vars に依存させないため。
+      //
+      // `--local-upstream` が要るのは、**wrangler dev が routes の custom_domain
+      // (p5stage.org) をリクエスト URL のホストとして使う**ため。そのままだと
+      // Worker から見た `url.origin` が本番のドメインになり、OAuth の `redirect_uri`
+      // が `http://p5stage.org/api/auth/callback` になって認可から戻れない。
+      command: `npm run build && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --local-upstream localhost:${WEB_PORT} --upstream-protocol http --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
@@ -113,6 +120,17 @@ export default defineConfig({
       reuseExistingServer: !isCI,
       timeout: SERVER_TIMEOUT_MS,
       env: { WRANGLER_SEND_METRICS: "false" },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      // GitHub の代わりに答えるサーバ (ADR 0013)。ビルドが要らないので素の node で立てる。
+      // 起動の確認は TCP で足りる (この口は認証を通さない要求に 2xx を返さない)。
+      command: `node e2e/fake-github/server.ts ${FAKE_GITHUB_PORT}`,
+      port: FAKE_GITHUB_PORT,
+      reuseExistingServer: !isCI,
+      timeout: SERVER_TIMEOUT_MS,
+      // 未対応の口を叩かれたことに気付けるよう、出力を捨てない。
       stdout: "pipe",
       stderr: "pipe",
     },

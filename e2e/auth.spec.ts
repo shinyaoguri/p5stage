@@ -1,7 +1,9 @@
 /**
  * ログイン導線と認証エンドポイントの回帰テスト (Phase 2-1)。
  *
- * 本物の GitHub へは行かない。認可画面の**手前まで**と、戻ってきた後の口だけを見る。
+ * ここは**認可の手前と、経路を踏んでいない要求の扱い**を見る。認可から戻って
+ * ログインが成立するまでの通しは `flow.spec.ts` の担当 (Phase 2-7)。
+ *
  * ここで実ブラウザ / 実 Worker でしか確かめられないのは 3 つ。
  *
  * - `gist` scope の意味を、認可へ送り出す前に画面へ出していること (要件 3.6 の義務)
@@ -18,7 +20,7 @@
 import { expect, test } from "@playwright/test";
 
 import { openEditor } from "./helpers";
-import { PREVIEW_ORIGIN } from "./origins";
+import { FAKE_GITHUB_ORIGIN, PREVIEW_ORIGIN, WEB_ORIGIN } from "./origins";
 
 /** `__Host-` プレフィックスが成立する条件。1 つでも欠けるとブラウザが受け取らない。 */
 const HOST_COOKIE_ATTRIBUTES = ["Path=/", "Secure", "HttpOnly", "SameSite=Lax"];
@@ -63,10 +65,10 @@ test.describe("ログインの導線", () => {
 });
 
 test.describe("認証エンドポイント", () => {
-  test("/api/auth/login は GitHub へ送り、state を __Host- cookie に置く", async ({
+  test("/api/auth/login は認可画面へ送り、state を __Host- cookie に置く", async ({
     page,
   }) => {
-    // リダイレクトを追うと GitHub の実サイトへ出てしまうので、その手前で止める。
+    // 追わずに止める。ここで見たいのは送り先の組み立てで、その先は flow.spec の担当。
     const response = await page.request.get("/api/auth/login", {
       maxRedirects: 0,
     });
@@ -75,8 +77,14 @@ test.describe("認証エンドポイント", () => {
 
     const location = response.headers()["location"] ?? "";
     const authorize = new URL(location);
-    expect(authorize.origin + authorize.pathname).toBe(
-      "https://github.com/login/oauth/authorize"
+    // 宛先は E2E では偽 GitHub に差し替わる (ADR 0013)。本物かどうかではなく、
+    // **認可画面の口へ送っていること**を見る。
+    expect(authorize.origin).toBe(FAKE_GITHUB_ORIGIN);
+    expect(authorize.pathname).toBe("/login/oauth/authorize");
+    // 戻り先は**自分のオリジン**。ここが本番のドメインなどに化けると認可から
+    // 戻ってこられない (wrangler dev では routes の custom_domain がそう化ける)。
+    expect(authorize.searchParams.get("redirect_uri")).toBe(
+      `${WEB_ORIGIN}/api/auth/callback`
     );
     // 要求する権限が増えていないこと (増えるなら同意の文面も直す必要がある)。
     expect(authorize.searchParams.get("scope")).toBe("gist");
