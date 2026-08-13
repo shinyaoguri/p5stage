@@ -2,6 +2,18 @@ export { OriginConfigError, resolveOrigins } from "./origins";
 export type { Origins } from "./origins";
 
 export {
+  ASSET_TYPES,
+  DEFAULT_ASSET_QUOTA_BYTES,
+  DEFAULT_MAX_ASSET_BYTES,
+  assetMimeForFileName,
+  isAssetFileName,
+  isAssetMime,
+  isSha256Hex,
+  sha256Hex,
+} from "./assets";
+export type { AssetMime } from "./assets";
+
+export {
   DEFAULT_FILE_NAMES,
   ENTRY_FILE,
   MAX_FILE_BYTES,

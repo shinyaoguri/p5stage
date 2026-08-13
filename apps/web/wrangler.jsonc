@@ -34,6 +34,15 @@
       "binding": "CONTENT",
       "bucket_name": "p5stage-content",
     },
+    // アセットの実体 (sha256 をキーにした不変 blob — ADR 0003)。
+    // 上の CONTENT と違い、これは**正本**。Gist はテキストしか持てないので、
+    // 失うと作品が壊れる。取り直せる写しと同じ寿命・同じ GC で扱わないよう分ける。
+    // バインディング名を ASSETS にしないのは、Workers の静的アセットの慣例名と
+    // ぶつかるため (apps/preview が実際にその名前で使っている)。
+    {
+      "binding": "BLOBS",
+      "bucket_name": "p5stage-assets",
+    },
   ],
   "vars": {
     // 実行 iframe を配信する別オリジン (要件 5.1)。
