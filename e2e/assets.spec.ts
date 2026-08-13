@@ -69,13 +69,13 @@ function claim(page: Page, body: Record<string, unknown>): Promise<ApiResult> {
 function upload(
   page: Page,
   asset: Asset,
-  options: { mime?: string; digest?: string } = {}
+  options: { digest?: string } = {}
 ): Promise<ApiResult> {
   return page.evaluate(
-    async ({ bytes, digest, mime }) => {
+    async ({ bytes, digest }) => {
       const response = await fetch(`/api/assets/${digest}`, {
         method: "PUT",
-        headers: { "Content-Type": mime },
+        headers: { "Content-Type": "image/png" },
         body: new Uint8Array(bytes),
       });
       return {
@@ -86,11 +86,7 @@ function upload(
         > | null,
       };
     },
-    {
-      bytes: asset.bytes,
-      digest: options.digest ?? asset.sha256,
-      mime: options.mime ?? "image/png",
-    }
+    { bytes: asset.bytes, digest: options.digest ?? asset.sha256 }
   );
 }
 
@@ -211,10 +207,22 @@ test.describe("アセットの受け口", () => {
     await openEditor(page);
     await login(page);
 
-    const asset = makePng();
-
     // SVG は文書として解釈される形式なので、初期の allowlist に入れていない。
-    const result = await upload(page, asset, { mime: "image/svg+xml" });
+    // 形式は本文を読む前に見るので、本文は要らない。**付けない**のは #38 の回避
+    // (弾く要求に本文を付けると CI の wrangler dev が落ちる。この形で実際に落ちた)。
+    const result = await page.evaluate(async (sha256) => {
+      const response = await fetch(`/api/assets/${sha256}`, {
+        method: "PUT",
+        headers: { "Content-Type": "image/svg+xml" },
+      });
+      return {
+        status: response.status,
+        body: (await response.json().catch(() => null)) as Record<
+          string,
+          unknown
+        > | null,
+      };
+    }, makePng().sha256);
 
     expect(result.status).toBe(415);
     expect(result.body).toMatchObject({ error: "unsupported_type" });

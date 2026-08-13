@@ -8,6 +8,7 @@
  */
 
 import {
+  DEFAULT_MAX_ASSET_BYTES,
   isAssetMime,
   isSha256Hex,
   sha256Hex,
@@ -89,16 +90,30 @@ async function readLimited(
 }
 
 /**
- * 読まなかった本文を捨てる。
+ * 読まなかった本文を読み捨てる。
  *
  * ボディを読まないまま応答を返した要求が続くと、ローカルの `wrangler dev` が
- * 落ちることがある (#38)。ここは弾く条件が多く本文も大きいので、
- * 明示的に読み捨ててその形を作らない。
+ * 落ちることがある (#38)。この口は弾く条件が多く、しかも弾かれる要求にも本文が
+ * 付いてくるので、その形をいちばん作りやすい。**切る (`cancel`) のでは足りず、
+ * 読み切る必要がある** (CI で 415 の直後に落ちた)。
+ *
+ * 上限を超える分は読まずに切る。捨てるために際限なく読む理由は無い。
  */
 async function discardBody(request: Request): Promise<void> {
   if (request.bodyUsed || request.body === null) return;
+
+  const reader = request.body.getReader();
+  let total = 0;
   try {
-    await request.body.cancel();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      total += value.byteLength;
+      if (total > DEFAULT_MAX_ASSET_BYTES) {
+        await reader.cancel();
+        return;
+      }
+    }
   } catch {
     // 送り手が先に切っていることがある。捨てるのが目的なので、失敗しても構わない。
   }
