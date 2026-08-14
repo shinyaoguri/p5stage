@@ -18,6 +18,7 @@ import type { APIRoute } from "astro";
 
 import {
   assetSizeError,
+  inUseError,
   quotaError,
   type AssetBlob,
 } from "../../../lib/assets/asset";
@@ -29,6 +30,7 @@ import {
   hasClaim,
   recordBlob,
   releaseBlob,
+  sketchesUsingBlob,
 } from "../../../lib/assets/store";
 import {
   jsonError,
@@ -184,10 +186,28 @@ async function upload(
 }
 
 /**
- * 所有を手放す (3-4b)。
+ * 文言に名前を挙げる作品の数。
+ *
+ * 出すのは 1 件目と残りの件数だけ (`inUseError`) なので、全部を引く必要は無い。
+ * これを超える数の作品が同じアセットを使っていると「ほか N 件」は少なめに出るが、
+ * 直す手数 (どれか一つでも外れるまで作品から外す) は変わらない。
+ */
+const REFERER_LIMIT = 20;
+
+/**
+ * 所有を手放す (3-4b / 3-5a)。
  *
  * 消えるのは台帳の「誰に計上するか」だけ。実体は残るので、同じ中身をもう一度
- * 持ち込めば転送なしで戻る。回収は 3-5 の GC (詳細は `releaseBlob`)。
+ * 持ち込めば転送なしで戻る。回収は 3-5b の GC (詳細は `releaseBlob`)。
+ *
+ * **自分の作品が今も使っているうちは手放させない** (3-5a)。手放すとその sha256 を
+ * 指すマニフェストは次の保存で断られる (3-2) ので、壊れるのは手放した瞬間ではなく
+ * 次に保存したとき — 気付けない壊れ方になる。エディタも同じ判断をしているが
+ * (3-4b)、あちらが見えるのは**今開いている作品**だけで、別のタブで開いた別の作品は
+ * 守れない。ここが最後の守り。
+ *
+ * 見るのは今配信しているリビジョンだけ (`sketchesUsingBlob`)。作品から外して
+ * 保存すれば手放せる。
  */
 export const DELETE: APIRoute = async ({ request, url, params }) => {
   const foreign = rejectForeignOrigin(request, url);
@@ -206,6 +226,13 @@ export const DELETE: APIRoute = async ({ request, url, params }) => {
   }
 
   const userId = auth.session.user.id;
+  const inUse = inUseError(
+    (await sketchesUsingBlob(env.DB, userId, sha256, REFERER_LIMIT)).map(
+      (sketch) => sketch.title
+    )
+  );
+  if (inUse !== null) return jsonError(409, "asset_in_use", inUse);
+
   // 持っていないものを消したと答えると、一覧が古いことに気付けない。
   if (!(await releaseBlob(env.DB, userId, sha256))) {
     return jsonError(404, "not_found", "そのアセットは持っていません");

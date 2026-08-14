@@ -212,6 +212,24 @@ export function manifestDigests(manifest: AssetManifest): string[] {
 }
 
 /**
+ * そのファイル構成が参照している blob の sha256 (3-5a)。
+ *
+ * **読めないマニフェストは「参照していない」と見なす。** 参照台帳が守るのは実際に
+ * 配られるものだけで、壊れたマニフェストは実行時の名前解決も通らない
+ * (`assetUrlsForFiles` が同じ `readAssetManifest` で読めずに諦める)。配られない
+ * ものを守ると、回収されるべき実体が永久に残る。
+ *
+ * 保存経路が壊れたマニフェストを断るのとは役割が違う (あちらは利用者に直させる、
+ * こちらは既に外にあるものをどう数えるか)。取り込み (adopt) や GitHub 側での直接
+ * 編集で、断る機会の無いまま壊れた形が入ってくることはある。
+ */
+export function referencedDigests(files: SketchFiles): string[] {
+  const result = readAssetManifest(files);
+  if (result === null || !result.ok) return [];
+  return manifestDigests(result.manifest);
+}
+
+/**
  * アセット名とコードのファイル名がぶつかっていないか。ぶつかった名前を返す。
  *
  * 実行時の解決は名前で引く (3-3) ので、同じ名前が両方にあるとどちらが返るか

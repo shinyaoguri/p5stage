@@ -7,6 +7,8 @@
 
 import { isAssetMime, isSha256Hex, type AssetMime } from "@p5stage/shared";
 
+import { DEFAULT_TITLE } from "../sketches/sketch";
+
 /** R2 に置いた blob 1 つ。中身そのものは持たない。 */
 export interface AssetBlob {
   /** 小文字 16 進の sha256。R2 のキーでもある。 */
@@ -94,6 +96,26 @@ export function quotaError(size: number, usage: AssetUsage): string | null {
     return `保存できる容量が足りません (残り ${formatBytes(remaining)})`;
   }
   return null;
+}
+
+/**
+ * その作品たちが使っている間は手放せない (3-5a)。使っていなければ null。
+ *
+ * 受け取るのがタイトルだけなのは、この判断に作品の型が要らないため
+ * (`AssetUsage` と同じく、ここは D1 も作品も知らない層)。
+ *
+ * 名前を挙げるのは 1 件目までにする。手放せない理由は「どれか一つでも使っている」
+ * ことなので、全部並べても直す手数は変わらず、ドロワーの幅では読めなくなる (3-4b)。
+ */
+export function inUseError(titles: readonly string[]): string | null {
+  if (titles.length === 0) return null;
+
+  const first = titles[0] ?? "";
+  const named = `「${first.trim() === "" ? DEFAULT_TITLE : first}」`;
+  const where =
+    titles.length === 1 ? named : `${named} ほか ${titles.length - 1} 件の作品`;
+
+  return `${where}で使っています。先に作品からアセットを外してください`;
 }
 
 /**

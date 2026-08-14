@@ -21,6 +21,7 @@ export {
   manifestNameConflicts,
   parseAssetManifest,
   readAssetManifest,
+  referencedDigests,
   serializeAssetManifest,
   withAssetManifest,
 } from "./asset-manifest";

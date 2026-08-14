@@ -15,6 +15,7 @@ import {
   manifestNameConflicts,
   parseAssetManifest,
   readAssetManifest,
+  referencedDigests,
   serializeAssetManifest,
   withAssetManifest,
   type AssetManifest,
@@ -199,6 +200,41 @@ describe("manifestDigests", () => {
       },
     });
     expect(digests).toEqual([DIGEST, OTHER_DIGEST]);
+  });
+});
+
+describe("referencedDigests", () => {
+  it("マニフェストが無ければ何も参照していない", () => {
+    expect(referencedDigests({ "sketch.js": "" })).toEqual([]);
+  });
+
+  it("読めないマニフェストは参照していないものとして数える", () => {
+    // 参照台帳 (3-5a) が守るのは実際に配られるものだけ。壊れた一覧は実行時の
+    // 名前解決も通らないので、ここで守ると回収されるべき実体が永久に残る。
+    expect(
+      referencedDigests({ [ASSET_MANIFEST_FILE]: "{ 壊れている" })
+    ).toEqual([]);
+  });
+
+  it("同じ実体を別の名前で参照していても 1 つに畳む", () => {
+    const digests = referencedDigests({
+      [ASSET_MANIFEST_FILE]: manifestText({
+        "cat.png": { sha256: DIGEST, size: 1, mime: "image/png" },
+        "copy.png": { sha256: DIGEST, size: 1, mime: "image/png" },
+        "dog.png": { sha256: OTHER_DIGEST, size: 1, mime: "image/png" },
+      }),
+    });
+
+    expect(digests).toEqual([DIGEST, OTHER_DIGEST]);
+  });
+
+  it("空のマニフェストは「無い」と同じ結果になる", () => {
+    // 「アセットを全部消した作品」と「一度も使っていない作品」で、守る対象は同じ。
+    expect(
+      referencedDigests({
+        [ASSET_MANIFEST_FILE]: serializeAssetManifest(emptyAssetManifest()),
+      })
+    ).toEqual([]);
   });
 });
 

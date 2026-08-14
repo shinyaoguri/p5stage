@@ -348,6 +348,43 @@ export function readStoredSettings(page: Page): Promise<unknown> {
 }
 
 /**
+ * 下書きを消す。**保存済みの作品から離れて新しい作品を始めた状態**を作る。
+ *
+ * 下書きは `drafts/current` の 1 つきりなので、`/edit` を開き直すだけでは直前の
+ * 作品がそのまま戻ってくる。作品を切り替えたときに画面から何が見えなくなるかを
+ * 確かめたい場面 (3-5a の参照台帳) では、ここまで消してから開き直す。
+ */
+export function clearStoredDraft(page: Page): Promise<void> {
+  return page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("p5stage");
+        request.onerror = () => reject(new Error("IndexedDB を開けません"));
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("drafts")) {
+            db.close();
+            resolve();
+            return;
+          }
+          const remove = db
+            .transaction("drafts", "readwrite")
+            .objectStore("drafts")
+            .delete("current");
+          remove.onsuccess = () => {
+            db.close();
+            resolve();
+          };
+          remove.onerror = () => {
+            db.close();
+            reject(new Error("下書きを消せません"));
+          };
+        };
+      })
+  );
+}
+
+/**
  * 設定ドロワー (#41 の 4)。
  *
  * 面は操作列の中ではなく body 直下にあるので、トグルと同じ祖先では指せない。
@@ -369,6 +406,19 @@ export const assetsDrawer = (page: Page): Locator =>
 export async function openAssets(page: Page): Promise<void> {
   await page.locator("#assets-toggle").click();
   await expect(assetsDrawer(page)).toBeVisible();
+}
+
+/**
+ * アセットパネルを閉じる。
+ *
+ * 開いたまま保存へ進めない — 面は画面上部の操作列に重なるので、`#save` を押そうと
+ * するとパネルが受け取ってしまう (`hidden` にしない面なので、見えていないことでは
+ * なく重なりが問題になる)。開くときの `#assets-toggle` もその下に隠れるので、
+ * 閉じるのは面が持つ × から。
+ */
+export async function closeAssets(page: Page): Promise<void> {
+  await assetsDrawer(page).locator(".assets-panel-close").click();
+  await expect(assetsDrawer(page)).not.toHaveClass(/is-open/);
 }
 
 /** 一覧に並ぶアセット 1 件 (name はコードから引く名前)。 */
