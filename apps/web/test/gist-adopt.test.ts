@@ -2,8 +2,9 @@
  * 外部の Gist を作品として受け入れてよいかの判断 (Phase 2-6)。
  *
  * 受け入れた Gist は**そのまま正本になる**ので、断る側の判断がそのまま安全性に
- * なる。見るのは「誰のものか」「全部読めているか」「スケッチとして成り立つか」の 3 つと、
- * 受け入れたときに作品へ移す値 (タイトル・公開範囲)。
+ * なる。見るのは「誰のものか」「全部読めているか」「スケッチとして成り立つか」
+ * 「アセットの一覧が読めるか」の 4 つと、受け入れたときに作品へ移す値
+ * (タイトル・公開範囲・**所有を確かめる相手の sha256**)。
  */
 
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,21 @@ import {
 } from "../src/lib/sketches/gist-adopt";
 
 const VIEWER_ID = 4242;
+const DIGEST = "a".repeat(64);
+const OTHER_DIGEST = "b".repeat(64);
+
+/** アセット 1 件を持つ assets.json。 */
+function manifest(entries: Record<string, string>): string {
+  return JSON.stringify({
+    version: 1,
+    assets: Object.fromEntries(
+      Object.entries(entries).map(([name, sha256]) => [
+        name,
+        { sha256, size: 70, mime: "image/png" },
+      ])
+    ),
+  });
+}
 
 function source(overrides: Partial<AdoptionSource> = {}): AdoptionSource {
   return {
@@ -32,6 +48,8 @@ describe("planGistAdoption", () => {
       kind: "accept",
       title: "波紋",
       visibility: "unlisted",
+      // アセットを使わない作品。台帳へ聞きに行く相手がいない。
+      digests: [],
     });
   });
 
@@ -71,6 +89,68 @@ describe("planGistAdoption", () => {
     );
 
     expect(decision).toMatchObject({ kind: "reject", reason: "invalid_files" });
+  });
+
+  it("読めない assets.json を持つ Gist は断る", () => {
+    // 受け入れると、次の保存が必ず断られる作品ができる (保存経路は同じ検査を通す)。
+    // 取り込む前なら、利用者は手元の Gist を直せる。
+    const decision = planGistAdoption(
+      source({
+        files: { "index.html": "<!doctype html>", "assets.json": "{ 壊れた" },
+      }),
+      VIEWER_ID
+    );
+
+    expect(decision).toMatchObject({
+      kind: "reject",
+      reason: "invalid_manifest",
+    });
+    expect(decision).toHaveProperty(
+      "message",
+      expect.stringContaining("assets.json")
+    );
+  });
+
+  it("アセットとコードの名前がぶつかる Gist は断る", () => {
+    // 実行時の名前解決は 1 つの表で引くので (3-3)、同じ名前が両方にあると
+    // どちらが返るか決まらない。保存経路と同じ理由で断る。
+    const decision = planGistAdoption(
+      source({
+        files: {
+          "index.html": "<!doctype html>",
+          "cat.png": "これはコード側のファイル",
+          "assets.json": manifest({ "cat.png": DIGEST }),
+        },
+      }),
+      VIEWER_ID
+    );
+
+    expect(decision).toMatchObject({
+      kind: "reject",
+      reason: "invalid_manifest",
+    });
+  });
+
+  it("受け入れるときは参照している実体を出す (所有の確認は台帳を持つ側)", () => {
+    // ここは D1 に触らない純ロジック。「誰の所有を確かめればよいか」までを出し、
+    // 引くのは呼び出し側 (ADR 0003 の 3-2 補足)。
+    const decision = planGistAdoption(
+      source({
+        files: {
+          "index.html": "<!doctype html>",
+          "assets.json": manifest({
+            "cat.png": DIGEST,
+            "same.png": DIGEST,
+            "cube.obj": OTHER_DIGEST,
+          }),
+        },
+      }),
+      VIEWER_ID
+    );
+
+    expect(decision).toMatchObject({ kind: "accept" });
+    // 同じ実体を 2 つの名前で使っても、聞くのは 1 回でよい。
+    expect(decision).toHaveProperty("digests", [DIGEST, OTHER_DIGEST]);
   });
 
   it("公開 Gist は公開の作品になる", () => {
