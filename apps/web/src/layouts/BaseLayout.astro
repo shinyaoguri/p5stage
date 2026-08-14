@@ -47,6 +47,11 @@ const {
     --fg: #16161a;
     --muted: #6b6b76;
     --accent: #e5457b;
+    /* 文章を読ませる面の書体。エディタ画面は操作系だけを等幅にする
+       (`--ui-font-family` / styles/editor-chrome.css) ので、そこから戻す先として
+       変数で持つ。 */
+    --body-font-family:
+      system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -66,12 +71,7 @@ const {
     min-height: 100dvh;
     background: var(--bg);
     color: var(--fg);
-    font-family:
-      system-ui,
-      -apple-system,
-      "Hiragino Sans",
-      "Noto Sans JP",
-      sans-serif;
+    font-family: var(--body-font-family);
     line-height: 1.7;
   }
 </style>

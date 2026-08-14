@@ -4,6 +4,9 @@ import { env } from "cloudflare:workers";
 
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { configuredAssetsOrigin } from "../lib/assets/delivery-origin";
+// クロームのトークン。下の scoped style が引くので、スクリプトの読み込みを
+// 待たずに当たるようページ側で読む (パネル群の CSS は各スクリプトが持つ)。
+import "../styles/editor-chrome.css";
 
 // 実行環境のオリジンは実行時に決まるので、このページは静的化しない。
 export const prerender = false;
@@ -476,11 +479,15 @@ try {
     border: none;
   }
 
-  /* 透過エディタ。スケッチの上に重ね、端はスケッチが見えるよう余白を空ける。 */
+  /* 透過エディタ。スケッチの上に重ね、端はスケッチが見えるよう余白を空ける。
+     左右と下は共通の余白 (styles/editor-chrome.css)。上だけは操作列の分を空ける
+     必要があり、テキストボタンが折り返す今は 3.5rem 要る (#41 の 2 でアイコン列に
+     置き換えたら、ここも共通の余白まで下げられる)。 */
   #editor {
     position: absolute;
     z-index: 10;
-    inset: max(3.5rem, 2rem) max(0.5rem, 2rem) max(0.5rem, 2rem);
+    inset: max(3.5rem, var(--editor-padding)) max(0.5rem, var(--editor-padding))
+      max(0.5rem, var(--editor-padding));
   }
 
   .chrome {
@@ -495,9 +502,12 @@ try {
     justify-content: flex-end;
     gap: 0.75rem;
     align-items: center;
-    padding: 0.5rem 0.75rem;
+    /* 右端はエディタと同じ縦線に揃える (styles/editor-chrome.css)。 */
+    padding: 0.5rem max(0.5rem, var(--editor-padding));
     color: #fff;
     font-size: 0.8125rem;
+    /* 操作系は設定の「書体」に追従させない (幅が動いて調整の邪魔になる)。 */
+    font-family: var(--ui-font-family);
     text-shadow: 0 0 3px #000;
     /* その空きはクリックも通す。操作列は右上に浮いているだけで、左上のタブを
        覆う面ではない (覆うと、タブが見えているのに押せない状態になる)。 */
@@ -516,8 +526,11 @@ try {
        タブの上に来ることがある。押せる面はタブの側なので、そちらを上に置く。 */
     z-index: 21;
     top: 0.5rem;
-    left: 0.75rem;
-    max-width: calc(100% - 22rem);
+    /* エディタの左端と同じ縦線に揃える (#41 の 1-1)。 */
+    left: max(0.5rem, var(--editor-padding));
+    /* 右上の操作列に譲る幅。左の余白ぶんを差し引き、揃えた縦線を保ったまま
+       操作列と重ならないところで止める。 */
+    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
   }
 
   .chrome button {
@@ -547,7 +560,12 @@ try {
   }
 
   /* コンソール。中身の見た目は styles/console-panel.css (JS が組み立てる DOM に
-     届かせるため)。ここは置き場所だけを決める。 */
+     届かせるため)。ここは置き場所だけを決める。
+
+     ここだけは `--editor-padding` に乗せない。エディタは同じ余白の内側に文字を
+     描くので、揃えるとコンソールが最後の数行に重なる。**エディタの外側に留まる**
+     ことが要るので、縁の下限と同じ 0.5rem で固定する (canvastage も同じ理由で
+     16px 固定にしている)。 */
   #console {
     position: absolute;
     z-index: 20;

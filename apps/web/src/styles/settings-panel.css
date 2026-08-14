@@ -15,7 +15,7 @@
 .settings-panel {
   position: relative;
   font-size: 0.75rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--ui-font-family);
 }
 
 .settings-panel-toggle {
