@@ -166,6 +166,27 @@ const gistUrl =
     : `https://gist.github.com/${sketch.ownerLogin}/${sketch.gistId}` +
       (past !== null && past.kind === "ready" ? `/${past.revision}` : "");
 
+// 今画面に出ている版。閲覧側はこれを起点に「進んだかどうか」を見る (Phase 4-2)。
+const shownRevision =
+  past !== null
+    ? past.kind === "ready"
+      ? past.revision
+      : null
+    : content !== null && content.kind === "ready"
+      ? content.revision
+      : null;
+
+/**
+ * 作者の保存に追従するか (Phase 4-2 / ADR 0017)。
+ *
+ * 追従するのは**最新の版を、中身が出ている状態で見ているとき**だけ。
+ *
+ * - 過去の版を開いている閲覧者を勝手に最新へ動かさない (`?rev=` を指定した意味が消える)
+ * - 中身が出ていない作品 (未保存・削除済み・取得不能) には差し替える先の DOM が無い。
+ *   保存された後の姿は、開き直せば出る
+ */
+const live = past === null && files !== null;
+
 /** 中身が出せないときに、閲覧者へ見せる説明。 */
 const notice = (() => {
   if (past !== null) {
@@ -199,6 +220,9 @@ const notice = (() => {
     data-preview-origin={previewOrigin}
     data-assets-origin={assetsOrigin}
     data-active-file={activeFile}
+    data-sketch-id={sketch.id}
+    data-revision={shownRevision}
+    data-live={live ? "1" : undefined}
   >
     <header class="sketch-header">
       <h1>{sketch.title}</h1>
@@ -226,6 +250,12 @@ const notice = (() => {
             </a>
           )
         }
+        {
+          /* 追従できているときだけ出る。印を描くのは CSS で、条件は
+            `data-live-state`(JS が書く)。繋がる前・切れた後・混雑で断られたときは
+            出ない — **閲覧そのものは何も変わらない**ので、失敗を言い立てない */
+        }
+        {live && <span class="sketch-live">同期中</span>}
       </p>
       {
         sketch.description !== "" && (
@@ -487,14 +517,24 @@ const notice = (() => {
     font-size: 1rem;
   }
 
-  .sketch-file {
-    margin: 0;
-    padding: 1rem;
-    overflow-x: auto;
-    border-radius: 0.5rem;
-    background: color-mix(in srgb, var(--fg) 6%, transparent);
-    font-size: 0.8125rem;
-    line-height: 1.6;
-    tab-size: 2;
+  /* 追従している印 (Phase 4-2)。**繋がっているときだけ**出す。
+     色だけに頼らず、点と文字の両方で読めるようにする。 */
+  .sketch-live {
+    display: none;
+    gap: 0.375rem;
+    align-items: center;
+    color: var(--accent);
+  }
+
+  .sketch-page[data-live-state="live"] .sketch-live {
+    display: inline-flex;
+  }
+
+  .sketch-live::before {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentcolor;
+    content: "";
   }
 </style>
