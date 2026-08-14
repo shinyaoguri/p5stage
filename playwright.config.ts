@@ -89,14 +89,29 @@ const SEED_BLOB = `npx wrangler r2 object put p5stage-assets/blobs/${SEED_BLOB_S
 const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOB}`;
 
 /**
- * ビルド成果物から `routes` を外す (#38 / `e2e/strip-dev-routes.ts`)。
+ * ビルド成果物を E2E 用に整える (#38 / Phase 3-5b / `e2e/prepare-dev-worker.ts`)。
  *
- * 本番のドメインが付いたままだと `wrangler dev` がそれをリクエスト URL のホストに
- * してしまい、OAuth の戻り先が本番のドメインになる。`--local-upstream` でも直せるが、
- * **渡すと E2E の途中で wrangler dev が落ちる** (#38) ので、ルートごと外す。
+ * `routes` — 本番のドメインが付いたままだと `wrangler dev` がそれをリクエスト URL の
+ * ホストにしてしまい、OAuth の戻り先が本番のドメインになる。
+ *
+ * `no_bundle` — `--test-scheduled` が開く `/__scheduled` はバンドル時に差し込まれる
+ * ミドルウェアなので、「バンドル済み」の印が付いたままだと Cron を起こせない。
  */
-const STRIP_ROUTES =
-  "node ../../e2e/strip-dev-routes.ts dist/server/wrangler.json";
+const PREPARE_WORKER =
+  "node ../../e2e/prepare-dev-worker.ts dist/server/wrangler.json";
+
+/**
+ * 孤児 blob を回収するまでの猶予 (時間 — Phase 3-5b)。約 7 秒。
+ *
+ * 本番は 168 時間 (apps/web/wrangler.jsonc)。0 にしない理由は 2 つある。
+ *
+ * - **E2E は同じ利用者で並列に走る**。0 にすると、他のテストが手放した直後の実体まで
+ *   同じ起動で消えてしまう
+ * - 猶予そのもの (手放した直後は消えない) を実ブラウザから確かめられる
+ *
+ * 待ち時間は `asset-gc.spec.ts` の `GRACE_WAIT_MS` と組。
+ */
+const GC_GRACE_HOURS = 0.002;
 
 /**
  * サーバの起動を「落ちたら立て直す」層で包む (#38 / `e2e/serve-with-restart.ts`)。
@@ -143,7 +158,7 @@ export default defineConfig({
       // ビルドの後に `routes` を外す (下の STRIP_ROUTES)。付いたままだと
       // `wrangler dev` がその custom_domain をリクエスト URL のホストとして使い、
       // OAuth の `redirect_uri` が本番のドメインになって認可から戻れない。
-      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && ${SERVE} npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var PUBLIC_ASSETS_ORIGIN:${ASSETS_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
+      command: `npm run build && ${PREPARE_WORKER} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && ${SERVE} npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --test-scheduled --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var PUBLIC_ASSETS_ORIGIN:${ASSETS_ORIGIN} --var ASSET_GC_GRACE_HOURS:${GC_GRACE_HOURS} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,

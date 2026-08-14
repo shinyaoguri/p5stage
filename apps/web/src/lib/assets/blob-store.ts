@@ -55,3 +55,17 @@ export async function blobExists(
 ): Promise<boolean> {
   return (await bucket.head(blobKey(sha256))) !== null;
 }
+
+/**
+ * 実体を消す (3-5b の回収)。
+ *
+ * 消してよいかの判断はここでは持たない (`lib/assets/gc.ts`)。**台帳より先に消す** —
+ * 逆にすると台帳から消えて実体だけが残り、回収は `blobs` を起点に引くので二度と
+ * 見つけられなくなる。
+ */
+export async function deleteBlob(
+  bucket: R2Bucket,
+  sha256: string
+): Promise<void> {
+  await bucket.delete(blobKey(sha256));
+}

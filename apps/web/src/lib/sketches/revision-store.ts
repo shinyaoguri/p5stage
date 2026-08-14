@@ -16,6 +16,36 @@ export function revisionKey(gistId: string, revision: string): string {
   return `gists/${gistId}/${revision}.json`;
 }
 
+/** キーの前置き。走査 (3-5b のバックフィル) はこの下だけを見る。 */
+export const REVISION_KEY_PREFIX = "gists/";
+
+/**
+ * キーから `(gistId, revision)` を取り出す。形が違えば null (3-5b)。
+ *
+ * バックフィルは**書いた側の記録が無い**リビジョンを R2 から拾い直すので、キーが
+ * 唯一の手掛かりになる。`revisionKey` の逆で、両者がずれていないことは単体テストが
+ * 往復で確かめる。
+ *
+ * 想定外のキーを黙って捨てず null で返すのは、呼び出し側が「読めなかった数」を
+ * 数えられるようにするため (勝手な形のオブジェクトが混ざっていることに気付ける)。
+ */
+export function parseRevisionKey(
+  key: string
+): { readonly gistId: string; readonly revision: string } | null {
+  if (!key.startsWith(REVISION_KEY_PREFIX) || !key.endsWith(".json")) {
+    return null;
+  }
+
+  const middle = key.slice(REVISION_KEY_PREFIX.length, -".json".length);
+  const parts = middle.split("/");
+  if (parts.length !== 2) return null;
+
+  const [gistId, revision] = parts;
+  if (!gistId || !revision) return null;
+
+  return { gistId, revision };
+}
+
 /** 中身を書く。同じキーへの書き込みは同じ内容になるので、上書きを気にしない。 */
 export async function putRevision(
   bucket: R2Bucket,

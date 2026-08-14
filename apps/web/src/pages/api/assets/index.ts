@@ -16,6 +16,7 @@ import {
   quotaError,
   type AssetUsage,
 } from "../../../lib/assets/asset";
+import { blobExists } from "../../../lib/assets/blob-store";
 import {
   assetUsage,
   claimBlob,
@@ -70,8 +71,11 @@ export const POST: APIRoute = async ({ request, url }) => {
   const tooLarge = assetSizeError(claim.size, usage);
   if (tooLarge !== null) return jsonError(413, "too_large", tooLarge);
 
+  // 台帳にあっても**実体を確かめてから**転送を省く (3-5b)。回収は R2 → D1 の順で
+  // 消すので、その間に「台帳にあるのに実体が無い」窓ができる。ここで裏を取らないと、
+  // 転送を省いた結果アセットの中身だけが存在しない作品が生まれる。
   const blob = await findBlob(env.DB, claim.sha256);
-  if (blob === null) {
+  if (blob === null || !(await blobExists(env.BLOBS, blob.sha256))) {
     // クォータはここでは見ない。申告は幾らでも投げられるので、**計上するのは
     // 実体を受け取ったとき**に揃える。
     return privateJson({ status: "missing", usage });

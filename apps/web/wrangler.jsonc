@@ -1,9 +1,9 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "p5stage-web",
-  // @astrojs/cloudflare v14 が用意するサーバエントリポイント。
-  // Durable Objects を足す Phase 4 で自前の worker.ts に差し替える。
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  // 自前のエントリ。@astrojs/cloudflare が用意するサーバエントリを包み、Astro が
+  // 持てないハンドラ (定期実行) を足す (Phase 3-5b / ADR 0015)。
+  "main": "./src/worker.ts",
   "compatibility_date": "2026-08-11",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
@@ -25,6 +25,11 @@
   "preview_urls": true,
   "observability": {
     "enabled": true,
+  },
+  // 孤児 blob の回収 (Phase 3-5b)。日次で足りる — 猶予期間 (既定 7 日) の方がずっと
+  // 長いので、間隔を詰めても回収が早まるのは最大 1 日だけ。
+  "triggers": {
+    "crons": ["17 4 * * *"],
   },
   "d1_databases": [
     {
@@ -58,6 +63,10 @@
     // アセットを配るオリジン (ADR 0014)。上の routes に足したホストと同じ値。
     // 本体・実行環境と別オリジンであることは resolveOrigins が実行時に確かめる。
     "PUBLIC_ASSETS_ORIGIN": "https://assets.p5stage.org",
+    // 孤児 blob を回収するまでの猶予 (時間 — Phase 3-5b)。印が付いてからこの長さを
+    // 過ぎたものだけ消す。手放した実体をもう一度持ち込む道は開いているので、週を
+    // またいで気付ける長さにしてある。E2E は `--var` で 0 にして回収を確かめる。
+    "ASSET_GC_GRACE_HOURS": "168",
     // GitHub OAuth App (本番) の Client ID。公開値なのでコミットしてよい。
     // 対になる Client Secret は `wrangler secret put GITHUB_CLIENT_SECRET` で入れる。
     // OAuth App は callback URL を 1 つしか持てないため、ローカルは別アプリを作り

@@ -303,6 +303,138 @@ export async function sketchesUsingBlob(
   return results;
 }
 
+/**
+ * 孤児の条件 (3-5b)。**誰にも計上されず、どのリビジョンからも参照されていない。**
+ *
+ * 起点は必ず `blobs`。参照は**全期間**を見る — 過去リビジョンは R2 に残り、いつでも
+ * 配りうるので、今配信していないという理由で消してはいけない (手放しの判断
+ * `sketchesUsingBlob` が今の断面だけを見るのと対になる)。
+ *
+ * 逆に、実体の無い sha256 を指す `blob_refs` の行 (利用者が手で書いたマニフェスト —
+ * 3-5a) は放っておいてよい。`blobs` を起点に引く限り出てこない。
+ */
+const ORPHAN_CONDITION = `NOT EXISTS (SELECT 1 FROM user_blobs ub WHERE ub.sha256 = blobs.sha256)
+   AND NOT EXISTS (SELECT 1 FROM blob_refs r WHERE r.sha256 = blobs.sha256)`;
+
+/**
+ * 孤児に印を立てる。立てた数を返す (3-5b)。
+ *
+ * 印の時刻から猶予を数えるので、**気付いた時刻を記録する**のがこの操作の意味。
+ * 既に印のあるものは触らない (`orphaned_at IS NULL` の条件) — 触ると猶予が
+ * 毎回振り出しに戻り、いつまでも回収されない。
+ */
+export async function markOrphanBlobs(
+  db: D1Database,
+  now: number,
+  limit: number
+): Promise<number> {
+  const result = await db
+    .prepare(
+      `UPDATE blobs SET orphaned_at = ?
+        WHERE sha256 IN (
+          SELECT sha256 FROM blobs
+           WHERE orphaned_at IS NULL AND ${ORPHAN_CONDITION}
+           LIMIT ?
+        )`
+    )
+    .bind(now, limit)
+    .run();
+
+  return result.meta.changes ?? 0;
+}
+
+/**
+ * 所有か参照が戻った blob の印を消す。消した数を返す (3-5b)。
+ *
+ * 手放した実体をもう一度持ち込む道は開いている (同じ中身なら転送も要らない — 3-1)。
+ * 猶予の間に戻ってきたものを回収するのは筋が通らないので、**回収の前に必ずここを
+ * 通す**。件数の上限を持たないのは、印の付いた行が部分インデックスで引ける少数で、
+ * かつ取りこぼすと消してはいけないものを消すため。
+ */
+export async function unmarkRevivedBlobs(db: D1Database): Promise<number> {
+  const result = await db
+    .prepare(
+      `UPDATE blobs SET orphaned_at = NULL
+        WHERE orphaned_at IS NOT NULL AND NOT (${ORPHAN_CONDITION})`
+    )
+    .run();
+
+  return result.meta.changes ?? 0;
+}
+
+/** 猶予を過ぎた孤児の sha256 (3-5b)。`cutoff` はこれ以前に印が付いたもの。 */
+export async function dueOrphanBlobs(
+  db: D1Database,
+  cutoff: number,
+  limit: number
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT sha256 FROM blobs
+        WHERE orphaned_at IS NOT NULL AND orphaned_at <= ?
+        ORDER BY orphaned_at
+        LIMIT ?`
+    )
+    .bind(cutoff, limit)
+    .all<{ readonly sha256: string }>();
+
+  return results.map((row) => row.sha256);
+}
+
+/**
+ * 台帳から blob を落とす。落とせたら true (3-5b)。
+ *
+ * **孤児の条件をもう一度確かめてから消す。** 対象を引いてから実体を消すまでの間に
+ * 所有や参照が戻ることはある (claim は猶予中の blob も受け付ける)。条件を付けずに
+ * 消すと、その行を指す `user_blobs` が外部キーの参照先を失う。
+ *
+ * 呼ぶのは **R2 の実体を消した後**。逆にすると台帳から消えて実体だけが残り、
+ * 回収は `blobs` を起点に引くので二度と見つけられなくなる。
+ */
+export async function forgetBlob(
+  db: D1Database,
+  sha256: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `DELETE FROM blobs
+        WHERE sha256 = ? AND orphaned_at IS NOT NULL AND ${ORPHAN_CONDITION}`
+    )
+    .bind(sha256)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** バッチが持ち越す状態 (`gc_state`) を読む。無ければ null。 */
+export async function readGcState(
+  db: D1Database,
+  key: string
+): Promise<string | null> {
+  const row = await db
+    .prepare(`SELECT value FROM gc_state WHERE key = ?`)
+    .bind(key)
+    .first<{ readonly value: string }>();
+
+  return row === null ? null : row.value;
+}
+
+/** バッチが持ち越す状態を書く。 */
+export async function writeGcState(
+  db: D1Database,
+  key: string,
+  value: string,
+  now: number
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO gc_state (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind(key, value, now)
+    .run();
+}
+
 /** 自分が持ち込んだ blob を新しい順に引く (管理 UI は 3-4)。 */
 export async function listBlobsByOwner(
   db: D1Database,

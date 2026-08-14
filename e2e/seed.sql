@@ -33,14 +33,20 @@ VALUES
    0, 0, 'e2erev01', '"e2e"', unixepoch() * 1000, NULL);
 
 -- 台帳。配信は R2 だけで完結する (ADR 0014) ので配信テストには要らないが、
--- 「持ち込んだ人がいる blob」という形を種でも崩さない (3-5 の GC が見る表)。
+-- 回収 (3-5b) はこの表を起点に引くので、実体があるなら行も要る。
+--
+-- **所有は持たせない。** ADR 0003 が「公開済みリビジョンが参照する blob は原則
+-- 削除しない」と言っているのは、まさにこの形 — 作った人が作品を残したままアセット
+-- だけ手放した状態。参照台帳 (`blob_refs`) にもこの種は行を持たない (種は 3-5a より
+-- 前と同じく R2 へ直に置くだけ) ので、**回収前のバックフィルが効かないと孤児と
+-- 見なされて消える**。`asset-gc.spec.ts` がそれを見張る。
 INSERT OR REPLACE INTO blobs (sha256, size, mime, created_at)
 VALUES
   ('7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe',
    70, 'image/png', 0);
-INSERT OR IGNORE INTO user_blobs (user_id, sha256, created_at)
-VALUES
-  (424242, '7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe', 0);
+-- ローカルの D1 は実行をまたいで残るので、以前の種が入れた所有を落としておく。
+DELETE FROM user_blobs
+ WHERE sha256 = '7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe';
 
 -- 限定公開。共有キャッシュに載らないこと・注意書き・noindex を見る。
 INSERT OR REPLACE INTO sketches
