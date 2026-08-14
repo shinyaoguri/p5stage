@@ -1,0 +1,5 @@
+{
+  "index.html": "<!doctype html>\n<html lang=\"ja\">\n  <head>\n    <meta charset=\"utf-8\" />\n  </head>\n  <body>\n    <img id=\"written\" src=\"cat.png\" alt=\"\" />\n    <script src=\"sketch.js\"></script>\n  </body>\n</html>\n",
+  "sketch.js": "// 旧版 (Phase 4-1)。中身は現行版と同じで、assets.json だけが別の実体を指す。\n// 「同じ cat.png が版によって別の blob になる」ことを確かめるための種。\nconst assigned = new Image();\nassigned.id = \"assigned\";\nassigned.onload = () => {\n  assigned.dataset.width = String(assigned.naturalWidth);\n  document.body.append(assigned);\n};\nassigned.src = \"cat.png\";\n",
+  "assets.json": "{\n  \"version\": 1,\n  \"assets\": {\n    \"cat.png\": {\n      \"sha256\": \"7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91\",\n      \"size\": 72,\n      \"mime\": \"image/png\"\n    }\n  }\n}\n"
+}

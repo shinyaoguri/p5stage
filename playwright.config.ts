@@ -62,16 +62,36 @@ const PERSIST_DIR = ".wrangler/e2e";
  */
 const SEED_SQL = "../../e2e/seed.sql";
 const SEED_CONTENT = "../../e2e/seed-content.json";
-/** アセットを使う作品の中身 (Phase 3-3)。参照する実体は下の SEED_BLOB。 */
+/** アセットを使う作品の中身 (Phase 3-3)。参照する実体は下の SEED_BLOBS。 */
 const SEED_ASSET_CONTENT = "../../e2e/seed-content-assets.json";
+/**
+ * 旧版の中身 (Phase 4-1)。
+ *
+ * 履歴から過去の版を開く道 (`?rev=`) は、**写しが 2 世代ないと確かめられない**。
+ * アセット側は同じ `cat.png` が別の実体を指すので、当時のマニフェストで解決されて
+ * いるかが配信 URL の sha256 に出る。
+ */
+const SEED_CONTENT_PREV = "../../e2e/seed-content-prev.json";
+const SEED_ASSET_CONTENT_PREV = "../../e2e/seed-content-assets-prev.json";
+
+/** 種のリビジョン。本物と同じ 16 進 40 桁 (e2e/seed.sql と合わせる)。 */
+const SEED_REVISION = "e2e1111111111111111111111111111111111111";
+const SEED_REVISION_PREV = "e2e0000000000000000000000000000000000000";
+
 const SEED_OBJECTS = [
-  ["e2e-gist-public", SEED_CONTENT],
-  ["e2e-gist-unlisted", SEED_CONTENT],
-  ["e2e-gist-assets", SEED_ASSET_CONTENT],
+  ["e2e-gist-public", SEED_REVISION, SEED_CONTENT],
+  ["e2e-gist-public", SEED_REVISION_PREV, SEED_CONTENT_PREV],
+  ["e2e-gist-unlisted", SEED_REVISION, SEED_CONTENT],
+  ["e2e-gist-unlisted", SEED_REVISION_PREV, SEED_CONTENT_PREV],
+  ["e2e-gist-assets", SEED_REVISION, SEED_ASSET_CONTENT],
+  ["e2e-gist-assets", SEED_REVISION_PREV, SEED_ASSET_CONTENT_PREV],
+  // 台帳を持たない作品 (Phase 4-1)。写しだけを置き、履歴は Cron に埋めさせる。
+  ["e2e-gist-backfill", SEED_REVISION, SEED_CONTENT],
+  ["e2e-gist-backfill", SEED_REVISION_PREV, SEED_CONTENT_PREV],
 ]
   .map(
-    ([gistId, content]) =>
-      `npx wrangler r2 object put p5stage-content/gists/${gistId}/e2erev01.json --file=${content} --content-type=application/json --local --persist-to ${PERSIST_DIR}`
+    ([gistId, revision, content]) =>
+      `npx wrangler r2 object put p5stage-content/gists/${gistId}/${revision}.json --file=${content} --content-type=application/json --local --persist-to ${PERSIST_DIR}`
   )
   .join(" && ");
 
@@ -81,12 +101,27 @@ const SEED_OBJECTS = [
  * キーは中身の sha256 で、`e2e/fixtures/dot.png` と `e2e/seed-content-assets.json` の
  * マニフェストが同じ値を指す。ずれていないことは `assets.spec.ts` が実ファイルから
  * 計算し直して確かめる。
+ *
+ * 緑の方は**旧版だけが参照する実体** (Phase 4-1)。今の版から外れた実体が過去の版で
+ * そのまま配られることを、配信 URL の sha256 で確かめる。
  */
-const SEED_BLOB_SHA256 =
-  "7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe";
-const SEED_BLOB = `npx wrangler r2 object put p5stage-assets/blobs/${SEED_BLOB_SHA256} --file=../../e2e/fixtures/dot.png --content-type=image/png --local --persist-to ${PERSIST_DIR}`;
+const SEED_BLOBS = [
+  [
+    "7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe",
+    "dot.png",
+  ],
+  [
+    "7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91",
+    "dot-green.png",
+  ],
+]
+  .map(
+    ([sha256, file]) =>
+      `npx wrangler r2 object put p5stage-assets/blobs/${sha256} --file=../../e2e/fixtures/${file} --content-type=image/png --local --persist-to ${PERSIST_DIR}`
+  )
+  .join(" && ");
 
-const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOB}`;
+const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOBS}`;
 
 /**
  * ビルド成果物を E2E 用に整える (#38 / Phase 3-5b / `e2e/prepare-dev-worker.ts`)。
