@@ -20,7 +20,7 @@ import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
 import { formatSavedAt } from "../ui/format-saved-at";
-import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
+import { makeToolbarButton, makeToolbarLink } from "../ui/toolbar-button";
 
 import type { SaveState, SketchMeta } from "./sketch-saver";
 
@@ -105,28 +105,34 @@ export class SavePanel {
     });
 
     // 状態は保存アイコンの色とドットが持つが、**色もドットも読み上げられない**。
-    // 支援技術へは従来どおり文字で伝える (画面から消すのは見た目の話で、
-    // live region ごと畳むと保存できていないことに気付けなくなる)。
+    // 支援技術へは文字で伝える (画面から消すのは見た目の話で、これごと畳むと
+    // 保存できていないことに気付けなくなる)。
+    //
+    // ボタンの**名前**ではなく**説明**として渡すのがここの要点。名前に混ぜると
+    // 「保存」を押すつもりでホバーするたび状態まで読まされ、`保存 (保存しました
+    // (8/14 18:03))` のような入れ子になる。読み上げは「保存 ボタン、未保存の
+    // 変更があります」と続けて読む。
     this.#status = document.createElement("span");
     this.#status.className = "save-status-sr";
     this.#status.id = "save-status";
     this.#status.setAttribute("role", "status");
+    this.#button.setAttribute("aria-describedby", this.#status.id);
 
     // 保存先を確かめる道。正本が自分の GitHub にあることが目に見えるようにする。
-    this.#link = document.createElement("a");
-    this.#link.className = "save-gist-link";
-    this.#link.target = "_blank";
-    this.#link.rel = "noopener noreferrer";
-    this.#link.textContent = "Gist";
+    this.#link = makeToolbarLink({
+      id: "gist-link",
+      icon: "github",
+      label: "Gist を開く",
+    });
     this.#link.hidden = true;
 
     // 人に見せる URL。login を含まない恒久リンクを出す (作者が GitHub で改名しても
     // 生きる。開くと正典 URL へ飛ぶ — ADR 0011)。
-    this.#pageLink = document.createElement("a");
-    this.#pageLink.className = "save-gist-link";
-    this.#pageLink.target = "_blank";
-    this.#pageLink.rel = "noopener noreferrer";
-    this.#pageLink.textContent = "作品ページ";
+    this.#pageLink = makeToolbarLink({
+      id: "page-link",
+      icon: "externalLink",
+      label: "作品ページを開く",
+    });
     this.#pageLink.hidden = true;
 
     // 正本を差し替える口 (Phase 2-6)。GitHub 側で Gist を消してしまった作品を
@@ -161,12 +167,10 @@ export class SavePanel {
   /** 状態を描き直す。 */
   render(state: SaveState): void {
     this.#state = state;
-    const described = describe(state);
-    this.#status.textContent = described;
     // 見た目 (色とドット) は CSS が属性から決める。E2E も意匠ではなくこちらを見る。
     this.#button.dataset.saveStatus = state.status;
-    // アイコンだけのボタンなので、状態は名前に含めるしかない。ホバーでも読める。
-    setToolbarButtonLabel(this.#button, `保存 (${described})`);
+    // 名前は「保存」のまま動かさない。状態は `aria-describedby` の先が持つ。
+    this.#status.textContent = describe(state);
     this.#button.disabled = state.status === "saving";
 
     // 作品ページは Gist より先に成立する (器ができた時点で URL が決まる)。

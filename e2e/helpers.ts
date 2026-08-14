@@ -167,6 +167,16 @@ export function draftIndicator(page: Page): Locator {
   return page.locator("#draft-status");
 }
 
+/**
+ * 保存先の Gist を開くリンク (Gist が付いている間だけ出る)。
+ *
+ * 操作列は文字を持たないので、**行き先も絵で示す** — 名前はホバーと読み上げが
+ * 持つ。掴むのは名前ではなく id (意匠と言い回しから切り離す)。
+ */
+export function gistLink(page: Page): Locator {
+  return page.locator("#gist-link");
+}
+
 /** 直すまで続く条件を示す警告アイコン (出ている条件が無ければ隠れている)。 */
 export function warningIndicator(page: Page): Locator {
   return page.locator("#warnings");
