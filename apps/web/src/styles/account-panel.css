@@ -52,6 +52,8 @@
   background: #14141a;
   color: #f2f2f5;
   font-size: 0.875rem;
+  /* 操作列の等幅から本文の書体へ戻す (dialog.css の `.app-dialog` と同じ理由)。 */
+  font-family: var(--body-font-family);
   line-height: 1.7;
 }
 

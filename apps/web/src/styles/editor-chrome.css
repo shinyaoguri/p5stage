@@ -1,0 +1,77 @@
+/*
+ * エディタ画面のクローム (エディタの外側) が共有するトークンと、画面全体に
+ * かかる方針 (狭い画面・モーション低減)。
+ *
+ * 透過エディタの中身は editor-overlay.css が持つ。あちらは **Monaco が作る DOM の
+ * 見た目**で、値は設定パネルが書き換える。こちらは **エディタの外側の骨格**で、
+ * 設定では変わらない (要件 3.1 の調整対象ではない)。
+ *
+ * 移植元は canvastage の style.css。あちらは余白を `--editor-padding` 1 本で
+ * 決めており、エディタ・タブ・操作列が常に同じ縦線に揃う。p5stage は機能から
+ * 先に作ったため各所がそれぞれの値を持っていた (#41 の 1-5)。ここに寄せる。
+ *
+ * ページ側 (edit.astro の scoped style) は置き場所だけを決め、値はここから引く。
+ */
+
+:root {
+  /*
+   * エディタ・ファイルタブ・操作列が画面の縁から空ける余白。
+   *
+   * 使う側は `max(0.5rem, var(--editor-padding))` の形で引く (canvastage と同じ)。
+   * 狭い画面でトークンを詰めたとき、縁に貼り付かない下限をここで担保する。
+   */
+  --editor-padding: 32px;
+
+  /*
+   * クロームの書体。
+   *
+   * 設定の「書体」(`--editor-font-family` 相当) はエディタの中身だけに効かせ、
+   * 操作系はここで固定する。書体を変えるたびにボタンの幅が動くと、見た目を
+   * 見ながら調整できない (canvastage が `--ui-font-family` を分けている理由)。
+   *
+   * canvastage は JetBrains Mono を Google Fonts から読むが、p5stage は
+   * 第三者ドメインへの読み込みを持ち込まない (判断は settings/definitions.ts の
+   * `DEFAULT_FONT_FAMILY` に記載)。端末にあるものだけで解決する。
+   */
+  --ui-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ * 狭い画面。
+ *
+ * エディタはデスクトップ前提の道具だが、余白が 32px のままだと横 375px の画面で
+ * 幅の 1/6 が縁に消える。余白だけを詰めて、操作系の配置は変えない。
+ */
+@media (max-width: 600px) {
+  :root {
+    --editor-padding: 8px;
+  }
+}
+
+/*
+ * モーション低減。
+ *
+ * 今のところクローム側にアニメーションは無いが、#41 の 4〜6 (ドロワーの
+ * スライドイン・トースト・通信中の pulse) はすべてここに乗る。**後から個別に
+ * 足すのではなく、先に全体を止める側を置く** — 個別指定は書き忘れが表に出ない。
+ *
+ * `*` に当てるので、自前の CSS だけでなく Monaco が持ち込む規則にも届く
+ * (カーソルの点滅がその一例)。**Monaco 側の例外は要らない** — 点滅の
+ * 「なめらか」「フェーズ」「拡大」は最終キーフレームが `opacity: 0` /
+ * `scaleY(0)` だが、`animation` 短縮形の `animation-fill-mode` は `none` なので、
+ * 潰した長さで終わった後は元の姿へ戻る (消えたまま止まりはしない。実ブラウザで確認)。
+ *
+ * スケッチの切り替え演出 (設定の「演出」) はこの規則の対象外。あちらは別オリジンの
+ * 実行環境が Web Animations API で動かすもので、この文書の CSS は届かない。
+ * 見せ物としてユーザーが選んだ効果でもあるので、止めるかどうかは別の判断になる。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -16,6 +16,9 @@
   background: #14141a;
   color: #f2f2f5;
   font-size: 0.875rem;
+  /* 操作列は等幅 (`--ui-font-family`) だが、ここは日本語の説明を読ませる面なので
+     本文の書体に戻す。ダイアログは操作列の子孫にいるので、明示しないと継承する。 */
+  font-family: var(--body-font-family);
   line-height: 1.7;
 }
 
