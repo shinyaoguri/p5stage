@@ -26,6 +26,7 @@ import {
 
 import { planDelivery } from "./delivery-plan";
 import { storeRevision } from "./publish";
+import { findRevision } from "./revision-log";
 import { getRevision } from "./revision-store";
 import type { Sketch } from "./sketch";
 import {
@@ -175,4 +176,47 @@ export async function resolveSketchContent(
     }
     return { kind: "unavailable", reason: unavailableReason(error) };
   }
+}
+
+/** 過去の版を開いたときの中身 (Phase 4-1)。 */
+export type RevisionContent =
+  /** 台帳にない版。作品ページと同じ 404 に揃える。 */
+  | { readonly kind: "unknown" }
+  /** 台帳にはあるが、R2 の写しが読めない。作品は存在する。 */
+  | { readonly kind: "gone"; readonly revision: string }
+  | {
+      readonly kind: "ready";
+      readonly files: SketchFiles;
+      readonly revision: string;
+      /** p5stage が写しを持った時刻 (GitHub のコミット時刻ではない — ADR 0016)。 */
+      readonly createdAt: number;
+    };
+
+/**
+ * 過去の版の中身を用意する (Phase 4-1 / ADR 0016)。
+ *
+ * **`resolveSketchContent` と道を分けてある。** あちらは写しが無ければ GitHub から
+ * 取って埋めるが、その埋め合わせが取ってくるのは**今の Gist** なので、過去の版の
+ * 解決に流用すると「古い版のラベルで最新の中身」を配ることになる。存在しない版を
+ * 並べた要求のたびに GitHub を叩く形にもなり、閲覧経路から GitHub を外した
+ * ADR 0011 がクエリ 1 つで無効化される。
+ *
+ * したがってここは **D1 の台帳と R2 だけで閉じる**。GitHub へは行かず、配信の
+ * ポインタも書き換えず、再検証も仕掛けない (過去を見ている閲覧者に最新を確かめ
+ * させる理由が無い)。
+ */
+export async function resolveRevisionContent(
+  gistId: string,
+  revision: string
+): Promise<RevisionContent> {
+  // URL から来た値なので、R2 を引く前に台帳を通す。
+  const entry = await findRevision(env.DB, gistId, revision);
+  if (entry === null) return { kind: "unknown" };
+
+  const files = await getRevision(env.CONTENT, gistId, revision);
+  // 写しが失われていても埋め直さない。埋め直せるのは今の版だけで、過去の版の
+  // 中身は GitHub の Gist API からしか取れない (= 閲覧経路が GitHub に戻る)。
+  if (files === null) return { kind: "gone", revision };
+
+  return { kind: "ready", files, revision, createdAt: entry.createdAt };
 }

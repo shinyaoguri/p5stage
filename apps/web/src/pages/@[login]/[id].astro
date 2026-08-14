@@ -19,9 +19,19 @@ import {
   isCanonicalLogin,
   orderedFileNames,
   sketchPath,
+  sketchRevisionPath,
 } from "../../lib/sketches/content";
-import { resolveSketchContent } from "../../lib/sketches/delivery";
+import {
+  resolveRevisionContent,
+  resolveSketchContent,
+} from "../../lib/sketches/delivery";
 import { isSketchId } from "../../lib/sketches/id";
+import { listRevisions } from "../../lib/sketches/revision-log";
+import {
+  listableGistId,
+  planRevisionView,
+  REVISION_LIST_LIMIT,
+} from "../../lib/sketches/revision-view";
 import { getSketchWithOwner } from "../../lib/sketches/store";
 
 export const prerender = false;
@@ -33,26 +43,84 @@ const id = Astro.params.id ?? "";
 const sketch = isSketchId(id) ? await getSketchWithOwner(env.DB, id) : null;
 
 // 見つからないときも、他人のものだったときも同じ 404 (存在を漏らさない)。
+// **404 は共有キャッシュに載せない** — 載せると、当てずっぽうの `?rev=` を
+// 投げ続ける相手にとって空振りが安くなる。
 if (sketch === null) {
-  return new Response(null, { status: 404 });
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
-// 正典 URL は 302 の飛び先であり、`<link rel="canonical">` の値でもある。
-// `/s/:id` からも同じ作品に来られるので、検索エンジンにはこちらを正として伝える。
+// どの版を出すかは純ロジックが決める (Phase 4-1 / ADR 0016)。
+const view = planRevisionView(sketch, Astro.url.searchParams.get("rev"));
+if (view.kind === "unknown") {
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+// 正典 URL は `<link rel="canonical">` の値。**過去の版でもクエリの無いこの URL を
+// 指す** — 版は増え続けるので、検索エンジンに近似重複を並べない (ADR 0016)。
 const canonicalUrl = new URL(
   sketchPath(sketch.ownerLogin, sketch.id),
   Astro.url.origin
 ).href;
 
 if (!isCanonicalLogin(login, sketch.ownerLogin)) {
+  // 飛び先で `?rev=` を落とさない。落とすと、古い login で貼られた版へのリンクが
+  // 黙って最新にすり替わる。
+  return Astro.redirect(
+    new URL(
+      view.kind === "past"
+        ? sketchRevisionPath(sketch.ownerLogin, sketch.id, view.revision)
+        : sketchPath(sketch.ownerLogin, sketch.id),
+      Astro.url.origin
+    ).href,
+    302
+  );
+}
+
+// 今の版を指す `?rev=` は正典へ寄せる (同じ中身に 2 つの URL を持たせない)。
+if (view.kind === "canonical") {
   return Astro.redirect(canonicalUrl, 302);
 }
 
-const content = await resolveSketchContent(sketch, Date.now());
+const past =
+  view.kind === "past"
+    ? await resolveRevisionContent(view.gistId, view.revision)
+    : null;
 
-const files = content.kind === "ready" ? content.files : null;
+// 台帳に無い版は、存在しない作品と同じ扱いにする。
+if (past !== null && past.kind === "unknown") {
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+// 今の版だけが再検証 (GitHub への確かめ直し) を伴う。過去の版は台帳と R2 で閉じる。
+const content =
+  past === null ? await resolveSketchContent(sketch, Date.now()) : null;
+
+const files =
+  past !== null
+    ? past.kind === "ready"
+      ? past.files
+      : null
+    : content !== null && content.kind === "ready"
+      ? content.files
+      : null;
 const fileNames = files === null ? [] : orderedFileNames(files);
 const activeFile = files === null ? null : initialFileName(files);
+
+// 履歴は「p5stage が写しを持っている版」の一覧 (ADR 0016)。開けない版は並べない。
+const historyGistId = listableGistId(sketch);
+const revisions =
+  historyGistId === null
+    ? []
+    : await listRevisions(env.DB, historyGistId, REVISION_LIST_LIMIT);
 
 // 実行環境のオリジン (要件 5.1 / ADR 0007) とアセットの配信オリジン (ADR 0014)。
 let previewOrigin: string | null = null;
@@ -80,21 +148,33 @@ Astro.response.headers.set(
     : "private, no-store"
 );
 
-const updatedAt = new Date(sketch.updatedAt).toLocaleString("ja-JP", {
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const formatTime = (value: number): string =>
+  new Date(value).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
+const updatedAt = formatTime(sketch.updatedAt);
+
+// 過去の版を見ているなら、GitHub 側もその版を指す (Gist は `<id>/<sha>` で開ける)。
 const gistUrl =
   sketch.gistId === null
     ? null
-    : `https://gist.github.com/${sketch.ownerLogin}/${sketch.gistId}`;
+    : `https://gist.github.com/${sketch.ownerLogin}/${sketch.gistId}` +
+      (past !== null && past.kind === "ready" ? `/${past.revision}` : "");
 
 /** 中身が出せないときに、閲覧者へ見せる説明。 */
 const notice = (() => {
+  if (past !== null) {
+    // 台帳にあるのに写しが読めない。埋め直せるのは今の版だけ (ADR 0016)。
+    return past.kind === "gone" ? "この版の中身は残っていません。" : null;
+  }
+  // `past` と `content` は排他 (どちらか一方だけを解決する)。
+  if (content === null) return null;
+
   switch (content.kind) {
     case "ready":
       return null;
@@ -111,7 +191,7 @@ const notice = (() => {
 <BaseLayout
   title={`${sketch.title} | p5stage`}
   description={sketch.description || `${sketch.ownerLogin} の p5.js スケッチ`}
-  noindex={sketch.visibility === "unlisted"}
+  noindex={sketch.visibility === "unlisted" || past !== null}
   canonical={canonicalUrl}
 >
   <main
@@ -160,6 +240,15 @@ const notice = (() => {
           </p>
         )
       }
+      {
+        past !== null && (
+          <p class="sketch-past">
+            過去の版を見ています
+            {past.kind === "ready" && ` (${formatTime(past.createdAt)} の写し)`}
+            。<a href={sketchPath(sketch.ownerLogin, sketch.id)}>最新の版へ</a>
+          </p>
+        )
+      }
     </header>
 
     {
@@ -195,6 +284,48 @@ const notice = (() => {
               set:text={files[name]}
             />
           ))}
+        </section>
+      )
+    }
+
+    {/* 版が 1 つしか無い作品に「履歴」は要らない (保存した直後がその状態)。 */}
+    {
+      revisions.length > 1 && (
+        <section class="sketch-history">
+          <h2 class="sketch-history-heading">履歴</h2>
+          <p class="sketch-history-note">
+            p5stage が写しを持っている版です (Gist の全履歴ではありません)。
+          </p>
+          {/* ただのリンクなので JS 無しでも辿れる。 */}
+          <ol class="sketch-history-list">
+            {revisions.map((entry) => {
+              const isCurrent = entry.revision === sketch.currentRevision;
+              const viewing =
+                past === null ? isCurrent : entry.revision === past.revision;
+              return (
+                <li class="sketch-history-item">
+                  <a
+                    href={
+                      isCurrent
+                        ? sketchPath(sketch.ownerLogin, sketch.id)
+                        : sketchRevisionPath(
+                            sketch.ownerLogin,
+                            sketch.id,
+                            entry.revision
+                          )
+                    }
+                    aria-current={viewing ? "true" : undefined}
+                  >
+                    <time datetime={new Date(entry.createdAt).toISOString()}>
+                      {formatTime(entry.createdAt)}
+                    </time>
+                    <code>{entry.revision.slice(0, 7)}</code>
+                    {isCurrent && <span class="sketch-history-tag">最新</span>}
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
         </section>
       )
     }
@@ -260,9 +391,75 @@ const notice = (() => {
     font-size: 0.875rem;
   }
 
+  /* 過去の版を見ていることの明示 (Phase 4-1)。限定公開の注意書きと同じ形にして、
+     「今見ているものが普段と違う」ことを 1 種類の見た目で伝える。 */
+  .sketch-past {
+    margin: 1rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .sketch-past a {
+    color: var(--accent);
+  }
+
   .sketch-notice {
     margin: 1.5rem 0 0;
     color: var(--muted);
+  }
+
+  .sketch-history {
+    margin: 2rem 0 0;
+  }
+
+  .sketch-history-heading {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .sketch-history-note {
+    margin: 0.25rem 0 0.75rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .sketch-history-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sketch-history-item a {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    color: inherit;
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+
+  .sketch-history-item a:hover {
+    background: color-mix(in srgb, var(--fg) 6%, transparent);
+  }
+
+  /* 今見ている版。色だけに頼らず、印としても読めるよう左に線を引く。 */
+  .sketch-history-item a[aria-current] {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .sketch-history-item code {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .sketch-history-tag {
+    color: var(--accent);
+    font-size: 0.75rem;
   }
 
   /* 実行面。作品が縦横どちらでも収まるよう 16:10 の枠に収める。 */

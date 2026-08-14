@@ -1,0 +1,5 @@
+{
+  "index.html": "<!doctype html>\n<html lang=\"ja\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <link rel=\"stylesheet\" href=\"style.css\" />\n  </head>\n  <body>\n    <script src=\"sketch.js\"></script>\n  </body>\n</html>\n",
+  "style.css": "html,\nbody {\n  margin: 0;\n}\n",
+  "sketch.js": "// E2E_SKETCH_MARKER_PREV\nconst canvas = document.createElement(\"canvas\");\ncanvas.width = 200;\ncanvas.height = 200;\ndocument.body.append(canvas);\ncanvas.getContext(\"2d\").fillRect(0, 0, 200, 200);\n"
+}

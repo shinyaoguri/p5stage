@@ -7,6 +7,10 @@
 -- 中身 (R2) は e2e/seed-content.json を同じキーで置く (playwright.config.ts)。
 -- `revision_checked_at` を今にしておくと再検証の間隔に入らないので、
 -- テスト中に GitHub へ出ていかない。
+--
+-- リビジョンは**本物と同じ 16 進 40 桁**にしてある (偽 GitHub が返す形も同じ)。
+-- 作品ページの `?rev=` は形で足切りするので、種だけ現実と違う形にしておくと
+-- 「テストでは通るが本番では弾かれる」経路ができる (Phase 4-1)。
 
 INSERT OR REPLACE INTO users (id, login, avatar_url, created_at, updated_at)
 VALUES (424242, 'e2e-author', NULL, 0, 0);
@@ -19,7 +23,8 @@ INSERT OR REPLACE INTO sketches
 VALUES
   ('E2EPublicSketch0', 424242, 'e2e-gist-public', 'E2E 公開スケッチ',
    'E2E のための作品です。', 'public',
-   0, 0, 'e2erev01', '"e2e"', unixepoch() * 1000, NULL);
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL);
 
 -- アセットを使う作品 (Phase 3-3)。中身は e2e/seed-content-assets.json、
 -- 実体 (e2e/fixtures/dot.png) は R2 の p5stage-assets へ同じ sha256 で置く。
@@ -30,7 +35,8 @@ INSERT OR REPLACE INTO sketches
 VALUES
   ('E2EAssetSketch01', 424242, 'e2e-gist-assets', 'E2E アセットスケッチ',
    '', 'public',
-   0, 0, 'e2erev01', '"e2e"', unixepoch() * 1000, NULL);
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL);
 
 -- 台帳。配信は R2 だけで完結する (ADR 0014) ので配信テストには要らないが、
 -- 回収 (3-5b) はこの表を起点に引くので、実体があるなら行も要る。
@@ -43,10 +49,30 @@ VALUES
 INSERT OR REPLACE INTO blobs (sha256, size, mime, created_at)
 VALUES
   ('7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe',
-   70, 'image/png', 0);
+   70, 'image/png', 0),
+  -- 旧版だけが参照する実体 (Phase 4-1)。今の版から外れても、過去の版が使っている
+  -- 限り回収されない — それが「リビジョン = コード + アセットの完全なスナップ
+  -- ショット」(ADR 0003) の意味。
+  ('7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91',
+   72, 'image/png', 0);
 -- ローカルの D1 は実行をまたいで残るので、以前の種が入れた所有を落としておく。
 DELETE FROM user_blobs
- WHERE sha256 = '7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe';
+ WHERE sha256 IN (
+   '7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe',
+   '7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91'
+ );
+
+-- 旧版が参照している実体は、**参照台帳に載っている状態**を種で作る (Phase 4-1)。
+--
+-- 上の赤い方 (今の版が使う実体) は「台帳に無いところからバックフィルが埋める」道を
+-- `asset-gc.spec.ts` が見張っているので、あえて行を持たせていない。緑の方まで同じに
+-- すると、**参照台帳のバックフィルが済んでいる環境** (カーソルが `done` のまま残る
+-- ローカル) で回収に消され、過去の版のアセットが引けなくなる。守られていること自体は
+-- 3-5b の担当なので、こちらは前提として置く。
+INSERT OR REPLACE INTO blob_refs (gist_id, revision, sha256, created_at)
+VALUES
+  ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
+   '7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91', 0);
 
 -- 限定公開。共有キャッシュに載らないこと・注意書き・noindex を見る。
 INSERT OR REPLACE INTO sketches
@@ -56,4 +82,51 @@ INSERT OR REPLACE INTO sketches
 VALUES
   ('E2EUnlistedSkt01', 424242, 'e2e-gist-unlisted', 'E2E 限定公開スケッチ',
    '', 'unlisted',
-   0, 0, 'e2erev01', '"e2e"', unixepoch() * 1000, NULL);
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL);
+
+-- リビジョンの台帳 (Phase 4-1)。**中身 (R2) を置いた版だけ**を載せる — 履歴に並ぶ
+-- 版は開けることが前提 (ADR 0016)。公開作品とアセット作品には旧版があり、
+-- `?rev=` で当時のコードと当時のアセットを引ける。
+-- 時刻は「1 日前に旧版、1 時間前に今の版」。固定値にすると 1970 年として出て、
+-- 画面の確認や PR の証跡で**何を見ているのか読めなくなる**。
+INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
+VALUES
+  ('e2e-gist-public', 'e2e0000000000000000000000000000000000000',
+   (unixepoch() - 86400) * 1000),
+  ('e2e-gist-public', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000),
+  ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
+   (unixepoch() - 86400) * 1000),
+  ('e2e-gist-assets', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000),
+  ('e2e-gist-unlisted', 'e2e0000000000000000000000000000000000000',
+   (unixepoch() - 86400) * 1000),
+  ('e2e-gist-unlisted', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000);
+
+-- 4-1 以前の種が置いていた版 (`e2erev01`) を落とす。ローカルの D1 と R2 は実行を
+-- またいで残り、**埋め直しが古い写しを拾って履歴に混ざる**。形も本物と違うので
+-- (16 進 40 桁ではない)、残っていると画面の確認が読みにくくなる。
+DELETE FROM gist_revisions WHERE revision = 'e2erev01';
+
+-- 4-1 より前に書き出された作品 (Phase 4-1)。**台帳をあえて持たせない。**
+--
+-- 履歴は Cron が R2 の写しから埋め直す (`revision-backfill.ts`)。それが実際に効く
+-- ことを確かめられるよう、種は「写しはあるが台帳に無い」形をここで作る。
+-- 他の作品と分けてあるのは、埋まる前は `?rev=` が 404 になり、**並行して走る
+-- 他のテストを巻き込む**ため。
+INSERT OR REPLACE INTO sketches
+  (id, owner_id, gist_id, title, description, visibility,
+   created_at, updated_at, current_revision, revision_etag,
+   revision_checked_at, gist_deleted_at)
+VALUES
+  ('E2EBackfillSkt01', 424242, 'e2e-gist-backfill', 'E2E 埋め直しスケッチ',
+   '', 'public',
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL);
+
+-- 台帳とカーソルを落として、実行のたびに同じ状態から始める
+-- (ローカルの D1 は実行をまたいで残る)。
+DELETE FROM gist_revisions WHERE gist_id = 'e2e-gist-backfill';
+DELETE FROM gc_state WHERE key = 'revisions_backfill_cursor';
