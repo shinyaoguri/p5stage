@@ -8,10 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  fetchAssetUsage,
-  uploadAsset,
-} from "../src/scripts/assets/asset-upload";
+import { uploadAsset } from "../src/scripts/assets/asset-upload";
 
 const SHA256 = "sha256-of-the-bytes";
 
@@ -42,7 +39,6 @@ function stubDigest(): void {
 function stubApi(handlers: {
   claim?: () => Response;
   put?: () => Response;
-  list?: () => Response;
 }): Call[] {
   const calls: Call[] = [];
   vi.stubGlobal(
@@ -51,11 +47,6 @@ function stubApi(handlers: {
       const method = init.method ?? "GET";
       calls.push({ url, method });
 
-      if (url === "/api/assets" && method === "GET") {
-        return Promise.resolve(
-          handlers.list?.() ?? Response.json({ assets: [], usage: USAGE })
-        );
-      }
       if (url === "/api/assets") {
         return Promise.resolve(
           handlers.claim?.() ??
@@ -179,21 +170,5 @@ describe("uploadAsset", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toContain("接続を確認");
-  });
-});
-
-describe("fetchAssetUsage", () => {
-  it("使用量を返す", async () => {
-    stubApi({});
-
-    expect(await fetchAssetUsage()).toEqual(USAGE);
-  });
-
-  it("未ログインは失敗ではなく null (エディタはログイン無しでも使える)", async () => {
-    stubApi({
-      list: () => Response.json({ error: "unauthorized" }, { status: 401 }),
-    });
-
-    expect(await fetchAssetUsage()).toBeNull();
   });
 });

@@ -154,6 +154,28 @@ export async function recordBlob(
 }
 
 /**
+ * その人の所有を手放す。持っていなければ false (3-4b)。
+ *
+ * 消えるのは `user_blobs` の 1 行だけで、**`blobs` と R2 の実体には触らない**。
+ * 同じ中身を別の人も持ち込んでいることがあり、公開済みのリビジョンが参照して
+ * いることもある (ADR 0003 の「公開済みリビジョンが参照する blob は原則削除
+ * しない」)。最後の所有者が手放した blob を即消すと、閲覧中の作品が理由も無く
+ * 壊れる。孤児の回収は参照カウント + 猶予期間で 3-5 が受け持つ。
+ */
+export async function releaseBlob(
+  db: D1Database,
+  userId: number,
+  sha256: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(`DELETE FROM user_blobs WHERE user_id = ? AND sha256 = ?`)
+    .bind(userId, sha256)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/**
  * 1 回の問い合わせに載せる sha256 の数。
  *
  * D1 は 1 文への束縛を 100 個までしか受け付けないので、超える分は分けて引く。

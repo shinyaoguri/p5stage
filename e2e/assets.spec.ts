@@ -92,6 +92,20 @@ function upload(
   );
 }
 
+/** 所有を手放す (3-4b)。 */
+function release(page: Page, sha256: string): Promise<ApiResult> {
+  return page.evaluate(async (digest) => {
+    const response = await fetch(`/api/assets/${digest}`, { method: "DELETE" });
+    return {
+      status: response.status,
+      body: (await response.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null,
+    };
+  }, sha256);
+}
+
 /**
  * その blob が自分に何件計上されているか。
  *
@@ -259,6 +273,54 @@ test.describe("アセットの受け口", () => {
     const response = await page.request.get("/api/assets");
 
     expect(response.status()).toBe(401);
+  });
+
+  test("手放すと計上から外れ、実体は残る", async ({ page }) => {
+    await openEditor(page);
+    await login(page);
+
+    const asset = makePng();
+    await claim(page, {
+      sha256: asset.sha256,
+      size: asset.size,
+      mime: "image/png",
+    });
+    await upload(page, asset);
+    expect(await claimCount(page, asset.sha256)).toBe(1);
+
+    const released = await release(page, asset.sha256);
+    expect(released.status).toBe(200);
+    expect(await claimCount(page, asset.sha256)).toBe(0);
+
+    // 実体は消さない (回収は 3-5 の GC)。**まだ配れる**ことが、公開済みの作品を
+    // 巻き込まない根拠になっている。
+    const delivered = await page.request.get(
+      `${ASSETS_ORIGIN}/a/${asset.sha256}/cat.png`
+    );
+    expect(delivered.status()).toBe(200);
+
+    // 二度目は「持っていない」。消えたつもりが別物だった、を黙らせない。
+    expect((await release(page, asset.sha256)).status).toBe(404);
+  });
+
+  test("持っていないものと形の違う鍵は手放せない", async ({ page }) => {
+    await openEditor(page);
+    await login(page);
+
+    expect((await release(page, makePng().sha256)).status).toBe(404);
+    expect((await release(page, "not-a-digest")).status).toBe(400);
+  });
+
+  test("未ログイン・実行オリジンからは手放せない", async ({ page }) => {
+    await page.goto("/");
+    expect((await release(page, "a".repeat(64))).status).toBe(401);
+
+    // 実行中のスケッチがログイン中の利用者のアセットを消せてはいけない (ADR 0008)。
+    const response = await page.request.delete(
+      `/api/assets/${"a".repeat(64)}`,
+      { headers: { Origin: PREVIEW_ORIGIN } }
+    );
+    expect(response.status()).toBe(403);
   });
 });
 

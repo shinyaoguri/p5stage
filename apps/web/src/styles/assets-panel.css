@@ -246,6 +246,115 @@
   color: rgb(255 255 255 / 0.85);
 }
 
+/*
+ * 持っているアセット (3-4b)。
+ *
+ * 作品の一覧の**下**に、畳んだ状態で置く。主役は作品が使っているアセットで、
+ * こちらは容量を空けたくなったときだけ開く面。
+ */
+.assets-owned {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.assets-owned-summary {
+  color: rgb(255 255 255 / 0.55);
+  cursor: pointer;
+  list-style: revert;
+}
+
+.assets-owned-summary:hover {
+  color: rgb(255 255 255 / 0.85);
+}
+
+.assets-owned-summary:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.5);
+  outline-offset: 1px;
+}
+
+/* 「外す」との違いと、ここからは見えない危険 (ほかの作品) を先に置く。 */
+.assets-owned-note {
+  margin: 0.5rem 0 0;
+  color: rgb(255 255 255 / 0.4);
+  line-height: 1.6;
+}
+
+.assets-owned-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 1 行 = 見本 / 形式・大きさ・日付 / 削除 (または使用中の印)。 */
+.assets-owned-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: background 0.15s;
+}
+
+.assets-owned-row:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+/* メタと使用中の印は縦に積む (横に並べると両方とも省略されて読めない)。 */
+.assets-owned-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.assets-owned-meta {
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 今の作品が使っている印。削除の口はこの行には出ない。 */
+.assets-owned-used {
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.35);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assets-owned-release {
+  flex-shrink: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0.25rem;
+  background: none;
+  color: rgb(255 255 255 / 0.5);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.assets-owned-release:hover:not(:disabled),
+.assets-owned-release:focus-visible {
+  border-color: rgb(255 85 85 / 0.6);
+  background: rgb(255 85 85 / 0.12);
+  color: rgb(255 255 255 / 0.9);
+}
+
+.assets-owned-release:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 /* フォーカスの見え方はドロワーの中で 1 か所にまとめる (#41 の 1-5)。 */
 .assets-panel-body :is(button, input):focus-visible {
   outline: 2px solid rgb(255 255 255 / 0.5);
