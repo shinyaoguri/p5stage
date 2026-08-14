@@ -16,6 +16,7 @@ import {
   hasSketchCanvas,
   openEditor,
   openFile,
+  runButton,
   typeIntoEditor,
 } from "./helpers";
 
@@ -87,15 +88,42 @@ test.describe("スケッチの実行", () => {
     await openEditor(page);
     await expect.poll(() => hasSketchCanvas(page)).toBe(true);
 
-    await page.locator("#run").click();
+    await runButton(page).click();
 
-    await expect(page.locator("#status")).toHaveText("停止しました");
+    // 止まったことは文字ではなくボタン自身が示す (#41 の 6)。
+    await expect(runButton(page)).toHaveAttribute("data-running", "false");
     // 止めるとは文書ごと捨てること (タイマー・音・カメラを手放す)。
     await expect
       .poll(() => hasSketchCanvas(page), {
         message: "停止したのにスケッチが残っています",
       })
       .toBe(false);
+  });
+
+  test("実行してから編集すると、実行ボタンが再実行の口になる", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    // 動いていて、画面が今のコードのまま = 押したら止まる。
+    await expect(runButton(page)).toHaveAttribute("data-running", "true");
+    await expect(runButton(page)).toHaveAttribute("aria-label", "停止");
+
+    await typeIntoEditor(page, 'console.log("e2e-restale");');
+
+    // 書き換えた時点で、画面のスケッチは今の中身ではなくなる。ここで押して
+    // 止まってしまうと、最も多い操作 (再実行) がマウスから届かない (#41 の 6)。
+    await expect(runButton(page)).toHaveAttribute("aria-label", /^再実行/);
+    await runButton(page).click();
+
+    await expectGeneration(page, 2);
+    await expect(consolePanel(page)).toContainText("e2e-restale");
+    // 実行したので古くなくなった = また止められる。
+    await expect(runButton(page)).toHaveAttribute("aria-label", "停止");
+    await expect
+      .poll(() => hasSketchCanvas(page), {
+        message: "再実行したのにスケッチが出ていません",
+      })
+      .toBe(true);
   });
 
   test("実行のたびにコンソールは前回の出力を持ち越さない", async ({ page }) => {

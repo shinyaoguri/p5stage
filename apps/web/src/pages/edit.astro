@@ -48,18 +48,17 @@ try {
             混ぜず画面上部中央に単独で置く (#41 の 3)。 */}
         <div id="project-bar" />
 
-        {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。
-            下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。
+        {/* 操作列。**文字はもう無い** (#41 の 6)。今そうである状態はそれぞれの
+            アイコン自身が持ち (保存の色とドット・実行ボタンの ▶/■)、もう終わった
+            出来事はトースト (scripts/ui/toast.ts) が受け持つ。
 
-            ここに残るのは**今そうである状態**だけ (#41 の 5)。もう終わった出来事の
-            報告はトースト (scripts/ui/toast.ts) へ移した — 行が 1 本しか無いので、
-            混ぜると後から来た知らせが前のものを消していた。
-
-            並びは「文字 → アイコン」。文字が続く左側に寄せて、アイコン列が右端で
-            途切れないようにする。 */}
+            残る文字は 2 種類だけで、どちらも常時は出ない — ホバーの文面と、
+            支援技術にだけ渡す状態 (色とドットは読み上げられないため)。 */}
         <div class="chrome">
-          <span id="draft-status" class="status draft-status" role="status" />
-          <span id="status" class="status" role="status" />
+          {/* 直すまで続く条件。無い間は何も出ない (#41 の 6)。 */}
+          <div id="warning-controls" />
+          {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
+          <div id="draft-controls" />
           <div id="save-controls" />
           <div id="new-controls" />
           {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
@@ -84,6 +83,7 @@ try {
   } from "@p5stage/shared";
 
   import { AccountPanel } from "../scripts/auth/account-panel";
+  import { DraftIndicator } from "../scripts/draft/draft-indicator";
   import { DraftSaver, loadDraft } from "../scripts/draft/draft-store";
   import { CodeEditor } from "../scripts/editor/code-editor";
   import { ConsolePanel } from "../scripts/editor/console-panel";
@@ -112,8 +112,10 @@ try {
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
+  import { formatSavedAt } from "../scripts/ui/format-saved-at";
   import { showToast } from "../scripts/ui/toast";
   import { makeToolbarButton } from "../scripts/ui/toolbar-button";
+  import { WarningIndicator } from "../scripts/ui/warning-indicator";
   import {
     SettingsSaver,
     loadSettings,
@@ -129,24 +131,12 @@ try {
   const stage = document.getElementById("stage");
   const consoleHost = document.getElementById("console");
   const settingsHost = document.getElementById("settings");
-  const status = document.getElementById("status");
-  const draftStatus = document.getElementById("draft-status");
+  const warningHost = document.getElementById("warning-controls");
+  const draftHost = document.getElementById("draft-controls");
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const newHost = document.getElementById("new-controls");
   const projectBarHost = document.getElementById("project-bar");
-
-  /**
-   * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
-   * ここは実行ボタンと同じ行に出るので、年を出して折り返させない。
-   */
-  const formatSavedAt = (savedAt: number) =>
-    new Date(savedAt).toLocaleString("ja-JP", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
 
   const init = async () => {
     if (
@@ -157,6 +147,8 @@ try {
       !stage ||
       !consoleHost ||
       !settingsHost ||
+      !warningHost ||
+      !draftHost ||
       !saveHost ||
       !adoptHost ||
       !projectBarHost
@@ -164,19 +156,15 @@ try {
       return;
     }
 
-    const setStatus = (text: string) => {
-      if (status) status.textContent = text;
-    };
     /**
-     * 下書きまわりの**状態**を出す (#41 の 5)。
+     * 直すまで続く条件の置き場 (#41 の 6)。
      *
-     * 出来事の報告はここではなくトーストへ渡す。ここに残すのは「消えると気付けない
-     * まま書き続けることになる」もの — 直すまで続く条件と、下書きが今どうなって
-     * いるか。
+     * 「消えると気付けないまま書き続けることになる」ものだけがここに載る。
+     * 出来事の報告はトーストへ渡す (#41 の 5 の線引きはそのまま)。
      */
-    const setDraftStatus = (text: string) => {
-      if (draftStatus) draftStatus.textContent = text;
-    };
+    const warnings = new WarningIndicator(warningHost);
+    /** 下書きが今どうなっているか (#41 の 6)。書く前は何も出ない。 */
+    const draftIndicator = new DraftIndicator(draftHost);
 
     // エディタを作る前に設定・下書き・(URL が作品を指していれば) 保存済みの中身を
     // 読む。後から当てると、初回の描画だけ既定の見た目・既定のテンプレートが
@@ -210,18 +198,20 @@ try {
     // 言う — 保存で初めて弾かれると、書いた後に直す羽目になる。
     const manifest = readAssetManifest(start.files);
 
-    // 開いた時点で分かる**直すまで続く条件**。行は 1 本しか無いので重い順に
-    // 1 つだけ出す。どれも消えると気付けないまま保存して中身を失うので、
-    // トーストには載せない (#41 の 5)。
-    if (loadFailure !== null) {
-      setDraftStatus(loadFailure);
-    } else if (opened !== null && opened.truncated.length > 0) {
-      // 中身を取れていないファイルをそのまま保存すると、その中身が失われる。
-      setDraftStatus(
+    // 開いた時点で分かる**直すまで続く条件**。どれも消えると気付けないまま保存して
+    // 中身を失うので、トーストには載せない (#41 の 5)。行き先は警告アイコンで、
+    // 種類ごとに 1 本持てるようになったため**重なったら重なったまま**出す
+    // (1 本の行に押し込んでいた頃は、重い方だけ出して残りを捨てていた)。
+    if (loadFailure !== null) warnings.set("load", loadFailure);
+    // 中身を取れていないファイルをそのまま保存すると、その中身が失われる。
+    if (opened !== null && opened.truncated.length > 0) {
+      warnings.set(
+        "truncated",
         `次のファイルは大きすぎて読み込めませんでした: ${opened.truncated.join(", ")}`
       );
-    } else if (manifest !== null && !manifest.ok) {
-      setDraftStatus(`${manifest.message} (直すまで保存できません)`);
+    }
+    if (manifest !== null && !manifest.ok) {
+      warnings.set("manifest", `${manifest.message} (直すまで保存できません)`);
     }
 
     // 復元は**もう終わった出来事**なので、上の条件とは別にトーストで言う。
@@ -238,9 +228,12 @@ try {
 
     const host = new PreviewHost(stage, {
       previewOrigin,
-      onReady: () => setStatus("実行環境に接続しました"),
-      onRendered: (gen) => setStatus(`実行 #${gen}`),
-      onError: (message) => setStatus(message),
+      // 繋がったことは知らせない (#41 の 6)。実行が始まれば分かることで、
+      // 出しても次の実行ですぐ流れる文字だった。
+      onRendered: (gen) => projectBar.setGeneration(gen),
+      // 実行環境と噛み合っていない = 直すまで動かない。次の実行で消える知らせに
+      // すると、動かない理由が分からないまま書き続けることになる。
+      onError: (message) => warnings.set("runtime", message),
       onConsole: (level, message, timestamp) =>
         consolePanel.add(level, message, timestamp),
     });
@@ -271,8 +264,8 @@ try {
 
     const stop = () => {
       host.stop();
+      // 止まったことは ▶ に戻ったボタンが示す (#41 の 6)。
       projectBar.setRunning(false);
-      setStatus("停止しました");
     };
 
     /**
@@ -301,11 +294,14 @@ try {
     projectBar.setName(initialName);
 
     const draftSaver = new DraftSaver({
-      onSaved: (saved) =>
-        setDraftStatus(`下書きを保存 (${formatSavedAt(saved.savedAt)})`),
+      onSaved: (saved) => {
+        draftIndicator.setSavedAt(saved.savedAt);
+        // 書けた = さっきの失敗はもう続いていない (容量が空けば通るようになる)。
+        warnings.set("draft", null);
+      },
       // 保存できない環境 (IndexedDB が無効・容量超過) は編集を止める理由には
       // ならないが、黙って失われるのは困るので出したままにする。
-      onError: () => setDraftStatus("下書きを保存できません"),
+      onError: () => warnings.set("draft", "下書きを保存できません"),
     });
 
     // 下書きは内容の変更 (onChange) だけでなく、ファイルの増減・改名・
@@ -416,6 +412,9 @@ try {
 
         editor.setFiles(adopted.files, preferredActiveFile(adopted.files));
         void draftSaver.clear();
+        // 消した下書きの時刻を出したままにしない (#41 の 6)。復元できるものは
+        // もう無い。
+        draftIndicator.setSavedAt(null);
         saver.adopt(adopted.sketchId, adopted.gist);
         // 名前は Gist の description に入っていたもの。取り込んだ側で作り直すと、
         // 同じ作品が別の名前で並ぶ。読めなかったときだけ新しく振る。
@@ -513,6 +512,7 @@ try {
           // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
           editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
           void draftSaver.clear();
+          draftIndicator.setSavedAt(null);
           // 別の作品として始めるので名前も新しく振る (前の名前が残ると、
           // 中身だけ入れ替わった同名の作品になる)。
           projectBar.setName(generateProjectName());
@@ -647,13 +647,12 @@ try {
     max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
   }
 
-  .status {
-    color: rgb(255 255 255 / 0.7);
-  }
-
-  /* 下書きの状態は常時出たままになるので、実行の状態より控えめにする。 */
-  .draft-status {
-    color: rgb(255 255 255 / 0.5);
+  /* 警告と下書きの印は、出ていないときは場所ごと消える (#41 の 6)。
+     器そのものが箱を作らないようにして、空のまま `gap` だけが残らないようにする
+     (他の器はいつでも中身のあるボタンが 1 つ入っている)。 */
+  #warning-controls,
+  #draft-controls {
+    display: contents;
   }
 
   /* コンソール。中身の見た目は styles/console-panel.css (JS が組み立てる DOM に

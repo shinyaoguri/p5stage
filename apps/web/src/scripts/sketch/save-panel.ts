@@ -5,13 +5,22 @@
  * (GitHub の Gist は作成後に public / secret を変更できない — ADR 0010)、
  * 選ぶ機会をここに置くしかない。限定公開が private ではないことも同じ画面で見せる
  * (要件 3.4)。
+ *
+ * 保存の状態は文字ではなく**保存アイコンそのもの**が持つ (#41 の 6)。移植元は
+ * canvastage の `#share-btn.saved` / `.dirty`。
+ *
+ * - 保存済みで、その後の変更が無い … 緑
+ * - 未保存の変更がある … 橙のドット
+ * - 保存できなかった … 赤。**次の保存まで消えない** (段階 5 でトーストに載せ
+ *   なかったのはこのため — 打鍵で消えると、保存できていないまま書き続ける)
  */
 
 import "../../styles/dialog.css";
 import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
-import { makeToolbarButton } from "../ui/toolbar-button";
+import { formatSavedAt } from "../ui/format-saved-at";
+import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
 
 import type { SaveState, SketchMeta } from "./sketch-saver";
 
@@ -35,16 +44,6 @@ const VISIBILITY_LABELS: Record<SketchMeta["visibility"], string> = {
   unlisted: "限定公開 — URL を知っている人だけが見られます",
   public: "公開 — ギャラリーに載り、誰でも見られます",
 };
-
-/** 保存できた時刻。実行ボタンと同じ行に出るので月日と分まで。 */
-function formatSavedAt(savedAt: number): string {
-  return new Date(savedAt).toLocaleString("ja-JP", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function describe(state: SaveState): string {
   switch (state.status) {
@@ -105,8 +104,11 @@ export class SavePanel {
       onClick: () => this.#handleClick(),
     });
 
+    // 状態は保存アイコンの色とドットが持つが、**色もドットも読み上げられない**。
+    // 支援技術へは従来どおり文字で伝える (画面から消すのは見た目の話で、
+    // live region ごと畳むと保存できていないことに気付けなくなる)。
     this.#status = document.createElement("span");
-    this.#status.className = "save-status";
+    this.#status.className = "save-status-sr";
     this.#status.id = "save-status";
     this.#status.setAttribute("role", "status");
 
@@ -159,11 +161,12 @@ export class SavePanel {
   /** 状態を描き直す。 */
   render(state: SaveState): void {
     this.#state = state;
-    this.#status.textContent = describe(state);
-    this.#status.classList.toggle(
-      "save-status-error",
-      state.status === "error"
-    );
+    const described = describe(state);
+    this.#status.textContent = described;
+    // 見た目 (色とドット) は CSS が属性から決める。E2E も意匠ではなくこちらを見る。
+    this.#button.dataset.saveStatus = state.status;
+    // アイコンだけのボタンなので、状態は名前に含めるしかない。ホバーでも読める。
+    setToolbarButtonLabel(this.#button, `保存 (${described})`);
     this.#button.disabled = state.status === "saving";
 
     // 作品ページは Gist より先に成立する (器ができた時点で URL が決まる)。

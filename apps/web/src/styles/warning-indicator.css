@@ -1,0 +1,20 @@
+/*
+ * 直すまで続く条件を示す警告アイコンの見た目 (#41 の 6)。
+ *
+ * 組み立ては scripts/ui/warning-indicator.ts。操作列のアイコンボタン
+ * (toolbar-button.css) を土台に、色だけを差し替える。
+ *
+ * 他のアイコンは平常時ほとんど見えない薄さ (0.3) だが、ここだけは**出ている
+ * こと自体が知らせ**なので最初から読める濃さで出す。色は console-panel.css の
+ * 警告と同じ語彙 (トーストと同じ揃え方)。
+ */
+
+.warning-indicator {
+  color: #ffcc66;
+}
+
+.warning-indicator:hover,
+.warning-indicator:focus-visible {
+  background: rgb(255 204 102 / 0.15);
+  color: #ffcc66;
+}
