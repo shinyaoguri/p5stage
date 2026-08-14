@@ -272,15 +272,36 @@ export function readStoredSettings(page: Page): Promise<unknown> {
   return readStored(page, "settings", "editor");
 }
 
+/**
+ * 設定ドロワー (#41 の 4)。
+ *
+ * 面は操作列の中ではなく body 直下にあるので、トグルと同じ祖先では指せない。
+ */
+export const settingsDrawer = (page: Page): Locator =>
+  page.locator("#settings-panel-body");
+
 /** 設定パネルを開く。 */
 export async function openSettings(page: Page): Promise<void> {
   await page.locator("#settings .settings-panel-toggle").click();
-  await expect(page.locator("#settings .settings-panel-body")).toBeVisible();
+  await expect(settingsDrawer(page)).toBeVisible();
 }
 
-/** 設定 1 項目のコントロール。 */
-export function settingControl(page: Page, key: string): Locator {
-  return page.locator(
-    `#settings [data-setting-key="${key}"] :is(input, select)`
+/**
+ * 設定 1 項目のコントロール。
+ *
+ * 群はアコーディオンで、既定では畳んである群がある。**畳んでいれば開いてから**
+ * 返す — 呼ぶ側が「その項目がどの群にあり、その群が開いているか」を知っている
+ * 必要は無い。
+ */
+export async function settingControl(
+  page: Page,
+  key: string
+): Promise<Locator> {
+  const group = page.locator(
+    `#settings-panel-body .settings-group:has([data-setting-key="${key}"])`
   );
+  if ((await group.getAttribute("class"))?.includes("is-collapsed") === true) {
+    await group.locator(".settings-group-toggle").click();
+  }
+  return group.locator(`[data-setting-key="${key}"] :is(input, select)`);
 }

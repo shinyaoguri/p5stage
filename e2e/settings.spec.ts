@@ -5,6 +5,9 @@
  * ここで見るのは適用先が層で分かれていること — CSS でしか触れないものは
  * CSS 変数へ、Monaco が自前で管理するものは Monaco のオプションへ — と、
  * 変更が即座に効いてリロードを跨いで残ること。
+ *
+ * 加えて、面としての振る舞い (#41 の 4): 右端に貼り付く全高のドロワーであること、
+ * 群がアコーディオンであること、閉じる口が届くこと。
  */
 
 import { expect, test } from "@playwright/test";
@@ -14,6 +17,7 @@ import {
   openSettings,
   readStoredSettings,
   settingControl,
+  settingsDrawer,
 } from "./helpers";
 
 /** 行の高さは既定 1.5 なので、文字サイズから行の高さが決まる。 */
@@ -24,7 +28,7 @@ test.describe("エディタ設定", () => {
     await openEditor(page);
     await openSettings(page);
 
-    await settingControl(page, "fontSize").fill("28");
+    await (await settingControl(page, "fontSize")).fill("28");
 
     // 書体まわりは Monaco が自前で持つので、CSS 変数ではなく実際の行に出る。
     const line = page.locator("#editor .view-line").first();
@@ -54,7 +58,7 @@ test.describe("エディタ設定", () => {
     await openEditor(page);
     await openSettings(page);
 
-    await settingControl(page, "textOpacity").fill("0.5");
+    await (await settingControl(page, "textOpacity")).fill("0.5");
 
     // CSS でしか触れない層。Monaco のオプションと二重に指定しない。
     await expect
@@ -72,31 +76,92 @@ test.describe("エディタ設定", () => {
     await openEditor(page);
     await openSettings(page);
 
-    await settingControl(page, "fontSize").fill("28");
+    await (await settingControl(page, "fontSize")).fill("28");
     await expect(page.locator("#editor .view-line").first()).toHaveCSS(
       "font-size",
       "28px"
     );
 
-    await page.locator("#settings .settings-panel-reset").click();
+    await settingsDrawer(page).locator(".settings-panel-reset").click();
 
     await expect(page.locator("#editor .view-line").first()).toHaveCSS(
       "font-size",
       "14px"
     );
-    await expect(settingControl(page, "fontSize")).toHaveValue("14");
+    await expect(await settingControl(page, "fontSize")).toHaveValue("14");
   });
 
   test("Escape で閉じ、フォーカスは開いたボタンへ戻る", async ({ page }) => {
     await openEditor(page);
     await openSettings(page);
 
-    await settingControl(page, "fontSize").press("Escape");
+    await (await settingControl(page, "fontSize")).press("Escape");
 
     // スケッチの上に重なる面なので、「消して手元を見たい」がすぐ叶うようにする。
-    await expect(page.locator("#settings .settings-panel-body")).toBeHidden();
+    await expect(settingsDrawer(page)).toBeHidden();
     await expect(
       page.locator("#settings .settings-panel-toggle")
     ).toBeFocused();
+  });
+
+  test("閉じるボタンでも閉じ、フォーカスは開いたボタンへ戻る", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    await openSettings(page);
+
+    // 開いた面の中にも閉じる口が要る。全高のドロワーに隠れて、開けた歯車は遠い。
+    await settingsDrawer(page).locator(".settings-panel-close").click();
+
+    await expect(settingsDrawer(page)).toBeHidden();
+    // 閉じた面は inert になる。中にフォーカスを取り残さない。
+    await expect(
+      page.locator("#settings .settings-panel-toggle")
+    ).toBeFocused();
+  });
+
+  test("画面の右端に貼り付く全高の面として開く", async ({ page }) => {
+    await openEditor(page);
+
+    // 閉じている間は画面の外。見えないだけでなく、右端を触っても反応しない。
+    await expect(settingsDrawer(page)).toBeHidden();
+
+    await openSettings(page);
+    // 画面の外から滑り込む面なので、着いてから測る (出てくる途中の位置は
+    // 右端からはみ出している)。
+    await expect(settingsDrawer(page)).toHaveCSS("transform", "none");
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    const box = await settingsDrawer(page).boundingBox();
+    expect(box).not.toBeNull();
+    if (viewport === null || box === null) return;
+
+    // 歯車の直下に浮くポップオーバーではない。上端から下端まで、右端に貼り付く。
+    expect(box.y).toBe(0);
+    expect(box.height).toBe(viewport.height);
+    expect(Math.round(box.x + box.width)).toBe(viewport.width);
+  });
+
+  test("項目の群は畳んであり、見出しを押すと開く", async ({ page }) => {
+    await openEditor(page);
+    await openSettings(page);
+
+    // 「カーソル」は既定で畳んである群 (開くのはテーマとフォントだけ)。
+    const group = settingsDrawer(page).locator(
+      ".settings-group:has([data-setting-key='cursorStyle'])"
+    );
+    const heading = group.locator(".settings-group-toggle");
+    await expect(heading).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      group.locator("[data-setting-key='cursorStyle']")
+    ).toBeHidden();
+
+    await heading.click();
+
+    await expect(heading).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      group.locator("[data-setting-key='cursorStyle']")
+    ).toBeVisible();
   });
 });

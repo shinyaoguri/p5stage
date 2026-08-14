@@ -68,7 +68,7 @@ test.describe("モーション低減", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openEditor(page);
     await openSettings(page);
-    await settingControl(page, "cursorBlinking").selectOption("smooth");
+    await (await settingControl(page, "cursorBlinking")).selectOption("smooth");
 
     // 点滅はフォーカスがある間だけ。外れている間は Monaco が `cursor-solid` に
     // 落とすので、当てる先の規則がそもそも付かない。

@@ -1,5 +1,5 @@
 /**
- * エディタ設定のパネル。
+ * エディタ設定のパネル。画面右端から出入りするドロワー (#41 の 4)。
  *
  * 宣言テーブル (definitions.ts) を読んでコントロールを組み立てる。項目を足すのは
  * テーブルへの追記だけで済み、ここには項目ごとの分岐を書かない
@@ -8,6 +8,13 @@
  * スケッチの上に重なる面なので、開いている間だけ場所を取り、閉じればボタンだけになる。
  * 変更は即時に反映する。ライブコーディング中に「適用」を押させると、調整のたびに
  * 手が止まる。
+ *
+ * **ドロワーの中身は 3 段** (canvastage と同じ): 見出しと閉じるボタン / 項目 /
+ * 「既定に戻す」。スクロールするのは真ん中だけで、閉じる口と戻す口はどれだけ
+ * 下まで潜っても同じ場所にある。
+ *
+ * **項目の群はアコーディオン**。30 項目を一度に広げると、目当ての 1 つを探すのに
+ * スクロールが要る。畳んだ見出しの列なら全体が 1 画面に収まり、開くのは触る群だけで済む。
  */
 
 import "../../styles/settings-panel.css";
@@ -16,6 +23,7 @@ import {
   SETTING_GROUPS,
   type EditorSettings,
   type SettingDef,
+  type SettingGroup,
   type SettingKey,
 } from "./definitions";
 import { DEFAULT_SETTINGS, withSetting } from "./settings";
@@ -33,6 +41,17 @@ interface Control {
   readonly output: HTMLElement | null;
 }
 
+/**
+ * 群の開閉を示す山形 (canvastage の `▾` に相当)。
+ *
+ * 操作列のアイコン (ui/toolbar-button.ts) には載せない。あちらは「押すと何かが
+ * 起きるボタンの絵」の一覧で、これは見出しに添える装飾。回転させるので
+ * `currentColor` の線で描く。
+ */
+const CHEVRON = `<svg class="settings-group-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <polyline points="6 9 12 15 18 9"/>
+</svg>`;
+
 export class SettingsPanel {
   readonly #container: HTMLElement;
   readonly #options: SettingsPanelOptions;
@@ -48,7 +67,6 @@ export class SettingsPanel {
     options: SettingsPanelOptions
   ) {
     this.#container = container;
-    this.#container.classList.add("settings-panel");
     this.#settings = settings;
     this.#options = options;
 
@@ -66,21 +84,33 @@ export class SettingsPanel {
     this.#body.setAttribute("aria-label", "エディタ設定");
     this.#toggle.setAttribute("aria-controls", this.#body.id);
 
-    for (const group of SETTING_GROUPS) {
-      this.#body.appendChild(this.#createGroup(group.title, group.keys));
+    // 項目だけがスクロールする面。ヘッダとフッタはその外に置く。
+    const content = document.createElement("div");
+    content.className = "settings-panel-content";
+    for (const [index, group] of SETTING_GROUPS.entries()) {
+      content.appendChild(this.#createGroup(group, index));
     }
-    this.#body.appendChild(this.#createFooter());
+    this.#body.replaceChildren(
+      this.#createHeader(),
+      content,
+      this.#createFooter()
+    );
 
-    // パネルの中で Escape を押したら閉じる。透過エディタの上に乗る面なので、
-    // 「消して手元を見たい」がすぐ叶うようにする。
-    this.#container.addEventListener("keydown", (event) => {
+    // パネルかトグルの上で Escape を押したら閉じる。透過エディタの上に乗る面
+    // なので、「消して手元を見たい」がすぐ叶うようにする。
+    const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !this.#open) return;
       event.stopPropagation();
       this.close();
-      this.#toggle.focus();
-    });
+    };
+    this.#container.addEventListener("keydown", closeOnEscape);
+    this.#body.addEventListener("keydown", closeOnEscape);
 
-    this.#container.replaceChildren(this.#toggle, this.#body);
+    this.#container.replaceChildren(this.#toggle);
+    // **ドロワーは画面に対して置く面なので、DOM も画面の直下に置く。**
+    // トグルが並ぶ操作列 (edit.astro の `.chrome`) は z-index で重なりの層を
+    // 作っており、その中に残すと全高の面がファイルタブや実行ボタンより下に潜る。
+    document.body.appendChild(this.#body);
     this.#syncControls();
     this.#renderChrome();
   }
@@ -102,23 +132,31 @@ export class SettingsPanel {
   }
 
   close(): void {
+    // 閉じた面は `inert` にするので、中にフォーカスが残っていると行き場を失う
+    // (キーボードだけの人は画面の先頭まで戻される)。開けたボタンへ返す。
+    if (this.#body.contains(document.activeElement)) this.#toggle.focus();
     this.#open = false;
     this.#renderChrome();
   }
 
   toggle(): void {
-    this.#open = !this.#open;
-    this.#renderChrome();
+    if (this.#open) this.close();
+    else this.open();
   }
 
   dispose(): void {
     this.#container.replaceChildren();
+    // ドロワーはコンテナの外 (body 直下) にあるので、一緒には消えない。
+    this.#body.remove();
     this.#controls.clear();
   }
 
   #renderChrome(): void {
-    this.#container.classList.toggle("is-open", this.#open);
-    this.#body.hidden = !this.#open;
+    this.#body.classList.toggle("is-open", this.#open);
+    // `hidden` では消さない。**出入りを見せる面**なので、閉じている間も要素は
+    // 残す (CSS が画面の外へ滑らせる)。代わりに `inert` で、見えていない間は
+    // フォーカスも読み上げも届かないようにする。
+    this.#body.toggleAttribute("inert", !this.#open);
     this.#toggle.setAttribute("aria-expanded", String(this.#open));
     // 開いている間は押されたままに見せる (アイコンなので文字で示せない)。
     this.#toggle.classList.toggle("is-active", this.#open);
@@ -128,19 +166,72 @@ export class SettingsPanel {
     );
   }
 
-  #createGroup(title: string, keys: readonly SettingKey[]): HTMLElement {
+  /**
+   * ドロワーの見出し行。
+   *
+   * 閉じる口をここに置く。トグル (右上の歯車) は開いている間もそのまま閉じる
+   * ボタンだが、全高の面に隠れて遠い。**開いた面の中に、その面を閉じる口を置く**。
+   */
+  #createHeader(): HTMLElement {
+    const header = document.createElement("div");
+    header.className = "settings-panel-header";
+
+    const title = document.createElement("h2");
+    title.className = "settings-panel-title";
+    title.textContent = "設定";
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "settings-panel-close";
+    // 絵 (×) は読み上げから外し、名前は title と aria-label が持つ
+    // (アイコンボタンの作法は ui/toolbar-button.ts と同じ)。
+    close.innerHTML = `<span aria-hidden="true">×</span>`;
+    close.title = "設定を閉じる";
+    close.setAttribute("aria-label", "設定を閉じる");
+    close.addEventListener("click", () => this.close());
+
+    header.replaceChildren(title, close);
+    return header;
+  }
+
+  #createGroup(group: SettingGroup, index: number): HTMLElement {
     const section = document.createElement("section");
     section.className = "settings-group";
 
+    const body = document.createElement("div");
+    body.className = "settings-group-body";
+    // 見出しから指すための id。群には安定した識別子が無いので並びの番号で振る。
+    body.id = `settings-group-${index}`;
+    for (const key of group.keys) {
+      body.appendChild(this.#createRow(key, SETTING_DEFS[key]));
+    }
+
+    // 見出しは見出しのまま押せるようにする (h2 をボタンで置き換えない)。
+    // 見出しの一覧で辿る人にとって、群の名前は畳んでいても目次のまま。
     const heading = document.createElement("h2");
     heading.className = "settings-group-title";
-    heading.textContent = title;
-    section.appendChild(heading);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "settings-group-toggle";
+    toggle.setAttribute("aria-controls", body.id);
+    toggle.innerHTML = CHEVRON;
+    toggle.prepend(group.title);
+    toggle.addEventListener("click", () => {
+      this.#setGroupOpen(section, section.classList.contains("is-collapsed"));
+    });
+    heading.appendChild(toggle);
 
-    for (const key of keys) {
-      section.appendChild(this.#createRow(key, SETTING_DEFS[key]));
-    }
+    section.replaceChildren(heading, body);
+    this.#setGroupOpen(section, group.defaultOpen === true);
     return section;
+  }
+
+  /** 群 1 つの開閉。見た目 (クラス) と支援技術への知らせ (aria) を一緒に動かす。 */
+  #setGroupOpen(section: HTMLElement, open: boolean): void {
+    section.classList.toggle("is-collapsed", !open);
+    section
+      .querySelector(".settings-group-toggle")
+      ?.setAttribute("aria-expanded", String(open));
   }
 
   #createRow(key: SettingKey, def: SettingDef): HTMLElement {

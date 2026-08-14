@@ -346,13 +346,23 @@ export type EditorSettings = {
 export interface SettingGroup {
   readonly title: string;
   readonly keys: readonly SettingKey[];
+  /**
+   * 開いた状態で出す群 (#41 の 4)。
+   *
+   * 群はアコーディオンなので、既定では畳んで見出しだけを並べる。8 群 30 項目を
+   * 全部広げると、探している項目までスクロールで辿ることになる。**最初に触る
+   * ところだけ開けておく** — 配色と書体は「まず自分の見た目にする」設定で、
+   * 開いた人がほぼ必ず通る。
+   */
+  readonly defaultOpen?: boolean;
 }
 
 export const SETTING_GROUPS: readonly SettingGroup[] = [
-  { title: "テーマ", keys: ["editorTheme"] },
+  { title: "テーマ", keys: ["editorTheme"], defaultOpen: true },
   {
     title: "フォント",
     keys: ["fontFamily", "fontSize", "fontWeight", "lineHeight"],
+    defaultOpen: true,
   },
   {
     title: "文字",
