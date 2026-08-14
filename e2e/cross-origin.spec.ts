@@ -140,7 +140,7 @@ test.describe("別オリジン実行", () => {
     await expect(consolePanel(page)).not.toContainText("別チャネルの出力");
 
     // 割り込みで状態が壊れていないこと (実行は引き続き通る)。
-    await page.locator("#run").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
     await expectGeneration(page, 2);
   });
 });

@@ -105,6 +105,13 @@ export async function typeIntoEditor(page: Page, code: string): Promise<void> {
  * `__Host-` の cookie でログイン済みになる。
  */
 export async function login(page: Page): Promise<void> {
+  // ログイン状態を引き終わるまで待つ。引き終えるとパネルは描き直され、それまでの
+  // DOM は捨てられるので、待たずに押すと同意ダイアログごと入れ替わって空振りする
+  // (#51)。**利用者も同じ競合を踏むが、それは #51 で直す話**。ここでは押して
+  // よい時点から始める。
+  await expect(
+    page.locator(".account-panel[data-ready='true']")
+  ).toBeAttached();
   await page.locator("#login").click();
   // ここはリンク (トップレベル遷移で cookie を確実に載せるため)。
   await page.locator("#login-consent .account-consent-proceed").click();
@@ -117,18 +124,40 @@ export function saveStatus(page: Page): Locator {
   return page.locator("#save-status");
 }
 
+/** 作品の名前 (画面上部中央の入力欄)。 */
+export function projectName(page: Page): Locator {
+  return page.locator("#project-name");
+}
+
+/**
+ * 作品の名前を付け替える。
+ *
+ * `fill` ではなく打ち込むのは、`input` イベントを 1 文字ずつ起こして**普段どおりの
+ * リネーム**を踏むため (`fill` は 1 回しか起こさない)。
+ */
+export async function setProjectName(page: Page, name: string): Promise<void> {
+  const input = projectName(page);
+  await input.click();
+  await input.press("ControlOrMeta+a");
+  await input.pressSequentially(name);
+  await expect(input).toHaveValue(name);
+}
+
 /**
  * 初回の保存。作品 ID を返す。
  *
- * 初回だけタイトルと公開範囲を尋ねられる (公開範囲は後から変えられない — ADR 0010)。
+ * 尋ねられるのは公開範囲だけ (後から変えられない — ADR 0010)。名前は画面上部の
+ * 入力欄が常時持つので、ここでは押す前に付け替える (#41 の 3)。
  */
 export async function saveNewSketch(
   page: Page,
   title: string,
   visibility: "public" | "unlisted"
 ): Promise<string> {
+  // 名前は画面上部の入力欄が常時持つ (#41 の 3)。保存ダイアログでは尋ねられない。
+  await setProjectName(page, title);
   await page.locator("#save").click();
-  await page.locator("#save-title").fill(title);
+  await expect(page.locator("#save-dialog-title")).toHaveText(title);
   await page
     .locator(`#save-dialog input[name="visibility"][value="${visibility}"]`)
     .check();

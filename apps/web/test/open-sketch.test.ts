@@ -30,6 +30,7 @@ function draft(sketchId: string | null): SketchDraft {
     activeFile: "index.html",
     savedAt: 1,
     sketchId,
+    title: "e2e-下書きの名前",
   };
 }
 
