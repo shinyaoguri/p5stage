@@ -13,6 +13,8 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 
+import { unclaimedAdoptMessage } from "../../../lib/assets/manifest-check";
+import { unclaimedDigests } from "../../../lib/assets/store";
 import {
   fetchGist,
   GistError,
@@ -100,6 +102,25 @@ export const POST: APIRoute = async ({ request, url }) => {
   const decision = planGistAdoption(content, auth.session.user.id);
   if (decision.kind === "reject") {
     return fromRejection(decision.reason, decision.message);
+  }
+
+  // 参照している実体を持ち込んでいるかは台帳に聞く (保存経路と同じ規則 — #65)。
+  // sha256 を書くだけで他人の blob を参照できると、クォータを一切使わずに
+  // アセット付きの作品が作れてしまう (ADR 0003 の補足)。
+  //
+  // **この位置でしか塞げない**。以下の 3 つの出口 (新規 201 / 既に取り込み済み 200 /
+  // 競合 200) はどれも `respond` = `publishRevision` に落ち、R2 の写しと参照台帳と
+  // 配信のポインタが同時に進む。分岐の前なら D1 へ 1 行も書かずに断れる。
+  const unclaimed = await unclaimedDigests(
+    env.DB,
+    auth.session.user.id,
+    decision.digests
+  );
+  if (unclaimed.length > 0) {
+    return fromRejection(
+      "unknown_asset",
+      unclaimedAdoptMessage(unclaimed.length)
+    );
   }
 
   // 既に取り込まれている Gist を二度渡されたら、作り直さずその作品へ案内する。

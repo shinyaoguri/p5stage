@@ -67,3 +67,17 @@ export function checkManifest(files: SketchFiles): ManifestCheck {
 export function unclaimedMessage(count: number): string {
   return `${count} 件のアセットが見つかりません。アップロードし直してください`;
 }
+
+/**
+ * 取り込み (adopt) で同じことが起きたときの文言 (#65)。
+ *
+ * 第 1 文は保存経路と揃える — **同じ規則の違反**であることが利用者にも読める。
+ * 違うのは次の一手で、この経路では何もアップロードしていない (外にある Gist を
+ * 正本にしようとしただけ) ので「し直す」とは言えない。
+ *
+ * **「実体が無い」と「他人のものだ」を区別しない。** 区別すると、この口が
+ * 「その sha256 が誰かの手元にあるか」を問い合わせる装置になる。
+ */
+export function unclaimedAdoptMessage(count: number): string {
+  return `${count} 件のアセットが見つかりません。先にアップロードするか、assets.json から外してください`;
+}

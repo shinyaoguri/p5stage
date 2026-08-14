@@ -1,5 +1,6 @@
 /**
- * アセットの受け口 (Phase 3-1) と配信 (Phase 3-3)。
+ * アセットの受け口 (Phase 3-1) と配信 (Phase 3-3)、そして**外から中身が入る口が
+ * 同じ所有の規則を守っているか** (#65)。
  *
  * 単体テストが見るのは純ロジック (allowlist・署名・クォータの判定) だけで、
  * **R2 と D1 に実際に着地するか**はここでしか確かめられない。加えて、この口は
@@ -15,10 +16,20 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 import { login, openEditor } from "./helpers";
-import { ASSETS_ORIGIN, PREVIEW_ORIGIN, WEB_ORIGIN } from "./origins";
+import {
+  ASSETS_ORIGIN,
+  FAKE_GITHUB_ORIGIN,
+  PREVIEW_ORIGIN,
+  WEB_ORIGIN,
+} from "./origins";
 
 /** PNG の署名。これが無いと中身の突き合わせで弾かれる。 */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -486,5 +497,148 @@ test.describe("アセットの配信", () => {
         // img.src への代入を捉える道 (p5 の loadImage が通る形 — ADR 0014)。
         assigned: "2",
       });
+  });
+});
+
+/** 種の実体の大きさ (`fixtures/dot.png`)。マニフェストにはこの値を書く。 */
+const SEED_BLOB_SIZE = 70;
+
+/** 取り込む相手の最小構成。実行の起点が無い Gist は所有を見る前に断られる。 */
+const ADOPTED_INDEX_HTML =
+  '<!doctype html>\n<html lang="ja">\n  <body>\n    <img src="cat.png" alt="" />\n  </body>\n</html>\n';
+
+/**
+ * 偽 GitHub に Gist を直接作る。
+ *
+ * **保存経路 (UI) を通さずに用意する**。通すとマニフェストの検査で先に弾かれ、
+ * 「外にある Gist を取り込む」という別の口を踏めない。資格は形しか見られない
+ * (`fake-github/server.ts` の `hasCredentials`)。
+ */
+async function createGist(
+  request: APIRequestContext,
+  files: Record<string, string>
+): Promise<string> {
+  const response = await request.post(`${FAKE_GITHUB_ORIGIN}/gists`, {
+    headers: { Authorization: "Basic e2e" },
+    data: {
+      description: "取り込みの相手 — p5stage",
+      public: false,
+      files: Object.fromEntries(
+        Object.entries(files).map(([name, content]) => [name, { content }])
+      ),
+    },
+  });
+  expect(response.status()).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+}
+
+/** アセット 1 件だけを持つ assets.json。手で書けることがこの穴の前提だった。 */
+function manifestWith(name: string, sha256: string, size: number): string {
+  return `${JSON.stringify(
+    { version: 1, assets: { [name]: { sha256, size, mime: "image/png" } } },
+    null,
+    2
+  )}\n`;
+}
+
+function adopt(page: Page, gistId: string): Promise<ApiResult> {
+  return page.evaluate(async (gist) => {
+    const response = await fetch("/api/sketches/adopt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gist }),
+    });
+    return {
+      status: response.status,
+      body: (await response.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null,
+    };
+  }, gistId);
+}
+
+/**
+ * 取り込み (adopt) にも同じ所有の規則が掛かること (#65)。
+ *
+ * 取り込みは**その Gist をそのまま正本にする**操作なので (ADR 0012)、受け入れた
+ * 中身は保存を経ずに R2 の写し・参照台帳・配信のポインタまで進む。配信
+ * (`/a/<sha256>/<name>`) は D1 を引かないため、素通しすると**実際に配られる**。
+ */
+test.describe("取り込みとアセットの所有", () => {
+  test("他人の実体を指すマニフェストごと取り込むことはできない", async ({
+    page,
+    request,
+  }) => {
+    await openEditor(page);
+    await login(page);
+
+    // 種の実体は誰の所有でもない (`seed.sql` が `user_blobs` を落としてある) が、
+    // R2 には在って配信もされている。sha256 は他人の作品ページから読める値なので、
+    // 書き写して自分の Gist に置くのは誰にでもできる。
+    const gistId = await createGist(request, {
+      "index.html": ADOPTED_INDEX_HTML,
+      "assets.json": manifestWith(
+        SEED_ASSET_NAME,
+        SEED_BLOB_SHA256,
+        SEED_BLOB_SIZE
+      ),
+    });
+
+    const result = await adopt(page, gistId);
+
+    // 要求の形は正しく、使えないのは相手の Gist の方 (保存経路の 400 と違う理由)。
+    expect(result.status).toBe(422);
+    expect(result.body).toMatchObject({ error: "unknown_asset" });
+    // クライアントはこの文言をそのまま出す。空だと理由が消える。
+    expect(String(result.body?.message ?? "")).not.toBe("");
+
+    // **自動で自分のものとして計上もしない**。ここを計上に倒すと、フォークの系譜
+    // (#44 / Phase 4) を通らずに他人の blob を自分の枠へ移せてしまう。
+    expect(await claimCount(page, SEED_BLOB_SHA256)).toBe(0);
+  });
+
+  test("自分で持ち込んだ実体を指すマニフェストなら取り込める", async ({
+    page,
+    request,
+  }) => {
+    await openEditor(page);
+    await login(page);
+
+    // 断る側を厳しくしすぎると、**自分の作品を持ち帰る道**まで塞がる。
+    const asset = makePng();
+    expect((await upload(page, asset)).status).toBe(201);
+
+    const gistId = await createGist(request, {
+      "index.html": ADOPTED_INDEX_HTML,
+      "assets.json": manifestWith(SEED_ASSET_NAME, asset.sha256, asset.size),
+    });
+
+    const result = await adopt(page, gistId);
+
+    expect(result.status).toBe(201);
+    // 取り込みで計上が増えない (持ち込んだ 1 行のまま)。
+    expect(await claimCount(page, asset.sha256)).toBe(1);
+  });
+
+  test("読めない assets.json を持つ Gist は取り込めない", async ({
+    page,
+    request,
+  }) => {
+    await openEditor(page);
+    await login(page);
+
+    // 受け入れると、次の保存が必ず断られる作品が D1 に残る (保存経路は同じ検査を
+    // 通す)。取り込む前なら、利用者は手元の Gist を直せる。
+    const gistId = await createGist(request, {
+      "index.html": ADOPTED_INDEX_HTML,
+      "assets.json": "{ これは JSON ではない",
+    });
+
+    const result = await adopt(page, gistId);
+
+    expect(result.status).toBe(422);
+    expect(result.body).toMatchObject({ error: "invalid_manifest" });
+    expect(String(result.body?.message ?? "")).toContain("assets.json");
   });
 });
