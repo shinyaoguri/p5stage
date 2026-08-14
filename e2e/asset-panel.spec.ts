@@ -10,7 +10,7 @@
  * sha256 も同じになる。**中身は毎回ランダムにする** (assets.spec.ts と同じ理由)。
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -19,12 +19,16 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   assetRow,
   assetsDrawer,
+  clearStoredDraft,
+  closeAssets,
   login,
   openAssets,
   openEditor,
   openOwnedAssets,
   ownedAssetRow,
   readStoredDraft,
+  saveAgain,
+  saveNewSketch,
   toasts,
 } from "./helpers";
 import { ASSETS_ORIGIN } from "./origins";
@@ -256,6 +260,75 @@ test.describe("アセットパネル", () => {
     await expect(owned).toBeVisible();
     // 断った後もまた押せる (押した拍子に無効のまま残らない)。
     await expect(owned.locator(".assets-owned-release")).toBeEnabled();
+  });
+
+  /**
+   * 参照台帳 (3-5a) が守るのはこの形。
+   *
+   * **別の作品を開いていると、画面は使用中だと知りようがない。** 3-4b の印は今
+   * 開いている作品のマニフェストとの突き合わせでしか出せないので、削除の口はそのまま
+   * 出る。押せてしまうと、保存済みの作品が次の保存で `unknown_asset` になる
+   * — 手放した瞬間ではなく後から壊れる、気付けない形。サーバが台帳を見て断る。
+   */
+  test("別の作品で使っているアセットは、そうと知らずに削除しようとしても断られる", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    await login(page);
+    await openAssets(page);
+
+    const asset = makePng();
+    await pickFile(page, asset, "cat.png");
+    await expect(assetRow(page, "cat.png")).toBeVisible();
+    // 保存して初めて参照になる (R2 へ書き出したリビジョンが台帳に載る)。
+    await closeAssets(page);
+    await saveNewSketch(page, `参照台帳 ${randomUUID()}`, "unlisted");
+
+    // 保存した作品から離れて新しい作品を始める。ここからは、さっきの作品が
+    // 使っていることは画面から見えない。
+    await clearStoredDraft(page);
+    await openEditor(page);
+    await openAssets(page);
+    await openOwnedAssets(page);
+    const owned = ownedAssetRow(page, asset.sha256);
+    await expect(owned).toBeVisible();
+    // 印が出ないことまで見る。**画面が守れていない**ことがこのテストの前提。
+    await expect(owned.locator(".assets-owned-used")).toHaveCount(0);
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await owned.locator(".assets-owned-release").click();
+
+    await expect(toasts(page, "error")).toContainText("で使っています");
+    // 断られた後も一覧に残る (画面だけ先に消えると、消えたと思い込む)。
+    await expect(owned).toBeVisible();
+  });
+
+  test("作品から外して保存すれば手放せる", async ({ page }) => {
+    await openEditor(page);
+    await login(page);
+    await openAssets(page);
+
+    const asset = makePng();
+    await pickFile(page, asset, "cat.png");
+    await expect(assetRow(page, "cat.png")).toBeVisible();
+    await closeAssets(page);
+    await saveNewSketch(page, `参照台帳 ${randomUUID()}`, "unlisted");
+
+    // 外しただけでは足りない。**保存して初めて**配信中のリビジョンが入れ替わる。
+    await openAssets(page);
+    await assetRow(page, "cat.png").locator(".assets-remove").click();
+    await expect(assetRow(page, "cat.png")).toHaveCount(0);
+    await closeAssets(page);
+    await saveAgain(page);
+
+    await openAssets(page);
+    await openOwnedAssets(page);
+    const owned = ownedAssetRow(page, asset.sha256);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await owned.locator(".assets-owned-release").click();
+
+    await expect(toasts(page, "info").last()).toContainText("削除しました");
+    await expect(owned).toHaveCount(0);
   });
 
   test("未ログインでは追加できないことを先に言う", async ({ page }) => {

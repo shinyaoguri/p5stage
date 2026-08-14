@@ -215,6 +215,94 @@ export async function unclaimedDigests(
   return digests.filter((digest) => !claimed.has(digest));
 }
 
+/**
+ * 1 回の `batch` に載せる文の数。
+ *
+ * Gist は 300 ファイルまで持てるので、マニフェストが指す blob も同じ桁になりうる。
+ * 1 文ずつ束縛を持つので `DIGEST_CHUNK` の制約は掛からないが、1 回の往復に
+ * 際限なく積むのは避ける。
+ */
+const REF_CHUNK = 50;
+
+/**
+ * そのリビジョンが参照する blob を台帳に載せる (3-5a)。
+ *
+ * 呼ぶのは**中身を R2 へ書けた後**だけ (`publishRevision`)。書けていないリビジョンは
+ * 配られないので、回収から守る理由も無い。
+ *
+ * 二度目以降は何も起きない (保存の再試行や閲覧時の fill で同じ組が来る)。
+ * 参照を**消す口は無い**: 過去リビジョンは R2 に残り続け、いつでも配りうる。
+ */
+export async function recordRefs(
+  db: D1Database,
+  gistId: string,
+  revision: string,
+  digests: readonly string[],
+  now: number
+): Promise<void> {
+  for (let index = 0; index < digests.length; index += REF_CHUNK) {
+    const chunk = digests.slice(index, index + REF_CHUNK);
+    await db.batch(
+      chunk.map((sha256) =>
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO blob_refs (gist_id, revision, sha256, created_at)
+             VALUES (?, ?, ?, ?)`
+          )
+          .bind(gistId, revision, sha256, now)
+      )
+    );
+  }
+}
+
+/** 参照している作品を指す最小の情報。文言に出す分だけ。 */
+export interface RefererSketch {
+  readonly id: string;
+  readonly title: string;
+}
+
+/**
+ * その人の作品のうち、**今配信しているリビジョン**がこの blob を参照しているものを
+ * 引く (3-5a)。手放してよいかの判断はこれで決まる。
+ *
+ * **過去のリビジョンは見ない。** 所有を手放しても実体は残り、公開済みのリビジョンは
+ * そのまま配られ続ける (配信 `/a/<sha256>/<name>` は D1 を引かない)。手放して実際に
+ * 壊れるのは**次の保存でマニフェストが断られる**ところだけ (3-2) なので、判断の
+ * 基準になるのは「次に保存される中身」= 今のリビジョンに限られる。過去まで数えると、
+ * 一度でも使った実体は作品から外した後も永久に手放せず、クォータが空かなくなる。
+ *
+ * 過去リビジョンが参照する実体を守るのは回収側 (3-5b) の仕事で、あちらは
+ * `blob_refs` を丸ごと見る。**同じ台帳を、こちらは今の断面で、あちらは全期間で読む。**
+ *
+ * **他人の作品は数えない。** 同じ中身を別の人が持ち込んでいれば相手の `user_blobs`
+ * にも行があり、こちらが所有を手放しても相手の参照は生きたまま。他人の使用を理由に
+ * 自分のクォータを縛るのは筋が違う。
+ *
+ * 切り離した作品も出てこない (`detachGist` が `gist_id` と `current_revision` を
+ * 両方落とすので、結合が成立しない)。その Gist はもうその作品の正本ではない。
+ */
+export async function sketchesUsingBlob(
+  db: D1Database,
+  userId: number,
+  sha256: string,
+  limit: number
+): Promise<RefererSketch[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.title
+         FROM sketches s
+         JOIN blob_refs r
+           ON r.gist_id = s.gist_id AND r.revision = s.current_revision
+        WHERE r.sha256 = ? AND s.owner_id = ?
+        ORDER BY s.updated_at DESC
+        LIMIT ?`
+    )
+    .bind(sha256, userId, limit)
+    .all<RefererSketch>();
+
+  return results;
+}
+
 /** 自分が持ち込んだ blob を新しい順に引く (管理 UI は 3-4)。 */
 export async function listBlobsByOwner(
   db: D1Database,

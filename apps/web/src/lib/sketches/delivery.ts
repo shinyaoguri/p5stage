@@ -25,7 +25,8 @@ import {
 } from "../session/context";
 
 import { planDelivery } from "./delivery-plan";
-import { getRevision, putRevision } from "./revision-store";
+import { storeRevision } from "./publish";
+import { getRevision } from "./revision-store";
 import type { Sketch } from "./sketch";
 import {
   markGistDeleted,
@@ -73,7 +74,7 @@ async function fill(
   }
 
   const { content } = result;
-  await putRevision(env.CONTENT, gistId, content.revision, content.files);
+  await storeRevision(gistId, content.revision, content.files, now);
   await setCurrentRevision(
     env.DB,
     sketchId,
@@ -108,12 +109,7 @@ async function revalidate(sketch: Sketch, now: number): Promise<void> {
     }
 
     const { content } = result;
-    await putRevision(
-      env.CONTENT,
-      sketch.gistId,
-      content.revision,
-      content.files
-    );
+    await storeRevision(sketch.gistId, content.revision, content.files, now);
     await setCurrentRevision(
       env.DB,
       sketch.id,

@@ -11,6 +11,7 @@ import {
   AssetInputError,
   assetSizeError,
   formatBytes,
+  inUseError,
   parseAssetClaim,
   quotaError,
   type AssetUsage,
@@ -102,6 +103,32 @@ describe("quotaError", () => {
     const reason = quotaError(1, { ...USAGE, bytes: 1200 });
 
     expect(reason).not.toContain("-");
+  });
+});
+
+describe("inUseError", () => {
+  it("どの作品も使っていなければ手放せる", () => {
+    expect(inUseError([])).toBeNull();
+  });
+
+  it("1 件なら作品の名前だけを出す", () => {
+    const reason = inUseError(["夏のスケッチ"]);
+
+    expect(reason).toContain("夏のスケッチ");
+    expect(reason).not.toContain("ほか");
+  });
+
+  it("複数なら 1 件目と残りの件数を出す", () => {
+    const reason = inUseError(["夏のスケッチ", "冬のスケッチ", "春のスケッチ"]);
+
+    expect(reason).toContain("夏のスケッチ");
+    expect(reason).toContain("ほか 2 件");
+    // 2 件目以降は名前を挙げない (ドロワーの幅で読めなくなる)。
+    expect(reason).not.toContain("冬のスケッチ");
+  });
+
+  it("名前を付けていない作品でも空の鉤括弧にしない", () => {
+    expect(inUseError(["   "])).toContain("無題のスケッチ");
   });
 });
 
