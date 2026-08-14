@@ -80,6 +80,18 @@ export const ICONS = {
     <line x1="12" y1="9" x2="12" y2="13"/>
     <line x1="12" y1="17" x2="12.01" y2="17"/>
   </svg>`,
+  /**
+   * アセット (Phase 3-4)。
+   *
+   * 絵は画像だが、指すのは画像だけではない (音声・3D モデル・データ・フォント)。
+   * それでも額縁の絵にするのは、**いちばん多く持ち込まれるのが画像**で、
+   * 一覧に並ぶのもその見本だから。
+   */
+  image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+    <circle cx="8.5" cy="8.5" r="1.5"/>
+    <polyline points="21 15 16 10 5 21"/>
+  </svg>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;

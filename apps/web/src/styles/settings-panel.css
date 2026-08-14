@@ -26,7 +26,7 @@
   font-family: var(--ui-font-family);
   font-size: 0.75rem;
   /* 狭い画面では画面幅に収める (横 375px の端末ではみ出させない)。 */
-  width: min(20rem, 100%);
+  width: min(var(--drawer-width), 100%);
   height: 100%;
   /* ヘッダとフッタを固定し、項目だけをスクロールさせる。 */
   overflow: hidden;
