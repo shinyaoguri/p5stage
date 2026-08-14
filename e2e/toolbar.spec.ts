@@ -73,7 +73,7 @@ test.describe("操作列", () => {
  * アカウントメニュー。
  *
  * **アバターは押しても壊れない場所**でなければならない。以前はこのボタン自身が
- * ログアウトを兼ねていて、押した瞬間にセッションが切れていた (#55)。
+ * ログアウトを兼ねていて、押した瞬間にセッションが切れていた (#56)。
  * ここが落ちたら、その事故が戻っている。
  */
 test.describe("アカウントメニュー", () => {
@@ -93,7 +93,7 @@ test.describe("アカウントメニュー", () => {
     await expect(menu).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(toggle).toHaveClass(/is-active/);
-    // 押しただけではログインしたまま (ここが #55 の事故)。
+    // 押しただけではログインしたまま (ここが #56 の事故)。
     await expect(page.locator("#login")).toHaveCount(0);
     // アイコンだけでは分からない「誰としてログインしているか」を文字で読める。
     await expect(menu).toContainText(FAKE_VIEWER.login);
