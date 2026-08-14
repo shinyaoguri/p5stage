@@ -116,7 +116,23 @@ export async function login(page: Page): Promise<void> {
   // ここはリンク (トップレベル遷移で cookie を確実に載せるため)。
   await page.locator("#login-consent .account-consent-proceed").click();
 
-  await expect(page.locator("#logout")).toBeVisible();
+  await expect(accountMenuToggle(page)).toBeVisible();
+}
+
+/** ログイン済みのアバター (押すとアカウントメニューが開く)。 */
+export function accountMenuToggle(page: Page): Locator {
+  return page.locator("#account-menu-toggle");
+}
+
+/**
+ * ログアウトする。
+ *
+ * **ログアウトの口はアカウントメニューの中にある。** アバターを押すこと自体は
+ * メニューを開くだけで、押しただけでセッションは切れない。
+ */
+export async function logout(page: Page): Promise<void> {
+  await accountMenuToggle(page).click();
+  await page.locator("#logout").click();
 }
 
 /** 保存パネルの状態表示。 */
