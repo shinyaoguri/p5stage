@@ -98,8 +98,21 @@ const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PE
 const STRIP_ROUTES =
   "node ../../e2e/strip-dev-routes.ts dist/server/wrangler.json";
 
+/**
+ * サーバの起動を「落ちたら立て直す」層で包む (#38 / `e2e/serve-with-restart.ts`)。
+ *
+ * `wrangler dev` は E2E の途中でプロセスごと落ちることがある (上流
+ * cloudflare/workers-sdk#14926)。素で立てると以降のテストが全部 `ECONNREFUSED` で
+ * 倒れるが、立て直せば巻き添えは進行中のテストだけで済み、それは `retries` が拾う。
+ */
+const SERVE = "node ../../e2e/serve-with-restart.ts";
+
 export default defineConfig({
   testDir: "./e2e",
+  // ブラウザを立てるのは `*.spec.ts` だけ。既定の testMatch は `*.test.ts` も拾うので、
+  // E2E を支えるスクリプトの単体テスト (`e2e/test/**/*.test.ts` — vitest 側) まで
+  // Playwright が実行してしまう。
+  testMatch: "**/*.spec.ts",
   fullyParallel: true,
   // .only の消し忘れで CI が一部しか回らないのを防ぐ。
   forbidOnly: isCI,
@@ -130,7 +143,7 @@ export default defineConfig({
       // ビルドの後に `routes` を外す (下の STRIP_ROUTES)。付いたままだと
       // `wrangler dev` がその custom_domain をリクエスト URL のホストとして使い、
       // OAuth の `redirect_uri` が本番のドメインになって認可から戻れない。
-      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var PUBLIC_ASSETS_ORIGIN:${ASSETS_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
+      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && ${SERVE} npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var PUBLIC_ASSETS_ORIGIN:${ASSETS_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,
@@ -142,7 +155,7 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: `npm run build:client && npx wrangler dev --port ${PREVIEW_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_WEB_ORIGIN:${WEB_ORIGIN} --inspector-port ${PREVIEW_INSPECTOR_PORT}`,
+      command: `npm run build:client && ${SERVE} npx wrangler dev --port ${PREVIEW_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_WEB_ORIGIN:${WEB_ORIGIN} --inspector-port ${PREVIEW_INSPECTOR_PORT}`,
       cwd: appDir("preview"),
       url: `${PREVIEW_ORIGIN}/runner/`,
       reuseExistingServer: !isCI,
