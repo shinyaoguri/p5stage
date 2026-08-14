@@ -12,17 +12,23 @@
 import astroEntry from "@astrojs/cloudflare/entrypoints/server";
 
 import { runAssetGc } from "./lib/assets/gc";
+import { runRevisionBackfill } from "./lib/sketches/revision-backfill";
 
 export default {
   fetch: astroEntry.fetch,
 
   /**
-   * 孤児 blob の回収 (Phase 3-5b)。
+   * 定期実行。今のところ 2 つ。
    *
    * `waitUntil` に預けず待つのは、Cron の実行時間そのものがこの仕事の長さでよいため。
-   * 途中で切れても次の起動が続きから拾う (進捗は D1 に持つ)。
+   * 途中で切れても次の起動が続きから拾う (進捗はどちらも D1 に持つ)。
+   *
+   * 1. 孤児 blob の回収 (Phase 3-5b)
+   * 2. リビジョン台帳のバックフィル (Phase 4-1)。回収とは独立で、順序の依存も無い。
+   *    片方が長引いても、次の起動でそれぞれの続きから進む
    */
   async scheduled() {
     await runAssetGc(Date.now());
+    await runRevisionBackfill();
   },
 } satisfies ExportedHandler<Env>;

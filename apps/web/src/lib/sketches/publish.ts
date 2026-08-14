@@ -11,18 +11,21 @@ import { referencedDigests, type SketchFiles } from "@p5stage/shared";
 
 import { recordRefs } from "../assets/store";
 
+import { recordRevision } from "./revision-log";
 import { putRevision } from "./revision-store";
 import { setCurrentRevision } from "./store";
 
 /**
- * リビジョンの写しを R2 へ置き、それが使うアセットを参照台帳へ記す (3-5a)。
+ * リビジョンの写しを R2 へ置き、それが使うアセットを参照台帳へ記し (3-5a)、
+ * 版そのものを履歴の台帳へ載せる (4-1)。
  *
  * **R2 へ書く経路はここに集める。** 写しが増えるのは保存・取り込み (`publishRevision`)
  * だけでなく、閲覧時の埋め合わせと再検証 (`delivery.ts` の `fill` / `revalidate`
  * — 作者が GitHub 側で直接編集した分) もある。どれか一つでも素通りすると、
  * **配られているのに台帳に無い** blob ができ、回収 (3-5b) がそれを孤児と見なす。
  *
- * 参照を記すのは R2 へ書けた後。書けていないリビジョンは配られないので、守る理由も無い。
+ * 記録はどちらも R2 へ書けた後。書けていないリビジョンは配られないので、参照を守る
+ * 理由も、履歴に並べる理由も無い (履歴に載る版は**開ける**ことが前提 — ADR 0016)。
  */
 export async function storeRevision(
   gistId: string,
@@ -32,6 +35,7 @@ export async function storeRevision(
 ): Promise<void> {
   await putRevision(env.CONTENT, gistId, revision, files);
   await recordRefs(env.DB, gistId, revision, referencedDigests(files), now);
+  await recordRevision(env.DB, gistId, revision, now);
 }
 
 /**
