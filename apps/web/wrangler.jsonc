@@ -56,6 +56,26 @@
       "bucket_name": "p5stage-assets",
     },
   ],
+  // 準リアルタイム同期の配信 (Phase 4-2 / ADR 0017)。作品 1 件 = DO 1 つで、
+  // 流すのはリビジョン SHA だけ (中身は上の CONTENT から配る)。
+  //
+  // `new_sqlite_classes` — Workers Free plan で使える Durable Objects は
+  // **SQLite backend のものに限られる**。このクラスはストレージを使わないが、
+  // 宣言は SQLite 側にしておく (無料枠で動くことが要件)。
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SKETCH_CHANNEL",
+        "class_name": "SketchChannel",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SketchChannel"],
+    },
+  ],
   "vars": {
     // 実行 iframe を配信する別オリジン (要件 5.1)。
     // ここは本番値。ローカルは .dev.vars で上書きする (.dev.vars.example 参照)。

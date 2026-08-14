@@ -14,6 +14,14 @@ import astroEntry from "@astrojs/cloudflare/entrypoints/server";
 import { runAssetGc } from "./lib/assets/gc";
 import { runRevisionBackfill } from "./lib/sketches/revision-backfill";
 
+/**
+ * 同期チャネル (Phase 4-2 / ADR 0017)。
+ *
+ * Durable Object のクラスは**エントリから export されていないと**バインディングから
+ * 解決できない。実装は `lib/live/channel.ts` にあり、ここは載せる場所。
+ */
+export { SketchChannel } from "./lib/live/channel";
+
 export default {
   fetch: astroEntry.fetch,
 
