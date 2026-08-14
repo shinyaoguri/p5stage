@@ -1,62 +1,170 @@
 /*
- * 設定パネルの見た目。
+ * 設定パネル (画面右端のドロワー) の見た目。
  *
  * パネルは settings-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
- * (file-tabs.css・console-panel.css と同じ事情)。位置はページ側が決め、
- * ここは中身だけを持つ。
+ * (file-tabs.css・console-panel.css と同じ事情)。他のパネルと違い、**置き場所も
+ * ここが決める** — ドロワーは操作列の一員ではなく画面に対して貼り付く面で、
+ * DOM も body 直下にある (理由は settings-panel.ts)。
  *
- * スケッチの上に重なるため、閉じている間はボタン 1 つだけで、開いたときも
- * 面はパネルの幅に留める。設定は「見た目を見ながら」調整するものなので、
- * 画面の大半は塞がない。
+ * 移植元は canvastage の `#settings-panel` (`src/style.css`)。右端に貼り付く全高の
+ * 面が 0.25s で滑り込み、ヘッダとフッタは固定して中身だけがスクロールする。
+ * 設定は「見た目を見ながら」調整するものなので、面は 20rem に留めて画面の大半は
+ * 塞がない (#41 の 1-4)。
  */
 
-/* パネル本体はボタンから浮かせる。ボタンは右上の操作列に並ぶので、
-   開閉のたびに列の高さが変わって実行ボタンが動く、ということが起きない。 */
-.settings-panel {
-  position: relative;
-  font-size: 0.75rem;
-  font-family: var(--ui-font-family);
-}
-
-/* ボタンの意匠は toolbar-button.css が持つ (操作列の他のボタンと同じもの)。
-   開いている間の見せ方も同じ仕組み (`is-active`) に乗る。 */
+/* トグル (歯車) の意匠は toolbar-button.css が持つ。開いている間の見せ方も
+   操作列の他のボタンと同じ仕組み (`is-active`) に乗るので、ここには無い。 */
 
 .settings-panel-body {
-  position: absolute;
-  z-index: 1;
-  top: calc(100% + 0.375rem);
+  position: fixed;
+  z-index: 30;
+  top: 0;
   right: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  width: 17rem;
-  /* 画面の高さに収め、あふれる分はパネルの中でスクロールさせる。 */
-  max-height: min(70vh, 40rem);
-  padding: 0.75rem;
-  overflow-y: auto;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  border-radius: 0.375rem;
-  background: rgb(0 0 0 / 0.72);
+  /* 操作列の外に置くので、書体と字の大きさはこの面が自分で決める。 */
+  font-family: var(--ui-font-family);
+  font-size: 0.75rem;
+  /* 狭い画面では画面幅に収める (横 375px の端末ではみ出させない)。 */
+  width: min(20rem, 100%);
+  height: 100%;
+  /* ヘッダとフッタを固定し、項目だけをスクロールさせる。 */
+  overflow: hidden;
+  border-left: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(0 0 0 / 0.85);
   color: rgb(255 255 255 / 0.75);
-  backdrop-filter: blur(10px);
+  /* 暗い面に載るので、ブラウザが描く部品 (select の一覧・スライダー・チェック) にも
+     暗い側を選ばせる。canvastage は select を自前の custom-select に置き換えて
+     いるが、あれは選択肢を各フォントで見せるための造りで、書体を自由入力にした
+     p5stage (settings/definitions.ts の DEFAULT_FONT_FAMILY) には要らない。 */
+  color-scheme: dark;
+  backdrop-filter: blur(20px);
+
+  /*
+   * 閉じている間は画面の外へ逃がす。
+   *
+   * `hidden` で消さないのは、出入りを見せるため。`visibility` を一緒に動かすのは
+   * **閉じた面をあらゆる意味で無いものにする**ため — 見えない面がヒットテストに
+   * 残ると、右端を触ったときに反応する。`visibility` は「見えなくなるのは
+   * 終わってから、見えるようになるのは始まってすぐ」と補間されるので、出入りの
+   * 間だけ姿が残る。
+   *
+   * フォーカスと読み上げは `inert` (settings-panel.ts) が止める。
+   * モーション低減は editor-chrome.css が画面全体で止めるので、ここには書かない。
+   */
+  visibility: hidden;
+  transform: translateX(100%);
+  transition:
+    transform 0.25s ease,
+    visibility 0.25s ease;
 }
 
-.settings-panel-body[hidden] {
-  display: none;
+.settings-panel-body.is-open {
+  visibility: visible;
+  transform: none;
+}
+
+.settings-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.settings-panel-title {
+  margin: 0;
+  color: rgb(255 255 255 / 0.8);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.settings-panel-close {
+  display: flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0.25rem;
+  background: none;
+  color: rgb(255 255 255 / 0.4);
+  font: inherit;
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.settings-panel-close:hover {
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(255 255 255 / 0.8);
+}
+
+/* ヘッダとフッタの間。ここだけがスクロールする。 */
+.settings-panel-content {
+  flex: 1;
+  min-height: 0;
+  padding: 0.5rem 0;
+  overflow-y: auto;
 }
 
 .settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  padding: 0.5rem 1rem 0.75rem;
 }
 
 .settings-group-title {
   margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* 見出しはそのまま押せる (アコーディオンの開閉)。畳んだ状態では目次になる。 */
+.settings-group-toggle {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: none;
+  background: none;
   color: rgb(255 255 255 / 0.45);
+  font: inherit;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.settings-group-toggle:hover {
+  color: rgb(255 255 255 / 0.75);
+}
+
+/* 開いていれば下向き、畳んでいれば右向き。回転で「開くと下に出る」を示す。 */
+.settings-group-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.settings-group.is-collapsed .settings-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.settings-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+}
+
+.settings-group.is-collapsed .settings-group-body {
+  display: none;
 }
 
 /* 1 項目 = ラベル / 現在値 / コントロール。ラベル列の幅を揃えて縦線を作る。 */
@@ -130,27 +238,32 @@
   cursor: pointer;
 }
 
-.settings-row input:focus-visible,
-.settings-row select:focus-visible {
+/* フォーカスの見え方はドロワーの中で 1 か所にまとめる (#41 の 1-5)。 */
+.settings-panel-body :is(button, input, select):focus-visible {
   outline: 2px solid rgb(255 255 255 / 0.5);
   outline-offset: 1px;
 }
 
 .settings-panel-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.25rem;
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 1.25rem;
   border-top: 1px solid rgb(255 255 255 / 0.1);
 }
 
+/* 面の幅いっぱいに置く。押すと全項目が戻るので、他の操作と紛れる場所には
+   置かない (フッタに 1 つだけ)。 */
 .settings-panel-reset {
-  padding: 0.125rem 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
   border: 1px solid rgb(255 255 255 / 0.2);
   border-radius: 0.25rem;
   background: none;
   color: rgb(255 255 255 / 0.6);
   font: inherit;
   cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .settings-panel-reset:hover,
