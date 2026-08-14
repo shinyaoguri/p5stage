@@ -10,6 +10,8 @@
 
 import "../../styles/account-panel.css";
 
+import { makeToolbarButton, setToolbarButtonIcon } from "../ui/toolbar-button";
+
 /** 認可の結果を伝えるクエリ (`callback.ts` が付ける)。 */
 const AUTH_RESULT_PARAM = "auth";
 
@@ -93,15 +95,15 @@ export class AccountPanel {
   #renderSignedOut(): HTMLElement {
     const wrapper = document.createElement("div");
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.id = "login";
-    button.className = "account-login";
-    button.textContent = "GitHub でログイン";
-
     const dialog = this.#buildConsentDialog();
 
-    button.addEventListener("click", () => dialog.showModal());
+    const button = makeToolbarButton({
+      id: "login",
+      icon: "github",
+      label: "GitHub でログイン",
+      onClick: () => dialog.showModal(),
+    });
+    button.classList.add("account-login");
 
     wrapper.appendChild(button);
     wrapper.appendChild(dialog);
@@ -156,36 +158,48 @@ export class AccountPanel {
     return dialog;
   }
 
+  /**
+   * ログイン済みの姿。
+   *
+   * **アバター 1 つに畳む** (#41)。login 名を文字で出していたが、操作列は他がすべて
+   * アイコンなので、そこだけ可変長の文字が入ると並びが崩れる。誰としてログイン
+   * しているかはアバターの絵で分かり、確かめたいときはホバー (`title`) で読める。
+   *
+   * ログアウトの口はこのボタン自身が兼ねる。アイコンの下に隠すと辿り着けなくなるので、
+   * **名前は `ログアウト (login)` にして、押すと何が起きるかを先に言う**。
+   */
   #renderSignedIn(): HTMLElement {
     const viewer = this.#viewer;
     const wrapper = document.createElement("div");
     wrapper.className = "account-signed-in";
     if (viewer === null) return wrapper;
 
+    const logout = makeToolbarButton({
+      id: "logout",
+      // アバターが無いときの代わり。下で画像に差し替える。
+      icon: "person",
+      label: `ログアウト (${viewer.login})`,
+      onClick: () => {
+        void this.#logout();
+      },
+    });
+    logout.classList.add("account-logout");
+
     if (viewer.avatarUrl !== null) {
       const avatar = document.createElement("img");
       avatar.className = "account-avatar";
       avatar.src = viewer.avatarUrl;
+      // 名前はボタンの `aria-label` が持つ。画像は装飾として外す。
       avatar.alt = "";
       avatar.width = 20;
       avatar.height = 20;
-      wrapper.appendChild(avatar);
+      // 読めなかったときに空のボタンにならないよう、人のアイコンへ戻す。
+      avatar.addEventListener("error", () => {
+        setToolbarButtonIcon(logout, "person");
+      });
+      logout.replaceChildren(avatar);
     }
 
-    const name = document.createElement("span");
-    name.className = "account-login-name";
-    name.textContent = viewer.login;
-
-    const logout = document.createElement("button");
-    logout.type = "button";
-    logout.id = "logout";
-    logout.className = "account-logout";
-    logout.textContent = "ログアウト";
-    logout.addEventListener("click", () => {
-      void this.#logout();
-    });
-
-    wrapper.appendChild(name);
     wrapper.appendChild(logout);
     return wrapper;
   }

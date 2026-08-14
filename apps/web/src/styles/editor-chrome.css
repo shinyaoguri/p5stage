@@ -34,6 +34,19 @@
    * `DEFAULT_FONT_FAMILY` に記載)。端末にあるものだけで解決する。
    */
   --ui-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /*
+   * 操作列のアイコンボタン (#41 の 2)。
+   *
+   * canvastage は各ボタンを `right: calc(余白 + N * 36px)` で絶対配置し、その 36px を
+   * `--toolbar-gap` と呼んでいる。**あれは中心から中心までの間隔**で、28px の
+   * ボタンが並ぶと見た目の隙間は 8px になる。ここでは flex 行の `gap` として持つので、
+   * 同じ見た目になる隙間の方 (8px) を入れる。並びが順番の番号に縛られず、
+   * ボタンを増やしても他の規則を書き直さずに済む。
+   */
+  --toolbar-btn-size: 28px;
+  --toolbar-icon-size: 16px;
+  --toolbar-gap: 8px;
 }
 
 /*
@@ -45,6 +58,9 @@
 @media (max-width: 600px) {
   :root {
     --editor-padding: 8px;
+    /* ボタンも一回り小さく (canvastage は 24px / 中心間 30px = 隙間 6px)。 */
+    --toolbar-btn-size: 24px;
+    --toolbar-gap: 6px;
   }
 }
 

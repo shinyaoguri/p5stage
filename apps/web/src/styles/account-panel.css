@@ -11,24 +11,30 @@
 
 .account-panel {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--toolbar-gap);
   align-items: center;
 }
 
 .account-signed-in {
   display: flex;
-  gap: 0.375rem;
   align-items: center;
 }
 
+/* アバターは操作列で唯一の「絵」なので、他のアイコンより一段はっきり出す
+   (誰としてログインしているかを文字なしで伝える唯一の手掛かり — #41)。 */
 .account-avatar {
   border-radius: 50%;
-  /* 読み込めなかったときに枠だけが残らないようにする。 */
   background: rgb(255 255 255 / 0.15);
 }
 
-.account-login-name {
-  color: rgb(255 255 255 / 0.7);
+.account-logout:has(.account-avatar) {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.account-logout:has(.account-avatar):hover,
+.account-logout:has(.account-avatar):focus-visible {
+  opacity: 1;
 }
 
 /* 認可の失敗はその場で気付けるよう、操作列から改行して出す。 */

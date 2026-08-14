@@ -1,0 +1,71 @@
+/*
+ * 操作列のアイコンボタンの見た目 (#41 の 2)。
+ *
+ * ボタンは scripts/ui/toolbar-button.ts が組み立てるので、Astro のスコープ付き CSS は
+ * 届かない (file-tabs.css と同じ事情)。置き場所はページ側が決め、ここは中身だけを持つ。
+ *
+ * 移植元は canvastage の `.toolbar-btn`。スケッチの上に重なるので、平常時は
+ * **枠も面も持たず薄い文字色だけ**にして絵を隠さない。触れたときだけ面が出る。
+ */
+
+.toolbar-btn {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  align-items: center;
+  width: var(--toolbar-btn-size);
+  height: var(--toolbar-btn-size);
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: rgb(255 255 255 / 0.3);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+/* `display` を指定した時点で、ブラウザ既定の `[hidden] { display: none }` に勝って
+   しまう。出し入れを `hidden` で行うボタン (切り離しなど) が常に出たままになるので、
+   ここで打ち消す。 */
+.toolbar-btn[hidden] {
+  display: none;
+}
+
+.toolbar-btn:hover,
+.toolbar-btn:focus-visible {
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(255 255 255 / 0.7);
+}
+
+.toolbar-btn:focus {
+  outline: none;
+}
+
+.toolbar-btn:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.6);
+  outline-offset: 1px;
+}
+
+.toolbar-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.toolbar-btn:disabled:hover {
+  background: transparent;
+  color: rgb(255 255 255 / 0.3);
+}
+
+/* 絵はボタンより一回り小さく。余白がクリックできる面になる。 */
+.toolbar-btn svg {
+  width: var(--toolbar-icon-size);
+  height: var(--toolbar-icon-size);
+}
+
+/* 開いている間は押されたままに見せる (設定など、面を開くボタン用)。 */
+.toolbar-btn.is-active {
+  background: rgb(255 255 255 / 0.15);
+  color: rgb(255 255 255 / 0.85);
+}
