@@ -14,6 +14,13 @@ export interface AdoptedSketch {
   readonly sketchId: string;
   readonly gist: SavedGist;
   readonly files: SketchFiles;
+  /**
+   * 取り込んだ作品の名前 (#41 の 3)。応答に無ければ null。
+   *
+   * 元は Gist の description (`titleFromDescription` が取り出す)。取り込んだ側で
+   * 名前を作り直すと、同じ作品が別の名前で並ぶことになる。
+   */
+  readonly title: string | null;
 }
 
 /** 取り込めなかった理由。利用者に見せる文言にする。 */
@@ -25,7 +32,7 @@ export class GistAdoptError extends Error {
 }
 
 interface AdoptResponse {
-  readonly sketch?: { readonly id?: string };
+  readonly sketch?: { readonly id?: string; readonly title?: string };
   readonly gist?: SavedGist;
   readonly files?: SketchFiles;
   readonly message?: string;
@@ -68,7 +75,13 @@ export async function adoptGist(ref: string): Promise<AdoptedSketch> {
     throw new GistAdoptError("取り込めませんでした (応答を解釈できません)");
   }
 
-  return { sketchId, gist: body.gist, files: body.files };
+  const title = body.sketch?.title;
+  return {
+    sketchId,
+    gist: body.gist,
+    files: body.files,
+    title: typeof title === "string" && title !== "" ? title : null,
+  };
 }
 
 /** 作品を Gist から切り離す。失敗したら理由を持って投げる。 */

@@ -60,13 +60,17 @@ const PROBE = [
 /**
  * プローブを流し込んで実行する。
  *
- * 実行の口 (`#run` ボタン) を押すこと自体が**本体オリジンでの user activation** に
- * なる。スケッチが音を鳴らせるかは、まさにこの activation が越境するかの話なので、
- * 「ボタンを押して実行する」という普段どおりの操作がそのまま検証条件になる。
+ * 実行の操作そのものが**本体オリジンでの user activation** になる。スケッチが音を
+ * 鳴らせるかは、まさにこの activation が越境するかの話なので、「自分で実行する」
+ * という普段どおりの操作がそのまま検証条件になる。
+ *
+ * 実行は ⌘/Ctrl+Enter で行う。中央の実行ボタンは実行中は停止に変わるので (#41 の 3)、
+ * 動いているスケッチを差し替えるにはこちらを踏む。**キー操作でも activation は
+ * 立つ**ことをこのテストが担保している (立たなければ音が鳴らずに落ちる)。
  */
 async function runProbe(page: import("@playwright/test").Page): Promise<void> {
   await typeIntoEditor(page, PROBE);
-  await page.locator("#run").click();
+  await page.keyboard.press("ControlOrMeta+Enter");
   await expect(consolePanel(page)).toContainText("policy:");
 }
 

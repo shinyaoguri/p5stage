@@ -47,6 +47,8 @@ export interface OpenedSketch {
   readonly files: SketchFiles | null;
   /** 大きすぎて中身を取れなかったファイル名。 */
   readonly truncated: readonly string[];
+  /** 付いている名前 (#41 の 3)。応答に無ければ null。 */
+  readonly title: string | null;
 }
 
 /** 作品を開けなかった理由。利用者に見せる文言にする。 */
@@ -87,11 +89,14 @@ export async function loadSketch(id: string): Promise<OpenedSketch> {
     gist?: SavedGist | null;
     files?: SketchFiles | null;
     truncated?: string[];
+    sketch?: { title?: string } | null;
   };
+  const title = body.sketch?.title;
   return {
     gist: body.gist ?? null,
     files: body.files ?? null,
     truncated: body.truncated ?? [],
+    title: typeof title === "string" && title !== "" ? title : null,
   };
 }
 

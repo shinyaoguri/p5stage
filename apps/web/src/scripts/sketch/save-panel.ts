@@ -64,10 +64,17 @@ function describe(state: SaveState): string {
 }
 
 export interface SavePanelOptions {
-  /** 保存が押された。初回だけ `meta` が付く。 */
-  onSave(meta: SketchMeta | null): void;
+  /**
+   * 保存が押された。初回だけ公開範囲が付く (2 回目以降は null)。
+   *
+   * タイトルはここで尋ねない。名前は画面上部の入力欄が常時持っている (#41 の 3) ので、
+   * 保存のたびに聞き直すと同じことを 2 か所で決めることになる。
+   */
+  onSave(visibility: SketchMeta["visibility"] | null): void;
   /** 切り離しが確認された (Phase 2-6)。 */
   onDetach(): void;
+  /** 保存する名前。ダイアログで「何が保存されるか」を見せるために引く。 */
+  getTitle(): string;
 }
 
 export class SavePanel {
@@ -80,13 +87,15 @@ export class SavePanel {
   readonly #pageLink: HTMLAnchorElement;
   readonly #detach: HTMLButtonElement;
   readonly #dialog: HTMLDialogElement;
-  readonly #titleInput: HTMLInputElement;
+  readonly #dialogTitle: HTMLElement;
+  readonly #getTitle: SavePanelOptions["getTitle"];
   #state: SaveState | null = null;
 
   constructor(host: HTMLElement, options: SavePanelOptions) {
     this.#host = host;
     this.#onSave = options.onSave;
     this.#onDetach = options.onDetach;
+    this.#getTitle = options.getTitle;
     this.#host.classList.add("save-panel");
 
     this.#button = makeToolbarButton({
@@ -131,7 +140,8 @@ export class SavePanel {
     });
     this.#detach.hidden = true;
 
-    this.#titleInput = document.createElement("input");
+    this.#dialogTitle = document.createElement("strong");
+    this.#dialogTitle.id = "save-dialog-title";
     this.#dialog = this.#buildDialog();
 
     for (const node of [
@@ -182,7 +192,9 @@ export class SavePanel {
       this.#onSave(null);
       return;
     }
-    this.#titleInput.value = "";
+    // 何という名前で保存されるかを、押す前に見せる。名前は上の入力欄にあるが、
+    // ダイアログを開くと視線がこちらへ移るので、ここでも一度言う。
+    this.#dialogTitle.textContent = this.#getTitle();
     this.#dialog.showModal();
   }
 
@@ -194,14 +206,11 @@ export class SavePanel {
     const heading = document.createElement("h2");
     heading.textContent = "あなたの Gist に保存します";
 
-    const titleLabel = document.createElement("label");
-    titleLabel.className = "app-field";
-    titleLabel.textContent = "タイトル";
-    this.#titleInput.type = "text";
-    this.#titleInput.id = "save-title";
-    this.#titleInput.placeholder = "無題のスケッチ";
-    this.#titleInput.maxLength = 100;
-    titleLabel.appendChild(this.#titleInput);
+    // 保存される名前。変えたいときは上の入力欄で直せるので、ここでは読ませるだけ。
+    const name = document.createElement("p");
+    name.className = "save-dialog-name";
+    name.textContent = "名前: ";
+    name.appendChild(this.#dialogTitle);
 
     const visibility = this.#buildVisibilityChoice();
 
@@ -228,15 +237,12 @@ export class SavePanel {
         "input[name='visibility']:checked"
       );
       dialog.close();
-      this.#onSave({
-        title: this.#titleInput.value,
-        // 選択が読めないときは限定公開へ倒す。黙って公開になる方向へは倒さない。
-        visibility: selected?.value === "public" ? "public" : "unlisted",
-      });
+      // 選択が読めないときは限定公開へ倒す。黙って公開になる方向へは倒さない。
+      this.#onSave(selected?.value === "public" ? "public" : "unlisted");
     });
 
     for (const node of [cancel, proceed]) actions.appendChild(node);
-    for (const node of [heading, titleLabel, visibility, note, actions]) {
+    for (const node of [heading, name, visibility, note, actions]) {
       dialog.appendChild(node);
     }
     return dialog;

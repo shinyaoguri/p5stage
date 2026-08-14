@@ -1,0 +1,87 @@
+/*
+ * 画面上部中央の実行ボタンとプロジェクト名の見た目 (#41 の 3)。
+ *
+ * 組み立ては scripts/editor/project-bar.ts、置き場所はページ側 (edit.astro)。
+ * ここは中身の意匠だけを持つ (file-tabs.css と同じ分担)。
+ *
+ * 移植元は canvastage の `#project-bar`。実行ボタンだけは丸くして、四角い
+ * 操作列のアイコンと役割が違うことを形で示す。
+ */
+
+.project-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* 実行・停止。操作列より一段小さく、丸い。 */
+.run-btn {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.run-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.run-btn:hover,
+.run-btn:focus-visible {
+  background: rgb(255 255 255 / 0.15);
+  color: rgb(255 255 255 / 0.85);
+}
+
+/*
+ * 実行中の表示が古いことを示すドット。
+ *
+ * 文字で「未実行の変更があります」と出すと、書いている間ずっと出たままになって
+ * 読み流される。押せば消えるものなので、押す先のボタンに小さく付ける。
+ */
+.run-btn.is-stale::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6bb3ff;
+}
+
+/*
+ * 名前。下線だけの控えめな入力欄。
+ *
+ * 幅は文字数で伸ばさない。打つたびに実行ボタンが動くと狙いが定まらないので、
+ * ボタンは左に固定して名前だけが右へ伸びる形にする。
+ */
+.project-name {
+  width: 10rem;
+  padding: 0 0.125rem;
+  border: none;
+  border-bottom: 1px solid rgb(255 255 255 / 0.15);
+  background: none;
+  color: rgb(255 255 255 / 0.6);
+  font-family: var(--ui-font-family);
+  font-size: 0.75rem;
+  text-shadow: 0 0 3px #000;
+}
+
+.project-name:hover {
+  border-bottom-color: rgb(255 255 255 / 0.3);
+  color: rgb(255 255 255 / 0.85);
+}
+
+.project-name:focus {
+  border-bottom-color: rgb(255 255 255 / 0.5);
+  color: #fff;
+  outline: none;
+}
+
+@media (max-width: 600px) {
+  .project-name {
+    width: 6rem;
+  }
+}
