@@ -18,16 +18,22 @@ import { ASSET_ROUTE_PREFIX } from "@p5stage/shared";
 import { defineMiddleware } from "astro:middleware";
 
 import { isAssetsHost } from "./lib/assets/delivery-origin";
+import { drainRequestBody } from "./lib/http/body";
 
-export const onRequest = defineMiddleware((context, next) => {
+export const onRequest = defineMiddleware(async (context, next) => {
   const onAssetsHost = isAssetsHost(context.url);
   const wantsAsset = context.url.pathname.startsWith(ASSET_ROUTE_PREFIX);
 
   // 配信ホストではアセットだけ、本体ではアセット以外だけ。
   // 「無い」とだけ答える (どちらのホストに何があるかを説明しない)。
-  if (onAssetsHost !== wantsAsset) {
-    return new Response(null, { status: 404 });
-  }
+  const response =
+    onAssetsHost === wantsAsset
+      ? await next()
+      : new Response(null, { status: 404 });
 
-  return next();
+  // 応答を作った後に、誰も読まなかった本文を読み捨てる (#38)。
+  // 弾く口は本文を見る前に断るので、この形はここを通る要求のあちこちで起きる。
+  await drainRequestBody(context.request);
+
+  return response;
 });
