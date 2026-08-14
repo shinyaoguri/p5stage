@@ -2,6 +2,11 @@
 # wrangler.jsonc の vars は本番値なので、ローカルではここで上書きする。
 PUBLIC_PREVIEW_ORIGIN="http://localhost:8788"
 
+# アセットを配るオリジン (ADR 0014)。本番は別ホストだが、ローカルは**同じサーバに
+# 別のホスト名で当てる**。localhost と 127.0.0.1 は別オリジンとして扱われるので、
+# プロセスを増やさずに「同じ Worker の 2 つの顔」を再現できる。
+PUBLIC_ASSETS_ORIGIN="http://127.0.0.1:4321"
+
 # GitHub OAuth App。OAuth App は callback URL を 1 つしか持てないので、
 # 本番 (https://p5stage.org/api/auth/callback) とは別に、ローカル用のアプリを
 # https://github.com/settings/developers で作る。

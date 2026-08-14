@@ -6,15 +6,22 @@
  * 送信側は `targetOrigin` を必ず明示する (`"*"` は使わない)。
  */
 
-import { parseSketchFiles, type SketchFiles } from "./files";
+import {
+  isValidFileName,
+  MAX_FILE_COUNT,
+  parseSketchFiles,
+  type SketchFiles,
+} from "./files";
 import { clampTransitionMs, isTransitionId } from "./transitions";
 
 /**
  * プロトコルのバージョン。
  * ランナーは `ready` に載せて返し、本体は自分の期待と一致するかを確かめる。
  * 本体とランナーは別々にデプロイされるため、片方だけ古い状態が起こりうる。
+ *
+ * 2: 実行の指示にアセットの URL 表を載せた (ADR 0014)。
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * 交信を識別する印。
@@ -44,12 +51,22 @@ export interface TransitionRequest {
   readonly durationMs: number;
 }
 
+/**
+ * アセットの実行時 URL (ファイル名 → 絶対 URL)。
+ *
+ * マニフェスト (assets.json) を読んで URL に変えるのは**本体の仕事**で、ランナーは
+ * この表を引くだけ (ADR 0014)。実行環境に配信オリジンの設定を持たせないため。
+ */
+export type AssetUrls = Readonly<Record<string, string>>;
+
 /** 本体 → ランナー。 */
 export type HostMessage =
   | {
       readonly type: "run";
       readonly gen: number;
       readonly files: SketchFiles;
+      /** アセットの実行時 URL。使っていなければ空。 */
+      readonly assets: AssetUrls;
       /** null なら即時切替。 */
       readonly transition: TransitionRequest | null;
     }
@@ -112,6 +129,41 @@ function parseTransition(value: unknown): TransitionRequest | null {
   };
 }
 
+/**
+ * アセットの URL 表を読み取る。表として読めなければ null。
+ *
+ * 送り主は本体 (origin と source を確かめた相手) だが、**この値はそのまま
+ * `img.src` や `fetch` の宛先になる**ので、信頼境界の作法どおり中身を確かめる。
+ * `javascript:` や `data:` を通すと、スケッチの中で任意のコードを走らせる口になる。
+ */
+function parseAssetUrls(value: unknown): AssetUrls | null {
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > MAX_FILE_COUNT) return null;
+
+  const urls: Record<string, string> = {};
+  for (const [name, url] of entries) {
+    if (!isValidFileName(name)) return null;
+    if (typeof url !== "string") return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    urls[name] = parsed.href;
+  }
+  return urls;
+}
+
 /** 受信データを本体 → ランナーのメッセージとして読み取る。妥当でなければ null。 */
 export function parseHostMessage(value: unknown): HostMessage | null {
   const message = unwrap(value);
@@ -124,10 +176,12 @@ export function parseHostMessage(value: unknown): HostMessage | null {
     case "run": {
       const files = parseSketchFiles((message as { files?: unknown }).files);
       if (files === null) return null;
+      const assets = parseAssetUrls((message as { assets?: unknown }).assets);
+      if (assets === null) return null;
       const transition = parseTransition(
         (message as { transition?: unknown }).transition
       );
-      return { type: "run", gen, files, transition };
+      return { type: "run", gen, files, assets, transition };
     }
     case "stop":
       return { type: "stop", gen };

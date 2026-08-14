@@ -11,6 +11,7 @@ import {
   SKETCH_SANDBOX,
   envelope,
   parseRunnerMessage,
+  type AssetUrls,
   type ConsoleLevel,
   type HostMessage,
   type SketchFiles,
@@ -66,10 +67,23 @@ export class PreviewHost {
    *
    * 切り替えの演出は本体の設定だが、動かすのはダブルバッファを持つランナーなので
    * (ADR 0007)、実行のたびに指示に乗せて渡す。
+   *
+   * アセットの URL 表も同じく毎回渡す。マニフェストを読んで URL に変えるのは
+   * **本体の仕事**で、実行環境は配信オリジンを知らない (ADR 0014)。
    */
-  run(files: SketchFiles, transition: TransitionRequest | null = null): void {
+  run(
+    files: SketchFiles,
+    assets: AssetUrls = {},
+    transition: TransitionRequest | null = null
+  ): void {
     this.#generation += 1;
-    this.#send({ type: "run", gen: this.#generation, files, transition });
+    this.#send({
+      type: "run",
+      gen: this.#generation,
+      files,
+      assets,
+      transition,
+    });
   }
 
   /** 実行中のスケッチを止める。 */

@@ -10,6 +10,7 @@ import {
   envelope,
   getTransition,
   parseHostMessage,
+  type AssetUrls,
   type ConsoleLevel,
   type RunnerMessage,
   type SketchFiles,
@@ -65,6 +66,22 @@ function createFileUrls(files: SketchFiles): Map<string, string> {
   return urls;
 }
 
+/**
+ * 実行時に名前を引く表。アセット (配信 URL) の上にコードのファイル (blob URL) を重ねる。
+ *
+ * 同じ名前が両方にあるとどちらが返るか決まらないので、保存経路が名前の衝突を
+ * 断っている (3-2)。それでも重ね順を決めておくのは、**手元で書いている途中**の
+ * 構成にも実行が要るため。中身が手元にあるコードのファイルを勝たせる。
+ */
+function buildRuntimeUrls(
+  fileUrls: ReadonlyMap<string, string>,
+  assets: AssetUrls
+): Map<string, string> {
+  const urls = new Map<string, string>(Object.entries(assets));
+  for (const [name, url] of fileUrls) urls.set(name, url);
+  return urls;
+}
+
 function main(): void {
   // 構成ミスは黙って動かないより、ランナーを直接開いたときに読める形で出す。
   let webOrigin: string;
@@ -107,19 +124,23 @@ function main(): void {
   const run = async (
     generation: number,
     files: SketchFiles,
+    assets: AssetUrls,
     transition: TransitionRequest | null
   ): Promise<void> => {
     const fileUrls = createFileUrls(files);
+    // 解放するのは自分で作った blob URL だけ。アセットの URL は配信先を指しているので
+    // 実行の終わりに手放すものが無い。
+    const runtimeUrls = buildRuntimeUrls(fileUrls, assets);
     let html: string;
     try {
       html = buildSketchHtml(files, {
         headScripts: [
           consoleBridgeScript(window.location.origin),
           fileLoaderBridgeScript(
-            buildRuntimeUrlMap(fileUrls, document.baseURI)
+            buildRuntimeUrlMap(runtimeUrls, document.baseURI)
           ),
         ],
-        resolveFileUrl: (name) => fileUrls.get(name) ?? null,
+        resolveFileUrl: (name) => runtimeUrls.get(name) ?? null,
       });
     } catch (error) {
       for (const url of fileUrls.values()) URL.revokeObjectURL(url);
@@ -184,7 +205,7 @@ function main(): void {
     if (message === null) return;
 
     if (message.type === "run") {
-      void run(message.gen, message.files, message.transition);
+      void run(message.gen, message.files, message.assets, message.transition);
     } else {
       stage.stop();
     }

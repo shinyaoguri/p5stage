@@ -1,17 +1,25 @@
 /**
- * 本体サイトと実行 iframe のオリジン構成。
+ * 本体サイト・実行 iframe・アセット配信のオリジン構成。
  *
  * p5stage は他者のコードを自動実行するため、実行 iframe は本体と必ず別オリジンに置く
- * (docs/requirements.md 5.1)。オリジンはデプロイ環境ごとに変わる設定値なので、
- * 「別オリジンである」という要件はここで実行時に検証し、構成ミスを起動時に落とす。
+ * (docs/requirements.md 5.1)。他者がアップロードしたアセットも本体とも実行環境とも
+ * 別のオリジンから配る (ADR 0014)。オリジンはデプロイ環境ごとに変わる設定値なので、
+ * 「互いに別オリジンである」という要件はここで実行時に検証し、構成ミスを起動時に落とす。
  */
 
-/** 検証済みのオリジン構成。web と preview は必ず異なる。 */
+/** 検証済みのオリジン構成。含まれるオリジンは互いに必ず異なる。 */
 export interface Origins {
   /** 本体サイト (エディタ・ギャラリー・API) のオリジン */
   readonly web: string;
   /** 実行 iframe を配信するオリジン。postMessage の origin 検証にも使う */
   readonly preview: string;
+  /**
+   * アセット (R2 の不変 blob) を配るオリジン。
+   *
+   * 実行環境はこの値を知らなくてよい (解決済みの URL を本体から受け取る — ADR 0014)
+   * ので、渡さなかったときは null になる。
+   */
+  readonly assets: string | null;
 }
 
 /** オリジン構成が要件を満たさないときに投げる。 */
@@ -50,13 +58,17 @@ function normalizeOrigin(value: string, label: string): string {
 }
 
 /**
- * web / preview のオリジンを検証して返す。
+ * オリジン構成を検証して返す。
  *
- * @throws {OriginConfigError} 値が不正なとき、または両者が同一オリジンのとき
+ * `assets` は省略できる。実行環境 (preview Worker) はアセットの配信先を知らないまま
+ * 動くので、そこでも同じ関数で web / preview の関係を確かめられるようにするため。
+ *
+ * @throws {OriginConfigError} 値が不正なとき、または同一オリジンが混ざるとき
  */
 export function resolveOrigins(input: {
   web: string;
   preview: string;
+  assets?: string | null;
 }): Origins {
   const web = normalizeOrigin(input.web, "web");
   const preview = normalizeOrigin(input.preview, "preview");
@@ -67,5 +79,16 @@ export function resolveOrigins(input: {
     );
   }
 
-  return { web, preview };
+  if (input.assets === undefined || input.assets === null) {
+    return { web, preview, assets: null };
+  }
+
+  const assets = normalizeOrigin(input.assets, "assets");
+  if (assets === web || assets === preview) {
+    throw new OriginConfigError(
+      `アセットは本体とも実行 iframe とも別オリジンである必要があります (${assets})`
+    );
+  }
+
+  return { web, preview, assets };
 }

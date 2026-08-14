@@ -1,5 +1,5 @@
 /**
- * アセットの受け口 (Phase 3-1)。
+ * アセットの受け口 (Phase 3-1) と配信 (Phase 3-3)。
  *
  * 単体テストが見るのは純ロジック (allowlist・署名・クォータの判定) だけで、
  * **R2 と D1 に実際に着地するか**はここでしか確かめられない。加えて、この口は
@@ -12,11 +12,13 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
 
 import { login, openEditor } from "./helpers";
-import { PREVIEW_ORIGIN } from "./origins";
+import { ASSETS_ORIGIN, PREVIEW_ORIGIN, WEB_ORIGIN } from "./origins";
 
 /** PNG の署名。これが無いと中身の突き合わせで弾かれる。 */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -257,5 +259,170 @@ test.describe("アセットの受け口", () => {
     const response = await page.request.get("/api/assets");
 
     expect(response.status()).toBe(401);
+  });
+});
+
+/**
+ * 種として置いてあるアセット (playwright.config.ts の SEED_BLOB)。
+ *
+ * 中身は `e2e/fixtures/dot.png` (2x1 の PNG)。幅と高さを違えてあるので、
+ * 取り違えたら数で分かる。
+ */
+const SEED_ASSET_NAME = "cat.png";
+const SEED_ASSET_SKETCH = "E2EAssetSketch01";
+const SEED_AUTHOR = "e2e-author";
+/** 種の実体の sha256 (playwright.config.ts が同じ値で R2 へ置く)。 */
+const SEED_BLOB_SHA256 =
+  "7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe";
+
+/** srcdoc のスケッチ文書から、画像が読めているかを集める。 */
+async function readAssetState(page: Page): Promise<{
+  written: number | null;
+  writtenSrc: string | null;
+  assigned: string | null;
+} | null> {
+  for (const frame of page.frames()) {
+    if (frame.url() !== "about:srcdoc") continue;
+    try {
+      const state = await frame.evaluate(() => {
+        const written = document.getElementById(
+          "written"
+        ) as HTMLImageElement | null;
+        const assigned = document.getElementById(
+          "assigned"
+        ) as HTMLImageElement | null;
+        if (written === null) return null;
+        return {
+          written: written.naturalWidth,
+          writtenSrc: written.src,
+          assigned: assigned?.dataset.width ?? null,
+        };
+      });
+      if (state !== null) return state;
+    } catch {
+      // 差し替えの途中でフレームが外れた。次の呼び出しで見直す。
+    }
+  }
+  return null;
+}
+
+test.describe("アセットの配信", () => {
+  test("上げた実体を配信オリジンから取れる", async ({ page, request }) => {
+    await openEditor(page);
+    await login(page);
+
+    const asset = makePng();
+    expect((await upload(page, asset)).status).toBe(201);
+
+    const response = await request.get(
+      `${ASSETS_ORIGIN}/a/${asset.sha256}/cat.png`
+    );
+
+    expect(response.status()).toBe(200);
+    expect(Array.from(await response.body())).toEqual(asset.bytes);
+
+    const headers = response.headers();
+    expect(headers["content-type"]).toBe("image/png");
+    // 中身が変わらないキーなので、上限まで効かせる (ADR 0014)。
+    expect(headers["cache-control"]).toContain("immutable");
+    // 他者の中身を返す口。申告した形式以外に解釈させない (要件 5.1)。
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    // 実行 iframe は別オリジン。p5 は画像に crossOrigin を付ける。
+    expect(headers["access-control-allow-origin"]).toBe("*");
+    expect(headers["etag"]).toBeTruthy();
+  });
+
+  test("同じ ETag で訊き直すと 304、範囲を指定すると 206", async ({
+    page,
+    request,
+  }) => {
+    await openEditor(page);
+    await login(page);
+
+    const asset = makePng();
+    expect((await upload(page, asset)).status).toBe(201);
+    const url = `${ASSETS_ORIGIN}/a/${asset.sha256}/cat.png`;
+
+    const first = await request.get(url);
+    const etag = first.headers()["etag"] ?? "";
+    expect(etag).not.toBe("");
+
+    const revalidated = await request.get(url, {
+      headers: { "If-None-Match": etag },
+    });
+    expect(revalidated.status()).toBe(304);
+
+    // 音声のシークが効くために要る (ADR 0014)。
+    const ranged = await request.get(url, { headers: { Range: "bytes=0-3" } });
+    expect(ranged.status()).toBe(206);
+    expect(ranged.headers()["content-range"]).toBe(`bytes 0-3/${asset.size}`);
+    expect(Array.from(await ranged.body())).toEqual(asset.bytes.slice(0, 4));
+  });
+
+  test("知らない実体と形の違う鍵は 404", async ({ request }) => {
+    expect(
+      (
+        await request.get(`${ASSETS_ORIGIN}/a/${"c".repeat(64)}/cat.png`)
+      ).status()
+    ).toBe(404);
+    // 大文字を許すと同じ中身が 2 つの鍵で載る (ADR 0003)。配信側でも縛る。
+    expect(
+      (
+        await request.get(`${ASSETS_ORIGIN}/a/${"C".repeat(64)}/cat.png`)
+      ).status()
+    ).toBe(404);
+    expect(
+      (await request.get(`${ASSETS_ORIGIN}/a/not-a-digest/cat.png`)).status()
+    ).toBe(404);
+  });
+
+  test("2 つのホストは出すものが混ざらない", async ({ request }) => {
+    // 本体のホストから他者のアセットを配らない。
+    expect(
+      (await request.get(`${WEB_ORIGIN}/a/${"a".repeat(64)}/cat.png`)).status()
+    ).toBe(404);
+    // 配信のホストで本体の画面や口を開かない (ADR 0014)。
+    expect((await request.get(`${ASSETS_ORIGIN}/edit`)).status()).toBe(404);
+    expect((await request.get(`${ASSETS_ORIGIN}/api/assets`)).status()).toBe(
+      404
+    );
+  });
+
+  test("種のマニフェストと実体の sha256 が一致している", async () => {
+    // ずれていると配信も実行も静かに 404 になる。**種の側で**気付けるようにする。
+    const bytes = await readFile(
+      fileURLToPath(new URL("fixtures/dot.png", import.meta.url))
+    );
+    const manifest = JSON.parse(
+      await readFile(
+        fileURLToPath(new URL("seed-content-assets.json", import.meta.url)),
+        "utf8"
+      )
+    ) as Record<string, string>;
+    const entry = JSON.parse(manifest["assets.json"] ?? "{}") as {
+      assets: Record<string, { sha256: string; size: number }>;
+    };
+
+    expect(entry.assets[SEED_ASSET_NAME]).toMatchObject({
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.length,
+    });
+  });
+
+  test("アセットを使う作品は、閲覧画面で画像まで読める", async ({ page }) => {
+    await page.goto(`/@${SEED_AUTHOR}/${SEED_ASSET_SKETCH}`);
+
+    await expect
+      .poll(() => readAssetState(page), {
+        message: "スケッチの画像が読めていません",
+        timeout: 15_000,
+      })
+      .toEqual({
+        // index.html の src を書き換える道。
+        written: 2,
+        writtenSrc: `${ASSETS_ORIGIN}/a/${SEED_BLOB_SHA256}/${SEED_ASSET_NAME}`,
+        // img.src への代入を捉える道 (p5 の loadImage が通る形 — ADR 0014)。
+        assigned: "2",
+      });
   });
 });

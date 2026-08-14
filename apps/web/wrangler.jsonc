@@ -11,6 +11,13 @@
       "pattern": "p5stage.org",
       "custom_domain": true,
     },
+    // アセットの配信 (ADR 0014)。同じ Worker だが、ブラウザから見て別オリジンに
+    // なることが要点 — 他者がアップロードした中身を本体のオリジンから配らない。
+    // このホストでは `/a/` 以外を出さない (src/middleware.ts)。
+    {
+      "pattern": "assets.p5stage.org",
+      "custom_domain": true,
+    },
   ],
   // PR ごとの確認用 URL (<alias>-p5stage-web.<subdomain>.workers.dev) を発行する。
   // routes を宣言すると workers_dev は false と推論され、既定ではプレビュー URL も
@@ -48,6 +55,9 @@
     // 実行 iframe を配信する別オリジン (要件 5.1)。
     // ここは本番値。ローカルは .dev.vars で上書きする (.dev.vars.example 参照)。
     "PUBLIC_PREVIEW_ORIGIN": "https://preview.p5stage.org",
+    // アセットを配るオリジン (ADR 0014)。上の routes に足したホストと同じ値。
+    // 本体・実行環境と別オリジンであることは resolveOrigins が実行時に確かめる。
+    "PUBLIC_ASSETS_ORIGIN": "https://assets.p5stage.org",
     // GitHub OAuth App (本番) の Client ID。公開値なのでコミットしてよい。
     // 対になる Client Secret は `wrangler secret put GITHUB_CLIENT_SECRET` で入れる。
     // OAuth App は callback URL を 1 つしか持てないため、ローカルは別アプリを作り

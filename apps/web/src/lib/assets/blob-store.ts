@@ -11,10 +11,12 @@ import type { AssetMime } from "@p5stage/shared";
 
 /**
  * 1 年間の再検証なしキャッシュ。中身が変わらないので上限まで効かせてよい。
- * 実際に配るのは 3-3 だが、**保存時に付けておかないと後から直せない**
- * (既に置いた blob を上書きしない設計のため)。
+ *
+ * 保存時 (`putBlob`) と配信時 (`pages/a/[sha256]/[name].ts`) の両方で使う。
+ * R2 に載っている値をそのまま返すのではなく配信側でも明示するのは、**何を
+ * 付けて配っているかをコードから読めるようにする**ため (ADR 0014)。
  */
-const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 /** blob のキー。台帳の `sha256` と同じ値で引ける。 */
 export function blobKey(sha256: string): string {

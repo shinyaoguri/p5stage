@@ -10,7 +10,7 @@
 
 import "../../styles/sketch-view.css";
 
-import type { SketchFiles } from "@p5stage/shared";
+import { assetUrlsForFiles, type SketchFiles } from "@p5stage/shared";
 
 import { PreviewHost } from "../preview-host";
 
@@ -56,8 +56,13 @@ export class SketchView {
     const previewOrigin = root.dataset.previewOrigin;
     if (stage === null || !previewOrigin || this.#blocks.length === 0) return;
 
+    // アセットの解決はエディタと同じ道を通る (assets.json も `<pre>` に出ている —
+    // ADR 0014)。閲覧でもマニフェストの読み方が 1 つになる。
+    const files = collectFiles(this.#blocks);
+    const assets = assetUrlsForFiles(files, root.dataset.assetsOrigin ?? null);
+
     // 作品ページに演出は要らない。開いた時点の姿が出ればよい。
-    new PreviewHost(stage, { previewOrigin }).run(collectFiles(this.#blocks));
+    new PreviewHost(stage, { previewOrigin }).run(files, assets);
   }
 
   #buildTabs(host: HTMLElement): void {

@@ -11,7 +11,7 @@
 /**
  * ファイル名 → 実行時 URL の対応から、絶対 URL → 実行時 URL の対応を作る。
  *
- * @param fileUrls ファイル名 → blob URL
+ * @param fileUrls ファイル名 → 実行時 URL (コードは blob URL、アセットは配信 URL)
  * @param baseUrl スケッチ文書のベース URL (= ランナー文書の URL)
  */
 export function buildRuntimeUrlMap(
