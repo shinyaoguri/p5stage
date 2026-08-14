@@ -64,12 +64,16 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 
 ## Phase 4: 共有体験 (p5stage の差別化の中核)
 
+- **リビジョン履歴の閲覧** (4-1): D1 の台帳 (`gist_revisions`) + `?rev=<sha>` +
+  履歴 UI。過去の版は台帳と R2 だけで解決し、GitHub へは行かない → **ADR 0016**
 - 準リアルタイム同期閲覧: エディタ → Workers 通知 → Durable Objects → SSE/WebSocket 配信 (許容遅延 数秒〜10 秒)
-- フォーク (Gist fork API + メタデータ複製)
+- フォーク (Gist fork API + メタデータ複製。系譜の正典は D1 — #44)
 - サムネイル自動取得の**新規実装** (canvastage に相当実装は無い。別オリジン iframe から postMessage で受け渡す) → R2、Cloudflare Images リサイズ
-- 限定公開 (secret gist + 注意書き)
-- リビジョン履歴の閲覧 UI
 - 完了条件: 作者がライブコーディングし、閲覧者が数秒遅れで追従できる
+
+**限定公開 (secret gist + 注意書き) は Phase 2 で完了済み**。`visibility` の 2 段階・
+secret gist の作成・作品ページの注意書き・`noindex`・`private, no-store` まで
+2-4 までに入ったため、この Phase の項目から外した。
 
 ## Phase 5: 発見 (ギャラリー)
 
