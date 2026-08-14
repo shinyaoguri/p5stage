@@ -68,6 +68,12 @@ export const ICONS = {
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
     <circle cx="12" cy="7" r="4"/>
   </svg>`,
+  /** 外の面を開く (作品ページ)。 */
+  externalLink: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+    <polyline points="15 3 21 3 21 9"/>
+    <line x1="10" y1="14" x2="21" y2="3"/>
+  </svg>`,
   /** 直すまで続く条件 (#41 の 6)。 */
   alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -79,7 +85,14 @@ export const ICONS = {
 export type IconName = keyof typeof ICONS;
 
 export interface ToolbarButtonOptions {
-  /** 何のボタンか。`title` と `aria-label` の両方になる。**省略できない**。 */
+  /**
+   * 何のボタンか。`title` と `aria-label` の両方になる。**省略できない**。
+   *
+   * ここに入れるのは**押すと何が起きるか**だけ。「今どうなっているか」は入れない —
+   * 状態はアイコン自身が色とドットで示し (#41 の 6)、読み上げには
+   * `aria-describedby` で別に渡す。名前に混ぜると `保存 (保存しました (8/14 18:03))`
+   * のような入れ子になり、ホバーするたび読まされる。
+   */
   readonly label: string;
   readonly icon: IconName;
   readonly id?: string;
@@ -102,6 +115,39 @@ export function makeToolbarButton(
   return button;
 }
 
+export interface ToolbarLinkOptions {
+  /** どこへ行くか。`title` と `aria-label` の両方になる。**省略できない**。 */
+  readonly label: string;
+  readonly icon: IconName;
+  readonly id?: string;
+}
+
+/**
+ * 操作列のアイコンリンクを作る。
+ *
+ * 行き先 (作品ページ・Gist) は**文字で名乗らせない**。操作列は他がすべてアイコン
+ * なので、そこだけ文字が並ぶと列が途切れて見える。押す先が外部の面であることは
+ * 絵で示し、名前はホバーと読み上げが持つ。
+ *
+ * ボタンと同じ見た目 (`.toolbar-btn`) に乗せるが、**リンクはリンクのまま**にする —
+ * 別のタブで開く・URL をコピーするといった、リンクにしかできない操作が要る。
+ */
+export function makeToolbarLink(
+  options: ToolbarLinkOptions
+): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.className = "toolbar-btn";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  if (options.id !== undefined) link.id = options.id;
+  setToolbarButtonIcon(link, options.icon);
+  setToolbarButtonLabel(link, options.label);
+  return link;
+}
+
+/** 操作列に並ぶもの (アイコンボタンとアイコンリンク)。 */
+type ToolbarElement = HTMLButtonElement | HTMLAnchorElement;
+
 /**
  * ボタンの名前を差し替える。
  *
@@ -109,7 +155,7 @@ export function makeToolbarButton(
  * 読み上げが食い違う。
  */
 export function setToolbarButtonLabel(
-  button: HTMLButtonElement,
+  button: ToolbarElement,
   label: string
 ): void {
   button.title = label;
@@ -118,7 +164,7 @@ export function setToolbarButtonLabel(
 
 /** ボタンの絵を差し替える。名前は `aria-label` が持つので SVG は読み上げから外す。 */
 export function setToolbarButtonIcon(
-  button: HTMLButtonElement,
+  button: ToolbarElement,
   icon: IconName
 ): void {
   button.innerHTML = ICONS[icon];

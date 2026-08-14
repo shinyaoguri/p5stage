@@ -25,6 +25,7 @@ import {
   accountMenuToggle,
   addFile,
   fileTab,
+  gistLink,
   hasSketchCanvas,
   login,
   logout,
@@ -53,9 +54,7 @@ async function signedInEditor(page: Page): Promise<void> {
 
 /** 保存パネルに出ている Gist リンクから、正本の Gist ID を取る。 */
 async function savedGistId(page: Page): Promise<string> {
-  const href = await page
-    .getByRole("link", { name: "Gist" })
-    .getAttribute("href");
+  const href = await gistLink(page).getAttribute("href");
   const id = (href ?? "").split("/").pop() ?? "";
   expect(id).not.toBe("");
   return id;
@@ -145,10 +144,12 @@ test.describe("保存から閲覧まで", () => {
     await expect(saveButton(page)).toHaveAttribute("data-save-status", "dirty");
     // **色もドットも読み上げられない**ので、文字は支援技術向けに残してある。
     await expect(saveStatus(page)).toHaveText("未保存の変更があります");
-    // 押したときに何が起きるかだけでなく、今どうなっているかも名前から読める。
+    // ただし**名前は「保存」のまま**動かさない。名前は押すと何が起きるかで、
+    // 今どうなっているかは説明として別に渡す (ホバーで状態まで読まされない)。
+    await expect(saveButton(page)).toHaveAttribute("aria-label", "保存");
     await expect(saveButton(page)).toHaveAttribute(
-      "aria-label",
-      "保存 (未保存の変更があります)"
+      "aria-describedby",
+      "save-status"
     );
   });
 
@@ -163,10 +164,7 @@ test.describe("保存から閲覧まで", () => {
     const id = await saveNewSketch(page, "通しの作品", "public");
 
     // 正本が自分の GitHub にあることが画面から辿れる (要件 3.1)。
-    await expect(page.getByRole("link", { name: "Gist" })).toHaveAttribute(
-      "href",
-      /gist\.github\.com\//
-    );
+    await expect(gistLink(page)).toHaveAttribute("href", /gist\.github\.com\//);
     // その Gist に中身が入っている (正本は Gist — ADR 0002)。
     // ファイル名で引くときは**キーの一覧**を見る。`toHaveProperty` はドットを
     // パスの区切りとして読むので、拡張子付きの名前とは噛み合わない。
@@ -287,9 +285,7 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     await typeIntoEditor(page, sketchCode(MARKER));
     const id = await saveNewSketch(page, "外す作品", "public");
 
-    const firstGist = await page
-      .getByRole("link", { name: "Gist" })
-      .getAttribute("href");
+    const firstGist = await gistLink(page).getAttribute("href");
 
     // 確認の 1 行目は「どちらも削除しません」(ADR 0012)。
     page.once("dialog", (dialog) => {
@@ -316,10 +312,7 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     await typeIntoEditor(page, sketchCode("REATTACHED_MARKER"));
     await saveAgain(page);
 
-    await expect(page.getByRole("link", { name: "Gist" })).not.toHaveAttribute(
-      "href",
-      String(firstGist)
-    );
+    await expect(gistLink(page)).not.toHaveAttribute("href", String(firstGist));
   });
 
   test("外した Gist を取り込み直すと、その Gist を正本にした作品ができる", async ({
@@ -329,9 +322,7 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     await typeIntoEditor(page, sketchCode("ADOPTED_MARKER"));
     const first = await saveNewSketch(page, "取り込む作品", "public");
 
-    const gistUrl = await page
-      .getByRole("link", { name: "Gist" })
-      .getAttribute("href");
+    const gistUrl = await gistLink(page).getAttribute("href");
     expect(gistUrl).not.toBeNull();
 
     // 外しておかないと「既に取り込まれている Gist」として断られる (adopt.ts)。
@@ -351,10 +342,7 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     const adopted = new URL(page.url()).searchParams.get("sketch");
     expect(adopted).not.toBe(first);
 
-    await expect(page.getByRole("link", { name: "Gist" })).toHaveAttribute(
-      "href",
-      String(gistUrl)
-    );
+    await expect(gistLink(page)).toHaveAttribute("href", String(gistUrl));
     // 取り込んだ中身がそのままエディタに載る (もう一度 GitHub を読みに行かない)。
     await expect(page.locator("#editor")).toContainText("ADOPTED_MARKER");
   });
