@@ -87,8 +87,16 @@ export function consoleBridgeScript(runnerOrigin: string): string {
 }
 
 /**
- * `fetch` / `XMLHttpRequest` を差し替え、スケッチ内のファイルへの参照を
- * 実行時 URL (blob) へ振り替える。p5 の loadJSON / loadStrings / loadShader 用。
+ * ファイル名で書かれた参照を実行時 URL へ振り替える。
+ *
+ * 振り替え先は 2 種類ある — スケッチ内のテキストファイル (blob URL) と、
+ * アセット (配信オリジンの URL — ADR 0014)。どちらも「絶対 URL → 実行時 URL」の
+ * 1 つの表に畳んであるので、ここでは区別しない。
+ *
+ * **fetch と XHR だけでは足りない。** p5 1.x の `loadImage` は、GIF を見分けるために
+ * 一度 `fetch(path)` した後、GIF でなければ `img.src = path` に**元のパスをそのまま**
+ * 渡す。画像が読めるかどうかはこちらの経路で決まるので、`src` の代入と
+ * `setAttribute` も同じ表で解決する。
  *
  * @param runtimeUrls 絶対 URL → 実行時 URL (buildRuntimeUrlMap の出力)
  */
@@ -125,6 +133,42 @@ export function fileLoaderBridgeScript(
     var mapped = resolve(url);
     if (mapped) args[1] = mapped;
     return nativeOpen.apply(this, args);
+  };
+
+  // 要素の src。代入された値を解決してから元の setter へ渡す。
+  // 読み返すと解決後の URL が返るが、元の名前を保つために表を持ち回るより、
+  // 差し替えを 1 段で終わらせる方が壊れにくい。
+  function patchUrlProperty(prototype, property) {
+    if (!prototype) return;
+    var descriptor = Object.getOwnPropertyDescriptor(prototype, property);
+    if (!descriptor || !descriptor.set || !descriptor.get) return;
+    Object.defineProperty(prototype, property, {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      get: function () {
+        return descriptor.get.call(this);
+      },
+      set: function (value) {
+        descriptor.set.call(this, resolve(value) || value);
+      },
+    });
+  }
+
+  patchUrlProperty(window.HTMLImageElement && HTMLImageElement.prototype, "src");
+  patchUrlProperty(window.HTMLMediaElement && HTMLMediaElement.prototype, "src");
+  patchUrlProperty(window.HTMLSourceElement && HTMLSourceElement.prototype, "src");
+
+  // 属性で書く道 (createImg 相当・独自ローダ)。src / href だけを見る。
+  var nativeSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (name, value) {
+    if (typeof name === "string") {
+      var lowered = name.toLowerCase();
+      if (lowered === "src" || lowered === "href") {
+        var mapped = resolve(value);
+        if (mapped) return nativeSetAttribute.call(this, name, mapped);
+      }
+    }
+    return nativeSetAttribute.apply(this, arguments);
   };
 })();
 </script>`;

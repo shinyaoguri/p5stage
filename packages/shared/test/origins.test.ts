@@ -12,6 +12,7 @@ describe("resolveOrigins", () => {
     ).toEqual({
       web: "https://p5stage.example",
       preview: "https://preview.p5stage.example",
+      assets: null,
     });
   });
 
@@ -24,6 +25,7 @@ describe("resolveOrigins", () => {
     ).toEqual({
       web: "https://p5stage.example",
       preview: "https://preview.p5stage.example",
+      assets: null,
     });
   });
 
@@ -36,7 +38,60 @@ describe("resolveOrigins", () => {
     ).toEqual({
       web: "http://localhost:4321",
       preview: "http://localhost:8788",
+      assets: null,
     });
+  });
+
+  it("アセットのオリジンも受け入れる (ADR 0014)", () => {
+    expect(
+      resolveOrigins({
+        web: "https://p5stage.example",
+        preview: "https://preview.p5stage.example",
+        assets: "https://assets.p5stage.example/",
+      })
+    ).toEqual({
+      web: "https://p5stage.example",
+      preview: "https://preview.p5stage.example",
+      assets: "https://assets.p5stage.example",
+    });
+  });
+
+  // 実行環境 (preview Worker) は配信先を知らないまま動く。
+  it.each([undefined, null])(
+    "アセットのオリジンを渡さなければ null (%j)",
+    (assets) => {
+      expect(
+        resolveOrigins({
+          web: "https://p5stage.example",
+          preview: "https://preview.p5stage.example",
+          assets,
+        }).assets
+      ).toBeNull();
+    }
+  );
+
+  // 他者がアップロードした中身を、本体からも実行環境からも配らない (ADR 0014)。
+  it.each(["https://p5stage.example", "https://preview.p5stage.example"])(
+    "アセットが本体・実行環境と同じオリジンなら拒否する (%s)",
+    (assets) => {
+      expect(() =>
+        resolveOrigins({
+          web: "https://p5stage.example",
+          preview: "https://preview.p5stage.example",
+          assets,
+        })
+      ).toThrow(OriginConfigError);
+    }
+  );
+
+  it("アセットのオリジンが不正なら拒否する", () => {
+    expect(() =>
+      resolveOrigins({
+        web: "https://p5stage.example",
+        preview: "https://preview.p5stage.example",
+        assets: "javascript:alert(1)",
+      })
+    ).toThrow(OriginConfigError);
   });
 
   it("同一オリジンを拒否する (要件 5.1 の別オリジン実行)", () => {

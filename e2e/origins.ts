@@ -36,6 +36,16 @@ export const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 export const PREVIEW_ORIGIN = `http://localhost:${PREVIEW_PORT}`;
 
 /**
+ * アセットを配るオリジン (ADR 0014)。
+ *
+ * 本番は本体と同じ Worker に別のホスト名を足す形なので、E2E も**同じサーバに
+ * 別のホスト名で当てる**。`localhost` と `127.0.0.1` はブラウザから見て別オリジン
+ * なので、プロセスを 1 つも増やさずに「同じ Worker の 2 つの顔」を再現できる
+ * (サーバをもう 1 つ立てると、ローカルの D1 / R2 を 2 プロセスで掴むことになる)。
+ */
+export const ASSETS_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
+
+/**
  * GitHub の代わりに答えるオリジン。
  *
  * 本体はループバック宛てしか受け付けないので (`lib/github/origins.ts`)、

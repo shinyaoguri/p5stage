@@ -31,6 +31,14 @@ export type {
 } from "./asset-manifest";
 
 export {
+  ASSET_ROUTE_PREFIX,
+  assetPath,
+  assetUrl,
+  assetUrlsForFiles,
+  assetUrlsFromManifest,
+} from "./asset-urls";
+
+export {
   DEFAULT_FILE_NAMES,
   ENTRY_FILE,
   MAX_FILE_BYTES,
@@ -55,6 +63,7 @@ export {
   parseRunnerMessage,
 } from "./protocol";
 export type {
+  AssetUrls,
   ConsoleLevel,
   Envelope,
   HostMessage,

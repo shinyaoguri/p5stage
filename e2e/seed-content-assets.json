@@ -1,0 +1,5 @@
+{
+  "index.html": "<!doctype html>\n<html lang=\"ja\">\n  <head>\n    <meta charset=\"utf-8\" />\n  </head>\n  <body>\n    <img id=\"written\" src=\"cat.png\" alt=\"\" />\n    <script src=\"sketch.js\"></script>\n  </body>\n</html>\n",
+  "sketch.js": "// 静的な書き換え (index.html の src) とは別に、代入で読む道も踏む。\n// p5 の loadImage は非 GIF のとき img.src へ元のパスを渡すので、\n// こちらが効かないと画像が読めない (ADR 0014)。\nconst assigned = new Image();\nassigned.id = \"assigned\";\nassigned.onload = () => {\n  assigned.dataset.width = String(assigned.naturalWidth);\n  document.body.append(assigned);\n};\nassigned.src = \"cat.png\";\n",
+  "assets.json": "{\n  \"version\": 1,\n  \"assets\": {\n    \"cat.png\": {\n      \"sha256\": \"7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe\",\n      \"size\": 70,\n      \"mime\": \"image/png\"\n    }\n  }\n}\n"
+}

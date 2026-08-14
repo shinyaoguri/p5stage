@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  ASSETS_ORIGIN,
   FAKE_GITHUB_ORIGIN,
   FAKE_GITHUB_PORT,
   PREVIEW_INSPECTOR_PORT,
@@ -61,13 +62,31 @@ const PERSIST_DIR = ".wrangler/e2e";
  */
 const SEED_SQL = "../../e2e/seed.sql";
 const SEED_CONTENT = "../../e2e/seed-content.json";
-const SEED_OBJECTS = ["e2e-gist-public", "e2e-gist-unlisted"]
+/** アセットを使う作品の中身 (Phase 3-3)。参照する実体は下の SEED_BLOB。 */
+const SEED_ASSET_CONTENT = "../../e2e/seed-content-assets.json";
+const SEED_OBJECTS = [
+  ["e2e-gist-public", SEED_CONTENT],
+  ["e2e-gist-unlisted", SEED_CONTENT],
+  ["e2e-gist-assets", SEED_ASSET_CONTENT],
+]
   .map(
-    (gistId) =>
-      `npx wrangler r2 object put p5stage-content/gists/${gistId}/e2erev01.json --file=${SEED_CONTENT} --content-type=application/json --local --persist-to ${PERSIST_DIR}`
+    ([gistId, content]) =>
+      `npx wrangler r2 object put p5stage-content/gists/${gistId}/e2erev01.json --file=${content} --content-type=application/json --local --persist-to ${PERSIST_DIR}`
   )
   .join(" && ");
-const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS}`;
+
+/**
+ * アセットの実体 (ADR 0014 の配信対象)。
+ *
+ * キーは中身の sha256 で、`e2e/fixtures/dot.png` と `e2e/seed-content-assets.json` の
+ * マニフェストが同じ値を指す。ずれていないことは `assets.spec.ts` が実ファイルから
+ * 計算し直して確かめる。
+ */
+const SEED_BLOB_SHA256 =
+  "7c12c1f9323964065d6b659ec1fe67544707644bf1ce287b9b1c195250adfdfe";
+const SEED_BLOB = `npx wrangler r2 object put p5stage-assets/blobs/${SEED_BLOB_SHA256} --file=../../e2e/fixtures/dot.png --content-type=image/png --local --persist-to ${PERSIST_DIR}`;
+
+const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOB}`;
 
 /**
  * ビルド成果物から `routes` を外す (#38 / `e2e/strip-dev-routes.ts`)。
@@ -111,7 +130,7 @@ export default defineConfig({
       // ビルドの後に `routes` を外す (下の STRIP_ROUTES)。付いたままだと
       // `wrangler dev` がその custom_domain をリクエスト URL のホストとして使い、
       // OAuth の `redirect_uri` が本番のドメインになって認可から戻れない。
-      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
+      command: `npm run build && ${STRIP_ROUTES} && npx wrangler d1 migrations apply p5stage --local --persist-to ${PERSIST_DIR} && ${SEED_COMMANDS} && npx wrangler dev --port ${WEB_PORT} --persist-to ${PERSIST_DIR} --var PUBLIC_PREVIEW_ORIGIN:${PREVIEW_ORIGIN} --var PUBLIC_ASSETS_ORIGIN:${ASSETS_ORIGIN} --var GITHUB_CLIENT_ID:e2e-client-id --var GITHUB_CLIENT_SECRET:e2e-client-secret --var GITHUB_TEST_ORIGIN:${FAKE_GITHUB_ORIGIN} --inspector-port ${WEB_INSPECTOR_PORT}`,
       cwd: appDir("web"),
       url: `${WEB_ORIGIN}/edit`,
       reuseExistingServer: !isCI,

@@ -13,6 +13,7 @@ import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
 import { env } from "cloudflare:workers";
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { configuredAssetsOrigin } from "../../lib/assets/delivery-origin";
 import {
   initialFileName,
   isCanonicalLogin,
@@ -53,14 +54,18 @@ const files = content.kind === "ready" ? content.files : null;
 const fileNames = files === null ? [] : orderedFileNames(files);
 const activeFile = files === null ? null : initialFileName(files);
 
-// 実行環境のオリジン (要件 5.1 / ADR 0007)。
+// 実行環境のオリジン (要件 5.1 / ADR 0007) とアセットの配信オリジン (ADR 0014)。
 let previewOrigin: string | null = null;
+let assetsOrigin: string | null = null;
 let originError: string | null = null;
 try {
-  previewOrigin = resolveOrigins({
+  const origins = resolveOrigins({
     web: Astro.url.origin,
     preview: env.PUBLIC_PREVIEW_ORIGIN,
-  }).preview;
+    assets: configuredAssetsOrigin(),
+  });
+  previewOrigin = origins.preview;
+  assetsOrigin = origins.assets;
 } catch (error) {
   if (!(error instanceof OriginConfigError)) throw error;
   originError = error.message;
@@ -112,6 +117,7 @@ const notice = (() => {
   <main
     class="sketch-page"
     data-preview-origin={previewOrigin}
+    data-assets-origin={assetsOrigin}
     data-active-file={activeFile}
   >
     <header class="sketch-header">

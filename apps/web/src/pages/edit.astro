@@ -3,17 +3,22 @@ import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
 import { env } from "cloudflare:workers";
 
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { configuredAssetsOrigin } from "../lib/assets/delivery-origin";
 
 // 実行環境のオリジンは実行時に決まるので、このページは静的化しない。
 export const prerender = false;
 
 let previewOrigin: string | null = null;
+let assetsOrigin: string | null = null;
 let originError: string | null = null;
 try {
-  previewOrigin = resolveOrigins({
+  const origins = resolveOrigins({
     web: Astro.url.origin,
     preview: env.PUBLIC_PREVIEW_ORIGIN,
-  }).preview;
+    assets: configuredAssetsOrigin(),
+  });
+  previewOrigin = origins.preview;
+  assetsOrigin = origins.assets;
 } catch (error) {
   if (!(error instanceof OriginConfigError)) throw error;
   originError = error.message;
@@ -25,7 +30,11 @@ try {
     originError !== null ? (
       <p class="error">実行環境のオリジン設定が不正です: {originError}</p>
     ) : (
-      <div id="editor-root" data-preview-origin={previewOrigin}>
+      <div
+        id="editor-root"
+        data-preview-origin={previewOrigin}
+        data-assets-origin={assetsOrigin}
+      >
         {/* 実行キャンバス。エディタはこの上に透過で重なる (要件 3.1)。 */}
         <div id="stage" />
         <div id="editor" />
@@ -62,6 +71,7 @@ try {
 <script>
   import {
     DEFAULT_SKETCH_FILES,
+    assetUrlsForFiles,
     isTransitionId,
     readAssetManifest,
     type TransitionRequest,
@@ -100,6 +110,9 @@ try {
 
   const root = document.getElementById("editor-root");
   const previewOrigin = root?.dataset.previewOrigin;
+  // アセットの配信オリジン。設定が無い構成でもエディタは動く (アセットだけ
+  // 解決されない) ので、実行を止める条件には入れない。
+  const assetsOrigin = root?.dataset.assetsOrigin ?? null;
   const editorHost = document.getElementById("editor");
   const tabsHost = document.getElementById("file-tabs");
   const stage = document.getElementById("stage");
@@ -210,7 +223,14 @@ try {
 
     const run = () => {
       consolePanel.clear();
-      host.run(editor.getFiles(), selectedTransition());
+      const files = editor.getFiles();
+      // 名前 → 配信 URL の解決は本体の仕事 (ADR 0014)。壊れたマニフェストは
+      // 空の表になる — その知らせは開いた時点で既に出している。
+      host.run(
+        files,
+        assetUrlsForFiles(files, assetsOrigin),
+        selectedTransition()
+      );
       // 保存済みの作品は、実行のたびに間引いて Gist へ書く (要件 3.2)。
       // リビジョンが「動かした形」の履歴になる。
       saver.scheduleSave();

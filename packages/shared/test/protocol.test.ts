@@ -21,6 +21,7 @@ describe("parseHostMessage", () => {
       type: "run",
       gen: 3,
       files,
+      assets: {},
       transition: null,
     });
   });
@@ -39,6 +40,7 @@ describe("parseHostMessage", () => {
       type: "run",
       gen: 1,
       files,
+      assets: {},
       transition: { id: "dissolve", durationMs: 300 },
     });
   });
@@ -74,8 +76,32 @@ describe("parseHostMessage", () => {
     ]) {
       expect(
         parseHostMessage(envelope({ type: "run", gen: 1, files, transition }))
-      ).toEqual({ type: "run", gen: 1, files, transition: null });
+      ).toEqual({ type: "run", gen: 1, files, assets: {}, transition: null });
     }
+  });
+
+  it("アセットの URL 表を読み取る (ADR 0014)", () => {
+    const assets = { "cat.png": "https://assets.example/a/abc/cat.png" };
+    expect(
+      parseHostMessage(envelope({ type: "run", gen: 1, files, assets }))
+    ).toMatchObject({ assets });
+  });
+
+  // 表の値はそのまま img.src や fetch の宛先になる。スケッチの中で任意のコードを
+  // 走らせる形 (javascript:) や、中身を送り込む形 (data:) を通さない。
+  it.each([
+    { "a.png": "javascript:alert(1)" },
+    { "a.png": "data:text/html,<script>alert(1)</script>" },
+    { "a.png": "blob:https://assets.example/1234" },
+    { "a.png": "/a/abc/a.png" },
+    { "a.png": 1 },
+    { "../a.png": "https://assets.example/a/abc/a.png" },
+    { "a/b.png": "https://assets.example/a/abc/b.png" },
+    [["a.png", "https://assets.example/a/abc/a.png"]],
+  ])("URL として受け付けられない表を持つ run を無視する (%j)", (assets) => {
+    expect(
+      parseHostMessage(envelope({ type: "run", gen: 1, files, assets }))
+    ).toBeNull();
   });
 
   it("stop を読み取る", () => {
