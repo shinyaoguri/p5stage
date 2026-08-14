@@ -44,6 +44,10 @@ try {
 
         <div id="file-tabs" />
 
+        {/* 実行ボタンと作品の名前。編集中に最も多く押す操作なので、右上の操作列に
+            混ぜず画面上部中央に単独で置く (#41 の 3)。 */}
+        <div id="project-bar" />
+
         {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。
             下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。
 
@@ -53,12 +57,6 @@ try {
         <div class="chrome">
           <span id="draft-status" class="status draft-status" role="status" />
           <span id="status" class="status" role="status" />
-          <button id="run" type="button">
-            実行 (⌘/Ctrl+Enter)
-          </button>
-          <button id="stop" type="button">
-            停止
-          </button>
           <div id="save-controls" />
           <div id="new-controls" />
           {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
@@ -104,8 +102,11 @@ try {
     SketchLoadError,
     sketchIdFromUrl,
   } from "../scripts/sketch/open-sketch";
+  import { ProjectBar } from "../scripts/editor/project-bar";
+  import { generateProjectName } from "../scripts/sketch/project-name";
   import { SavePanel } from "../scripts/sketch/save-panel";
   import { SketchSaver } from "../scripts/sketch/sketch-saver";
+  import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
   import { makeToolbarButton } from "../scripts/ui/toolbar-button";
@@ -129,6 +130,7 @@ try {
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const newHost = document.getElementById("new-controls");
+  const projectBarHost = document.getElementById("project-bar");
 
   /**
    * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
@@ -152,7 +154,8 @@ try {
       !consoleHost ||
       !settingsHost ||
       !saveHost ||
-      !adoptHost
+      !adoptHost ||
+      !projectBarHost
     ) {
       return;
     }
@@ -238,10 +241,44 @@ try {
         assetUrlsForFiles(files, assetsOrigin),
         selectedTransition()
       );
+      // 今の中身を動かしたので、実行後の変更は無くなった (#41 の 3 の青ドット)。
+      projectBar.setRunning(true);
+      projectBar.setStale(false);
       // 保存済みの作品は、実行のたびに間引いて Gist へ書く (要件 3.2)。
       // リビジョンが「動かした形」の履歴になる。
       saver.scheduleSave();
     };
+
+    const stop = () => {
+      host.stop();
+      projectBar.setRunning(false);
+      setStatus("停止しました");
+    };
+
+    /**
+     * 最初に出す名前 (#41 の 3)。
+     *
+     * 中身をどこから採ったか (`start.source`) と揃える。下書きから始めたなら
+     * 下書きの名前 — そちらの方が新しい。**どこにも無ければ自動生成**して、
+     * 保存前から名前を持たせる。
+     */
+    const initialName =
+      (start.source === "draft" ? draft?.title : null) ??
+      opened?.title ??
+      draft?.title ??
+      generateProjectName();
+
+    const projectBar = new ProjectBar(projectBarHost, {
+      onRun: run,
+      onStop: stop,
+      onRename: (name) => {
+        // 保存前の名前は下書きにしか置き場が無い。保存済みなら正本へも書き戻す。
+        saveDraft();
+        const current = saver.state.sketchId;
+        if (current !== null) titleSaver.schedule(current, name);
+      },
+    });
+    projectBar.setName(initialName);
 
     const draftSaver = new DraftSaver({
       onSaved: (saved) =>
@@ -252,19 +289,25 @@ try {
     });
 
     // 下書きは内容の変更 (onChange) だけでなく、ファイルの増減・改名・
-    // 開いているファイルの移動 (onFilesChanged) でも書く。
+    // 開いているファイルの移動 (onFilesChanged) でも書く。名前も一緒に持たせる —
+    // 保存前の作品の名前はここにしか置き場が無い (#41 の 3)。
     const saveDraft = () =>
-      draftSaver.save(
-        editor.getFiles(),
-        editor.activeFile,
-        saver.state.sketchId
-      );
+      draftSaver.save(editor.getFiles(), editor.activeFile, {
+        sketchId: saver.state.sketchId,
+        title: projectBar.name,
+      });
+
+    // 開いただけでは下書きを書かない (「復元しました」が出る条件になってしまう)。
+    // 自動生成した名前が残るのは、リネームか編集で下書きを書いた後 — どちらも
+    // saveDraft を通る。何も触っていない作品の名前は、失っても困るものが無い。
 
     // 手元 (下書き) と正本 (Gist) の両方に「変わった」を伝える。伝え先が
     // 別々なので、片方だけ呼ぶ経路を作らないようここで束ねる。
     const onEdited = () => {
       saveDraft();
       saver.markDirty();
+      // 動かした後に書き換えた = 画面のスケッチは今の中身ではない。
+      projectBar.setStale(true);
     };
 
     const editor = new CodeEditor(editorHost, {
@@ -279,14 +322,28 @@ try {
       },
     });
 
+    // 名前の書き戻し。保存済みの作品だけが対象 (#41 の 3)。
+    const titleSaver = new TitleSaver({ onError: setDraftStatus });
+
     const savePanel = new SavePanel(saveHost, {
-      onSave: (meta) => void saver.saveNow(meta),
+      // 名前は画面上部の入力欄が持つ。初回の保存はそれと公開範囲を束ねて送る。
+      onSave: (visibility) =>
+        void saver.saveNow(
+          visibility === null ? null : { title: projectBar.name, visibility }
+        ),
       onDetach: () => void detachCurrentSketch(),
+      getTitle: () => projectBar.name,
     });
     const saver = new SketchSaver({
       sketchId,
       getFiles: () => editor.getFiles(),
-      onState: (state) => savePanel.render(state),
+      onState: (state) => {
+        savePanel.render(state);
+        // 器ができた時点で、その名前は正本に載っている。開き直しの往復を省く。
+        if (state.sketchId !== null && state.status === "saved") {
+          titleSaver.markSent(state.sketchId, projectBar.name);
+        }
+      },
       onCreated: showSketchIdInUrl,
     });
 
@@ -336,6 +393,11 @@ try {
         editor.setFiles(adopted.files, preferredActiveFile(adopted.files));
         void draftSaver.clear();
         saver.adopt(adopted.sketchId, adopted.gist);
+        // 名前は Gist の description に入っていたもの。取り込んだ側で作り直すと、
+        // 同じ作品が別の名前で並ぶ。読めなかったときだけ新しく振る。
+        const adoptedName = adopted.title ?? generateProjectName();
+        projectBar.setName(adoptedName);
+        titleSaver.markSent(adopted.sketchId, adoptedName);
         showSketchIdInUrl(adopted.sketchId);
         setDraftStatus("Gist から取り込みました");
         run();
@@ -370,6 +432,8 @@ try {
       // Gist への保存は往復が要るので、離脱間際に始めても着地しない。予約は
       // 捨てて未保存のままにする (中身は下書きに残るので次に開けば続けられる)。
       saver.cancelScheduled();
+      // 名前も同じ理由で送り切れない。次に開いたときは下書きの名前が出る。
+      titleSaver.cancelScheduled();
     };
     window.addEventListener("pagehide", flushAll);
     document.addEventListener("visibilitychange", () => {
@@ -406,12 +470,6 @@ try {
     });
     tabs.render(editor.fileNames, editor.activeFile);
 
-    document.getElementById("run")?.addEventListener("click", run);
-    document.getElementById("stop")?.addEventListener("click", () => {
-      host.stop();
-      setStatus("停止しました");
-    });
-
     // 下書きは黙って復元される。戻る道が無いと前回の続きから抜けられないので、
     // 破棄して最初から始める口をここに置く。
     newHost?.appendChild(
@@ -429,6 +487,9 @@ try {
           // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
           editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
           void draftSaver.clear();
+          // 別の作品として始めるので名前も新しく振る (前の名前が残ると、
+          // 中身だけ入れ替わった同名の作品になる)。
+          projectBar.setName(generateProjectName());
           // 開いていた作品から切り離す。ここを忘れると、新しく書き始めた内容が
           // 前の作品の Gist を上書きする。
           saver.detach();
@@ -493,14 +554,26 @@ try {
   }
 
   /* 透過エディタ。スケッチの上に重ね、端はスケッチが見えるよう余白を空ける。
-     左右と下は共通の余白 (styles/editor-chrome.css)。上だけは操作列の分を空ける
-     必要があり、テキストボタンが折り返す今は 3.5rem 要る (#41 の 2 でアイコン列に
-     置き換えたら、ここも共通の余白まで下げられる)。 */
+     左右と下は共通の余白 (styles/editor-chrome.css)。上だけは操作列とファイルタブの
+     分を空ける。アイコン列になった今 (#41 の 2-3)、必要な高さは 28px のボタンと
+     上下の余白で 2.75rem に収まる (テキストボタンが折り返していた頃は 3.5rem 要った)。 */
   #editor {
     position: absolute;
     z-index: 10;
-    inset: max(3.5rem, var(--editor-padding)) max(0.5rem, var(--editor-padding))
-      max(0.5rem, var(--editor-padding));
+    inset: max(2.75rem, var(--editor-padding))
+      max(0.5rem, var(--editor-padding)) max(0.5rem, var(--editor-padding));
+  }
+
+  /* 実行ボタンと作品の名前。画面幅の中央に置く (#41 の 3)。
+     中身の見た目は styles/project-bar.css。 */
+  #project-bar {
+    position: absolute;
+    /* 操作列より上。状態の文言は左へ伸びて中央に届くことがあり、そのとき
+       押せる面はこちら側なので上に置く (ファイルタブと同じ理由)。 */
+    z-index: 22;
+    top: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .chrome {
@@ -544,23 +617,6 @@ try {
     /* 右上の操作列に譲る幅。左の余白ぶんを差し引き、揃えた縦線を保ったまま
        操作列と重ならないところで止める。 */
     max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
-  }
-
-  /* テキストのまま残っている実行・停止だけの意匠 (#41 の 3 で中央の ▶/■ トグルに
-     作り替える)。アイコンボタンはスクリプトが組み立てるので、スコープ付きの
-     この規則は届かない — あちらの意匠は styles/toolbar-button.css が持つ。 */
-  .chrome button {
-    padding: 0.25rem 0.5rem;
-    border: 1px solid rgb(255 255 255 / 0.25);
-    border-radius: 0.25rem;
-    background: rgb(0 0 0 / 0.4);
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .chrome button:hover {
-    background: rgb(255 255 255 / 0.15);
   }
 
   .status {

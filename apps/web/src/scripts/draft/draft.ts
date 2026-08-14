@@ -26,6 +26,13 @@ export interface SketchDraft {
    * (Phase 2-3)。作品ごとに下書きを持ち分けるのは、作品を切り替える導線ができてから。
    */
   readonly sketchId: string | null;
+  /**
+   * 作品の名前 (#41 の 3)。読めなければ null。
+   *
+   * 保存前から名前を持つので (`sketch/project-name.ts` が自動生成する)、下書きにも
+   * 入れる。ここに無いと、リロードのたびに別の名前が振られて別の作品に見える。
+   */
+  readonly title: string | null;
 }
 
 /**
@@ -64,5 +71,12 @@ export function parseDraft(value: unknown): SketchDraft | null {
       ? source.sketchId
       : null;
 
-  return { files, activeFile, savedAt, sketchId };
+  // 名前が読めないものは「まだ付いていない」として扱う。呼び出し側が自動生成で
+  // 埋めるので、下書き全体を捨てる理由にはならない。
+  const title =
+    typeof source.title === "string" && source.title.trim() !== ""
+      ? source.title
+      : null;
+
+  return { files, activeFile, savedAt, sketchId, title };
 }

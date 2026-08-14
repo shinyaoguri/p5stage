@@ -12,13 +12,22 @@ describe("ドラフトの読み取り", () => {
         activeFile: "sketch.js",
         savedAt: 1234,
         sketchId: "AAAAAAAAAAAAAAAA",
+        title: "neon-wave-7fq",
       })
     ).toEqual({
       files: FILES,
       activeFile: "sketch.js",
       savedAt: 1234,
       sketchId: "AAAAAAAAAAAAAAAA",
+      title: "neon-wave-7fq",
     });
+  });
+
+  it("名前が読めなければ「まだ付いていない」として読む", () => {
+    // 呼び出し側が自動生成で埋める (#41 の 3)。下書き全体を捨てる理由にはならない。
+    expect(parseDraft({ files: FILES })?.title).toBeNull();
+    expect(parseDraft({ files: FILES, title: 42 })?.title).toBeNull();
+    expect(parseDraft({ files: FILES, title: "   " })?.title).toBeNull();
   });
 
   it("作品 ID が無ければ「まだ保存していない下書き」として読む", () => {

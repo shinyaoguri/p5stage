@@ -53,7 +53,7 @@ test.describe("スケッチの実行", () => {
     await openEditor(page);
 
     await typeIntoEditor(page, 'throw new Error("e2e-boom");');
-    await page.locator("#run").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
 
     await expectGeneration(page, 2);
     await expect(consolePanel(page)).toContainText("e2e-boom");
@@ -77,7 +77,7 @@ test.describe("スケッチの実行", () => {
       page,
       'fetch("data.txt").then((r) => r.text()).then((t) => console.log("read:" + t));'
     );
-    await page.locator("#run").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
 
     await expectGeneration(page, 2);
     await expect(consolePanel(page)).toContainText("read:e2e-file-body");
@@ -87,7 +87,7 @@ test.describe("スケッチの実行", () => {
     await openEditor(page);
     await expect.poll(() => hasSketchCanvas(page)).toBe(true);
 
-    await page.locator("#stop").click();
+    await page.locator("#run").click();
 
     await expect(page.locator("#status")).toHaveText("停止しました");
     // 止めるとは文書ごと捨てること (タイマー・音・カメラを手放す)。
@@ -102,11 +102,11 @@ test.describe("スケッチの実行", () => {
     await openEditor(page);
 
     await typeIntoEditor(page, 'console.log("e2e-first");');
-    await page.locator("#run").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
     await expect(consolePanel(page)).toContainText("e2e-first");
 
     await typeIntoEditor(page, 'console.log("e2e-second");');
-    await page.locator("#run").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
 
     await expect(consolePanel(page)).toContainText("e2e-second");
     await expect(consolePanel(page)).not.toContainText("e2e-first");

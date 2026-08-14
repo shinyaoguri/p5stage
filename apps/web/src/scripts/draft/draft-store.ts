@@ -61,10 +61,24 @@ export interface DraftSaverOptions {
   store?: Store<unknown>;
 }
 
+/**
+ * ファイル以外の付随情報。
+ *
+ * どちらも `string | null` なので、位置引数で並べると渡し違えても型で気付けない。
+ * 名前で渡す形にしておく。
+ */
+export interface DraftContext {
+  /** どの作品の下書きか。まだ保存していなければ null。 */
+  readonly sketchId?: string | null;
+  /** 作品の名前 (#41 の 3)。 */
+  readonly title?: string | null;
+}
+
 interface PendingDraft {
   readonly files: SketchDraft["files"];
   readonly activeFile: string;
   readonly sketchId: string | null;
+  readonly title: string | null;
 }
 
 export class DraftSaver {
@@ -87,9 +101,14 @@ export class DraftSaver {
   save(
     files: SketchDraft["files"],
     activeFile: string,
-    sketchId: string | null = null
+    context: DraftContext = {}
   ): void {
-    this.#pending = { files, activeFile, sketchId };
+    this.#pending = {
+      files,
+      activeFile,
+      sketchId: context.sketchId ?? null,
+      title: context.title ?? null,
+    };
 
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {

@@ -66,12 +66,14 @@ describe("ドラフトの読み込み", () => {
       activeFile: "sketch.js",
       savedAt: 5,
       sketchId: null,
+      title: "calm-echo-2b9",
     });
     expect(await loadDraft(fake.store)).toEqual({
       files: FILES,
       activeFile: "sketch.js",
       savedAt: 5,
       sketchId: null,
+      title: "calm-echo-2b9",
     });
   });
 
@@ -105,6 +107,35 @@ describe("ドラフトの保存", () => {
     expect((fake.values.get("current") as SketchDraft).files["sketch.js"]).toBe(
       "12"
     );
+  });
+
+  it("作品 ID と名前も一緒に書く", async () => {
+    const fake = createFakeStore();
+    const saver = new DraftSaver({ store: fake.store });
+
+    // 保存前の作品の名前はここにしか置き場が無い (#41 の 3)。落とすと、リロードの
+    // たびに別の名前が振られて別の作品に見える。
+    saver.save(FILES, "sketch.js", {
+      sketchId: "AAAAAAAAAAAAAAAA",
+      title: "misty-dune-4kz",
+    });
+    await vi.advanceTimersByTimeAsync(700);
+
+    const written = fake.values.get("current") as SketchDraft;
+    expect(written.sketchId).toBe("AAAAAAAAAAAAAAAA");
+    expect(written.title).toBe("misty-dune-4kz");
+  });
+
+  it("付随情報を渡さなければ null で書く", async () => {
+    const fake = createFakeStore();
+    const saver = new DraftSaver({ store: fake.store });
+
+    saver.save(FILES, "sketch.js");
+    await vi.advanceTimersByTimeAsync(700);
+
+    const written = fake.values.get("current") as SketchDraft;
+    expect(written.sketchId).toBeNull();
+    expect(written.title).toBeNull();
   });
 
   it("打鍵が続いていても最長の待ち時間で一度書く", async () => {
