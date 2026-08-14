@@ -27,6 +27,21 @@ export function sketchPermalink(sketchId: string): string {
 }
 
 /**
+ * 過去の版の URL (Phase 4-1)。
+ *
+ * 正典 URL にクエリを足すだけにしてある。**パスを分けない**のは、`<link rel="canonical">`
+ * がクエリの無い URL を指し続ける形にしたいため (公開作品の版は増え続けるので、
+ * 検索エンジンに近似重複を大量に見せない — ADR 0016)。
+ */
+export function sketchRevisionPath(
+  ownerLogin: string,
+  sketchId: string,
+  revision: string
+): string {
+  return `${sketchPath(ownerLogin, sketchId)}?rev=${encodeURIComponent(revision)}`;
+}
+
+/**
  * URL の login が正典どおりか。
  *
  * GitHub の login は大文字小文字を区別しないので、綴りが同じでも表記が違えば
