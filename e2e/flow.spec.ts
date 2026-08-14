@@ -90,8 +90,11 @@ test.describe("ログインの往復", () => {
   }) => {
     await signedInEditor(page);
 
-    await expect(page.locator(".account-login-name")).toHaveText(
-      FAKE_VIEWER.login
+    // 誰としてログインしているかは、操作列ではアバター 1 つに畳んである (#41 の 2)。
+    // 文字では出ないので、ボタンの名前 (ホバーと支援技術が読むもの) で確かめる。
+    await expect(page.locator("#logout")).toHaveAttribute(
+      "aria-label",
+      new RegExp(FAKE_VIEWER.login)
     );
 
     const session = (await context.cookies()).find(

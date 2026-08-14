@@ -10,7 +10,7 @@
 
 .save-panel {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--toolbar-gap);
   align-items: center;
 }
 
@@ -24,11 +24,6 @@
 }
 
 .save-gist-link {
-  color: rgb(255 255 255 / 0.7);
-}
-
-/* 切り離しは戻せない操作なので、保存と同じ重みでは出さない。 */
-.save-detach {
   color: rgb(255 255 255 / 0.7);
 }
 

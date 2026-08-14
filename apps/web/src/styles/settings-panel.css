@@ -18,26 +18,8 @@
   font-family: var(--ui-font-family);
 }
 
-.settings-panel-toggle {
-  padding: 0.25rem 0.5rem;
-  border: 1px solid rgb(255 255 255 / 0.25);
-  border-radius: 0.25rem;
-  background: rgb(0 0 0 / 0.4);
-  color: rgb(255 255 255 / 0.8);
-  font: inherit;
-  text-shadow: 0 0 3px #000;
-  cursor: pointer;
-}
-
-.settings-panel-toggle:hover,
-.settings-panel-toggle:focus-visible {
-  background: rgb(255 255 255 / 0.15);
-  color: #fff;
-}
-
-.settings-panel.is-open .settings-panel-toggle {
-  border-color: rgb(255 255 255 / 0.45);
-}
+/* ボタンの意匠は toolbar-button.css が持つ (操作列の他のボタンと同じもの)。
+   開いている間の見せ方も同じ仕組み (`is-active`) に乗る。 */
 
 .settings-panel-body {
   position: absolute;

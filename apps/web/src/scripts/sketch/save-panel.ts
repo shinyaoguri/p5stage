@@ -11,6 +11,7 @@ import "../../styles/dialog.css";
 import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
+import { makeToolbarButton } from "../ui/toolbar-button";
 
 import type { SaveState, SketchMeta } from "./sketch-saver";
 
@@ -88,11 +89,12 @@ export class SavePanel {
     this.#onDetach = options.onDetach;
     this.#host.classList.add("save-panel");
 
-    this.#button = document.createElement("button");
-    this.#button.type = "button";
-    this.#button.id = "save";
-    this.#button.textContent = "保存";
-    this.#button.addEventListener("click", () => this.#handleClick());
+    this.#button = makeToolbarButton({
+      id: "save",
+      icon: "save",
+      label: "保存",
+      onClick: () => this.#handleClick(),
+    });
 
     this.#status = document.createElement("span");
     this.#status.className = "save-status";
@@ -118,16 +120,16 @@ export class SavePanel {
 
     // 正本を差し替える口 (Phase 2-6)。GitHub 側で Gist を消してしまった作品を
     // 作り直す道でもあるので、Gist が付いている間はいつでも押せる場所に置く。
-    this.#detach = document.createElement("button");
-    this.#detach.type = "button";
-    this.#detach.id = "detach";
-    this.#detach.className = "save-detach";
-    this.#detach.textContent = "Gist を外す";
-    this.#detach.hidden = true;
-    this.#detach.addEventListener("click", () => {
-      if (!window.confirm(DETACH_CONFIRM)) return;
-      this.#onDetach();
+    this.#detach = makeToolbarButton({
+      id: "detach",
+      icon: "unlink",
+      label: "Gist を外す",
+      onClick: () => {
+        if (!window.confirm(DETACH_CONFIRM)) return;
+        this.#onDetach();
+      },
     });
+    this.#detach.hidden = true;
 
     this.#titleInput = document.createElement("input");
     this.#dialog = this.#buildDialog();

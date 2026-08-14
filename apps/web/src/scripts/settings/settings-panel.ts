@@ -19,6 +19,7 @@ import {
   type SettingKey,
 } from "./definitions";
 import { DEFAULT_SETTINGS, withSetting } from "./settings";
+import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
 
 export interface SettingsPanelOptions {
   /** 設定が変わった (即時反映と保存の受け口)。 */
@@ -51,11 +52,12 @@ export class SettingsPanel {
     this.#settings = settings;
     this.#options = options;
 
-    this.#toggle = document.createElement("button");
-    this.#toggle.type = "button";
-    this.#toggle.className = "settings-panel-toggle";
-    this.#toggle.textContent = "設定";
-    this.#toggle.addEventListener("click", () => this.toggle());
+    this.#toggle = makeToolbarButton({
+      icon: "settings",
+      label: "エディタの設定を開く",
+      onClick: () => this.toggle(),
+    });
+    this.#toggle.classList.add("settings-panel-toggle");
 
     this.#body = document.createElement("div");
     this.#body.className = "settings-panel-body";
@@ -118,7 +120,12 @@ export class SettingsPanel {
     this.#container.classList.toggle("is-open", this.#open);
     this.#body.hidden = !this.#open;
     this.#toggle.setAttribute("aria-expanded", String(this.#open));
-    this.#toggle.title = this.#open ? "設定を閉じる" : "エディタの設定を開く";
+    // 開いている間は押されたままに見せる (アイコンなので文字で示せない)。
+    this.#toggle.classList.toggle("is-active", this.#open);
+    setToolbarButtonLabel(
+      this.#toggle,
+      this.#open ? "設定を閉じる" : "エディタの設定を開く"
+    );
   }
 
   #createGroup(title: string, keys: readonly SettingKey[]): HTMLElement {

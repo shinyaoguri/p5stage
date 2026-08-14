@@ -45,20 +45,22 @@ try {
         <div id="file-tabs" />
 
         {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。
-            下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。 */}
+            下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。
+
+            並びは「文字 → アイコン」。実行と停止だけまだテキストボタンなので
+            (#41 の 3 で中央の ▶/■ トグルに作り替えるため、ここでは触らない)、
+            文字が続く左側に寄せて、アイコン列が右端で途切れないようにする。 */}
         <div class="chrome">
           <span id="draft-status" class="status draft-status" role="status" />
           <span id="status" class="status" role="status" />
-          <div id="save-controls" />
           <button id="run" type="button">
             実行 (⌘/Ctrl+Enter)
           </button>
           <button id="stop" type="button">
             停止
           </button>
-          <button id="new" type="button">
-            新規
-          </button>
+          <div id="save-controls" />
+          <div id="new-controls" />
           {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
           <div id="adopt-controls" />
           <div id="settings" />
@@ -106,6 +108,7 @@ try {
   import { SketchSaver } from "../scripts/sketch/sketch-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
+  import { makeToolbarButton } from "../scripts/ui/toolbar-button";
   import {
     SettingsSaver,
     loadSettings,
@@ -125,6 +128,7 @@ try {
   const draftStatus = document.getElementById("draft-status");
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
+  const newHost = document.getElementById("new-controls");
 
   /**
    * 下書きの時刻。「いつの続きか」が分かればよいので月日と分まで。
@@ -410,22 +414,31 @@ try {
 
     // 下書きは黙って復元される。戻る道が無いと前回の続きから抜けられないので、
     // 破棄して最初から始める口をここに置く。
-    document.getElementById("new")?.addEventListener("click", () => {
-      if (!window.confirm("編集中の内容を破棄して新しいスケッチを始めます。")) {
-        return;
-      }
-      // 差し替えで onFilesChanged が走り保存が予約される。その予約ごと
-      // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
-      editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
-      void draftSaver.clear();
-      // 開いていた作品から切り離す。ここを忘れると、新しく書き始めた内容が
-      // 前の作品の Gist を上書きする。
-      saver.detach();
-      clearSketchIdInUrl();
-      setDraftStatus("下書きを破棄しました");
-      run();
-      editor.focus();
-    });
+    newHost?.appendChild(
+      makeToolbarButton({
+        id: "new",
+        icon: "newSketch",
+        label: "新しいスケッチ",
+        onClick: () => {
+          if (
+            !window.confirm("編集中の内容を破棄して新しいスケッチを始めます。")
+          ) {
+            return;
+          }
+          // 差し替えで onFilesChanged が走り保存が予約される。その予約ごと
+          // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
+          editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
+          void draftSaver.clear();
+          // 開いていた作品から切り離す。ここを忘れると、新しく書き始めた内容が
+          // 前の作品の Gist を上書きする。
+          saver.detach();
+          clearSketchIdInUrl();
+          setDraftStatus("下書きを破棄しました");
+          run();
+          editor.focus();
+        },
+      })
+    );
 
     // エディタの外 (ボタンやファイル選択) にフォーカスがあるときの ⌘/Ctrl+Enter。
     // エディタ内の keydown は CodeEditor 側が拾って伝播を止めるので二重に走らない。
@@ -500,7 +513,7 @@ try {
     /* 折り返しても右端に揃える。左へ伸びた部分は空きになり、下のファイルタブが
        見えたまま残る。 */
     justify-content: flex-end;
-    gap: 0.75rem;
+    gap: var(--toolbar-gap);
     align-items: center;
     /* 右端はエディタと同じ縦線に揃える (styles/editor-chrome.css)。 */
     padding: 0.5rem max(0.5rem, var(--editor-padding));
@@ -533,6 +546,9 @@ try {
     max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
   }
 
+  /* テキストのまま残っている実行・停止だけの意匠 (#41 の 3 で中央の ▶/■ トグルに
+     作り替える)。アイコンボタンはスクリプトが組み立てるので、スコープ付きの
+     この規則は届かない — あちらの意匠は styles/toolbar-button.css が持つ。 */
   .chrome button {
     padding: 0.25rem 0.5rem;
     border: 1px solid rgb(255 255 255 / 0.25);
@@ -540,9 +556,6 @@ try {
     background: rgb(0 0 0 / 0.4);
     color: inherit;
     font: inherit;
-  }
-
-  .chrome button {
     cursor: pointer;
   }
 

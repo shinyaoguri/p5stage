@@ -11,6 +11,8 @@
 import "../../styles/dialog.css";
 import "../../styles/adopt-panel.css";
 
+import { makeToolbarButton } from "../ui/toolbar-button";
+
 export interface AdoptPanelOptions {
   /**
    * 取り込みが確定した。**成功なら null、失敗なら見せる文言**を返す。
@@ -38,11 +40,12 @@ export class AdoptPanel {
     this.#proceed = document.createElement("button");
     this.#dialog = this.#buildDialog();
 
-    const open = document.createElement("button");
-    open.type = "button";
-    open.id = "adopt";
-    open.textContent = "Gist から開く";
-    open.addEventListener("click", () => this.#open());
+    const open = makeToolbarButton({
+      id: "adopt",
+      icon: "import",
+      label: "Gist から開く",
+      onClick: () => this.#open(),
+    });
 
     host.appendChild(open);
     host.appendChild(this.#dialog);
