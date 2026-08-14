@@ -1,10 +1,15 @@
-import { ENTRY_FILE, MAX_FILE_COUNT } from "@p5stage/shared";
+import {
+  ASSET_MANIFEST_FILE,
+  ENTRY_FILE,
+  MAX_FILE_COUNT,
+} from "@p5stage/shared";
 import { describe, expect, it } from "vitest";
 
 import {
   checkAddFile,
   checkRemoveFile,
   checkRenameFile,
+  isManagedFile,
   isProtectedFile,
   nextActiveFile,
   suggestFileName,
@@ -21,6 +26,13 @@ describe("isProtectedFile", () => {
   });
 });
 
+describe("isManagedFile", () => {
+  it("アセットの一覧だけを p5stage の持ち物として扱う", () => {
+    expect(isManagedFile(ASSET_MANIFEST_FILE)).toBe(true);
+    expect(isManagedFile("data.json")).toBe(false);
+  });
+});
+
 describe("checkAddFile", () => {
   it("新しい名前を受け付ける", () => {
     expect(checkAddFile("shader.glsl", DEFAULT)).toBeNull();
@@ -33,6 +45,12 @@ describe("checkAddFile", () => {
   it("ファイル名として不正な理由をそのまま返す", () => {
     expect(checkAddFile("lib/util.js", DEFAULT)).toContain("フォルダ");
     expect(checkAddFile("", DEFAULT)).toContain("入力");
+  });
+
+  it("アセットの一覧の名前は手で作れない (予約名)", () => {
+    expect(checkAddFile(ASSET_MANIFEST_FILE, DEFAULT)).toContain(
+      ASSET_MANIFEST_FILE
+    );
   });
 
   it("ファイル数の上限で止める", () => {
@@ -64,6 +82,19 @@ describe("checkRenameFile", () => {
 
   it("ファイル名として不正な理由をそのまま返す", () => {
     expect(checkRenameFile("sketch.js", " main.js", DEFAULT)).toContain("空白");
+  });
+
+  it("アセットの一覧は名前を変えられない (黙ってアセットが消えるため)", () => {
+    const files = [...DEFAULT, ASSET_MANIFEST_FILE];
+    expect(
+      checkRenameFile(ASSET_MANIFEST_FILE, "assets2.json", files)
+    ).toContain(ASSET_MANIFEST_FILE);
+  });
+
+  it("アセットの一覧の名前へは変えられない (予約名)", () => {
+    expect(
+      checkRenameFile("sketch.js", ASSET_MANIFEST_FILE, DEFAULT)
+    ).toContain(ASSET_MANIFEST_FILE);
   });
 
   it("無いファイルは対象にできない", () => {

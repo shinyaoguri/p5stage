@@ -153,6 +153,46 @@ export async function recordBlob(
   ]);
 }
 
+/**
+ * 1 回の問い合わせに載せる sha256 の数。
+ *
+ * D1 は 1 文への束縛を 100 個までしか受け付けないので、超える分は分けて引く。
+ * 上限ぎりぎりに寄せず、ユーザー ID の分を足しても余る幅にしてある。
+ */
+const DIGEST_CHUNK = 90;
+
+/**
+ * 参照しようとしている blob のうち、その人に計上されていないものを返す (3-2)。
+ *
+ * マニフェストが指せるのは**自分が持ち込んだ blob だけ**。sha256 さえ書けば他人の
+ * blob を参照できる形にすると、クォータを一切使わずに作品を作れてしまい、
+ * 「所有で数える」(ADR 0003 の補足) が上限として働かなくなる。他人のアセットを
+ * 持ち込む道はフォーク (Phase 4) で、そこでは `user_blobs` に行が増える。
+ */
+export async function unclaimedDigests(
+  db: D1Database,
+  userId: number,
+  digests: readonly string[]
+): Promise<string[]> {
+  const claimed = new Set<string>();
+
+  for (let index = 0; index < digests.length; index += DIGEST_CHUNK) {
+    const chunk = digests.slice(index, index + DIGEST_CHUNK);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT sha256 FROM user_blobs
+          WHERE user_id = ? AND sha256 IN (${placeholders})`
+      )
+      .bind(userId, ...chunk)
+      .all<{ readonly sha256: string }>();
+
+    for (const row of results) claimed.add(row.sha256);
+  }
+
+  return digests.filter((digest) => !claimed.has(digest));
+}
+
 /** 自分が持ち込んだ blob を新しい順に引く (管理 UI は 3-4)。 */
 export async function listBlobsByOwner(
   db: D1Database,

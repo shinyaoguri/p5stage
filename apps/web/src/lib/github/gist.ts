@@ -5,7 +5,7 @@
  * ので (ADR 0009) そもそもブラウザからは叩けないし、閲覧のトラフィックを GitHub へ
  * 直接流さない約束 (要件 5.2) とも同じ向きになる。
  *
- * 応答の検証は自前。zod は Phase 3 で `assets.json` を扱うときに入れる。
+ * 応答の検証は自前 (`assets.json` の検証も手書きにした — ADR 0003 の 3-2 補足)。
  */
 
 import type { SketchFiles } from "@p5stage/shared";
