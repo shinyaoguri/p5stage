@@ -4,10 +4,18 @@
  * 移植元は canvastage の `#project-bar`。実行は**編集中に最も多く押す操作**なので、
  * 右上の操作列に混ぜず、中央に単独で置いて狙いやすくする。
  *
- * 状態は文字ではなくアイコンで示す。
+ * 状態は文字ではなくアイコンで示す (#41 の 6)。`実行 #3` / `停止しました` の
+ * ような文字はここに畳んだ。
  *
- * - 実行中かどうか … ▶ / ■ のトグル
- * - 実行中の表示が古い (実行してから編集した) … ボタン右上の青いドット
+ * - 動いていない … ▶ (押すと実行)
+ * - 動いていて、実行してから編集した … ▶ + 青いドット (押すと再実行)
+ * - 動いていて、画面の中身が今のコードのまま … ■ (押すと停止)
+ *
+ * **止まらない道は作らない。** 押した先が再実行に変わるのは「実行すべきものが
+ * ある」間だけで、実行してしまえば ■ に戻る。
+ *
+ * 実行の**世代**は `data-generation` に載せる。文字を消しても、往復の
+ * ハンドシェイクが通ったことを機械が読めるようにしておく必要がある (ADR 0007)。
  *
  * 名前は常時編集できる `<input>`。下線だけの控えめな見た目にして、スケッチの
  * 上に置いても邪魔にならないようにする。
@@ -57,8 +65,10 @@ export class ProjectBar {
       id: "run",
       icon: "play",
       label: "実行",
+      // 止めるのは「動いていて、かつ画面が今のコードのまま」のときだけ。
+      // 書き換えた後に押すのは、ほぼ必ず再実行のつもりなので実行へ倒す。
       onClick: () => {
-        if (this.#running) this.#options.onStop();
+        if (this.#running && !this.#stale) this.#options.onStop();
         else this.#options.onRun();
       },
     });
@@ -127,13 +137,31 @@ export class ProjectBar {
     this.#renderButton();
   }
 
+  /**
+   * 画面に出ている実行の世代 (#41 の 6)。
+   *
+   * ランナーが `rendered` を返した = 往復が通ったときだけ進む。文字で `実行 #n` と
+   * 出していた頃と同じ材料を、機械が読める形で残す (E2E の待ち合わせ — ADR 0007)。
+   */
+  setGeneration(generation: number): void {
+    this.#button.dataset.generation = String(generation);
+  }
+
   #renderButton(): void {
-    setToolbarButtonIcon(this.#button, this.#running ? "stop" : "play");
+    // 停止できるのは「動いていて、画面が今のコードのまま」のときだけ。それ以外は
+    // 押すと実行なので ▶ を出す — アイコンと押した結果を食い違わせない。
+    const canStop = this.#running && !this.#stale;
+    setToolbarButtonIcon(this.#button, canStop ? "stop" : "play");
     setToolbarButtonLabel(
       this.#button,
-      this.#running ? "停止" : `実行 (${runShortcutLabel()})`
+      canStop
+        ? "停止"
+        : `${this.#running ? "再実行" : "実行"} (${runShortcutLabel()})`
     );
     // 「実行中で、かつ実行後に編集した」だけ。止まっているときは出さない。
     this.#button.classList.toggle("is-stale", this.#running && this.#stale);
+    // 動いているかどうかは、意匠ではなく構造で読めるようにしておく (E2E は
+    // ▶/■ の絵ではなくこちらを見る)。
+    this.#button.dataset.running = String(this.#running);
   }
 }

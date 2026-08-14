@@ -30,6 +30,7 @@ import {
   logout,
   openEditor,
   saveAgain,
+  saveButton,
   saveNewSketch,
   saveStatus,
   typeIntoEditor,
@@ -124,6 +125,33 @@ test.describe("ログインの往復", () => {
 });
 
 test.describe("保存から閲覧まで", () => {
+  test("保存の状態は保存アイコン自身が持つ", async ({ page }) => {
+    await signedInEditor(page);
+
+    // まだ一度も保存していない。
+    await expect(saveButton(page)).toHaveAttribute(
+      "data-save-status",
+      "unsaved"
+    );
+
+    await saveNewSketch(page, "状態の見え方", "unlisted");
+    // 保存できた = 緑 (#41 の 6)。
+    await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
+
+    await typeIntoEditor(page, sketchCode("E2E_DIRTY"));
+
+    // 書き換えたら未保存の変更 = 橙のドット。文字で出していた頃と違い、書いて
+    // いる間ずっと同じ場所に出続けるものではない。
+    await expect(saveButton(page)).toHaveAttribute("data-save-status", "dirty");
+    // **色もドットも読み上げられない**ので、文字は支援技術向けに残してある。
+    await expect(saveStatus(page)).toHaveText("未保存の変更があります");
+    // 押したときに何が起きるかだけでなく、今どうなっているかも名前から読める。
+    await expect(saveButton(page)).toHaveAttribute(
+      "aria-label",
+      "保存 (未保存の変更があります)"
+    );
+  });
+
   test("保存した作品を、未ログインの別ブラウザが開いて実行できる", async ({
     page,
     browser,
@@ -316,7 +344,9 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     await page.locator("#adopt-confirm").click();
 
     // 別の作品として立ち上がり、その Gist が正本になる。取り込みは「開き直した」
-    // のと同じ扱いなので、時刻の付かない「保存済み」になる。
+    // のと同じ扱いなので、時刻の付かない「保存済み」になる。時刻が付くかどうかは
+    // アイコンの色に出ないので、支援技術へ渡している文字の方で見る (#41 の 6)。
+    await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
     await expect(saveStatus(page)).toHaveText("保存済み");
     const adopted = new URL(page.url()).searchParams.get("sketch");
     expect(adopted).not.toBe(first);

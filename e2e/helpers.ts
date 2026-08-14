@@ -17,15 +17,26 @@ export async function openEditor(page: Page): Promise<void> {
   await expectGeneration(page, 1);
 }
 
+/** 実行・停止ボタン (画面上部中央)。 */
+export function runButton(page: Page): Locator {
+  return page.locator("#run");
+}
+
 /**
  * 指定の世代が画面に出るまで待つ。
  *
- * 表示が `実行 #n` に変わるのは、本体 → ランナーの `run` に対してランナーが
+ * `data-generation` が進むのは、本体 → ランナーの `run` に対してランナーが
  * `rendered` を返したときだけ。つまりこれを待つことが、往復のハンドシェイクが
  * 通ったことの確認になる (ADR 0007)。
+ *
+ * `実行 #n` の文字を消した後も、待ち合わせの材料は要る (#41 の 6)。文字ではなく
+ * 属性を見るので、意匠を変えてもここは落ちない。
  */
 export function expectGeneration(page: Page, gen: number): Promise<void> {
-  return expect(page.locator("#status")).toHaveText(`実行 #${gen}`);
+  return expect(runButton(page)).toHaveAttribute(
+    "data-generation",
+    String(gen)
+  );
 }
 
 /** 実行 iframe (本体が置く 1 枚。中身は別オリジンのランナー)。 */
@@ -135,9 +146,30 @@ export async function logout(page: Page): Promise<void> {
   await page.locator("#logout").click();
 }
 
-/** 保存パネルの状態表示。 */
+/**
+ * 保存の状態を支援技術へ渡している文字 (#41 の 6)。
+ *
+ * 画面に出ているのは保存アイコンの色とドットだけで、この文字は読み上げ専用
+ * (`.save-status-sr` で面積を潰してある)。**色は読み上げられない**ので、ここが
+ * 空になっていないことにも意味がある。
+ */
 export function saveStatus(page: Page): Locator {
   return page.locator("#save-status");
+}
+
+/** 保存ボタン。色とドットの状態は `data-save-status` から読む (#41 の 6)。 */
+export function saveButton(page: Page): Locator {
+  return page.locator("#save");
+}
+
+/** 下書きの印 (書く前は出ていない)。時刻は `data-saved-at` から読む。 */
+export function draftIndicator(page: Page): Locator {
+  return page.locator("#draft-status");
+}
+
+/** 直すまで続く条件を示す警告アイコン (出ている条件が無ければ隠れている)。 */
+export function warningIndicator(page: Page): Locator {
+  return page.locator("#warnings");
 }
 
 /** 作品の名前 (画面上部中央の入力欄)。 */
@@ -179,7 +211,7 @@ export async function saveNewSketch(
     .check();
   await page.locator("#save-confirm").click();
 
-  await expect(saveStatus(page)).toContainText("保存しました");
+  await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
 
   // 保存できると URL に作品 ID が載る (open-sketch.ts)。
   const id = new URL(page.url()).searchParams.get("sketch");
@@ -190,15 +222,17 @@ export async function saveNewSketch(
 /**
  * 2 回目以降の保存 (尋ねられることは無い)。**保存すべきものがある状態で呼ぶ**。
  *
- * 押す前に「保存しました」が消えていることを確かめるのは、前回の保存と区別するため。
- * 表示は時刻しか変わらないので、それを見ないと押す前の状態のまま通ってしまう。
- * 消えた後の文言は経緯で変わる (編集後なら「未保存の変更があります」、Gist を
- * 外した後なら「未保存」) ので、消えたことだけを見る。
+ * 押す前に `saved` が外れていることを確かめるのは、前回の保存と区別するため。
+ * それを見ないと押す前の状態のまま通ってしまう。外れた後の状態は経緯で変わる
+ * (編集後なら `dirty`、Gist を外した後なら `unsaved`) ので、外れたことだけを見る。
  */
 export async function saveAgain(page: Page): Promise<void> {
-  await expect(saveStatus(page)).not.toContainText("保存しました");
+  await expect(saveButton(page)).not.toHaveAttribute(
+    "data-save-status",
+    "saved"
+  );
   await page.locator("#save").click();
-  await expect(saveStatus(page)).toContainText("保存しました");
+  await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
 }
 
 /**

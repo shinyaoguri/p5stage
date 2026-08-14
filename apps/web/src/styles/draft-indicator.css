@@ -1,0 +1,37 @@
+/*
+ * 下書きの状態を示すドットの見た目 (#41 の 6)。
+ *
+ * 組み立ては scripts/draft/draft-indicator.ts。
+ *
+ * 操作列の一員として並ぶが、押せる口ではないので**ボタンと同じ大きさの中に
+ * 小さな点を置く**形にする。並びの間隔はアイコンボタンと同じ間隔のまま、
+ * 点だけが控えめに見える。
+ */
+
+.draft-indicator {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  align-items: center;
+  width: var(--toolbar-btn-size);
+  height: var(--toolbar-btn-size);
+}
+
+/* `display` を指定すると、ブラウザ既定の `[hidden] { display: none }` に勝って
+   しまう (toolbar-button.css と同じ事情 — #41 の 2 で踏んだ)。 */
+.draft-indicator[hidden] {
+  display: none;
+}
+
+.draft-indicator::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  /* 書けていることは平常。目の端に入るだけでよく、読ませる必要は無い。 */
+  background: rgb(255 255 255 / 0.35);
+}
+
+.draft-indicator:hover::before {
+  background: rgb(255 255 255 / 0.7);
+}

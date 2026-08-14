@@ -10,6 +10,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   addFile,
+  draftIndicator,
   fileTab,
   fileTabNames,
   openEditor,
@@ -27,7 +28,12 @@ test.describe("下書き", () => {
 
     await typeIntoEditor(page, 'console.log("e2e-draft");');
     // 下書きが今どうなっているかは**状態**なので、常時見える場所に残る (#41 の 5)。
-    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+    // 出方は文字ではなくドットで、時刻はホバーと `data-saved-at` から読む (#41 の 6)。
+    await expect(draftIndicator(page)).toBeVisible();
+    await expect(draftIndicator(page)).toHaveAttribute(
+      "data-saved-at",
+      /^\d+$/
+    );
 
     await page.reload();
 
@@ -43,7 +49,7 @@ test.describe("下書き", () => {
     await addFile(page, "memo.txt");
     await typeIntoEditor(page, "e2e-memo");
     await openFile(page, "style.css");
-    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+    await expect(draftIndicator(page)).toBeVisible();
 
     await page.reload();
 
@@ -64,7 +70,7 @@ test.describe("下書き", () => {
   test("「新規」で破棄すると既定のテンプレートに戻る", async ({ page }) => {
     await openEditor(page);
     await typeIntoEditor(page, 'console.log("e2e-draft");');
-    await expect(page.locator("#draft-status")).toContainText("下書きを保存");
+    await expect(draftIndicator(page)).toBeVisible();
 
     // 復元は黙ってやるが、破棄は取り消せないので確認を挟む。
     page.once("dialog", (dialog) => void dialog.dismiss());
@@ -76,13 +82,17 @@ test.describe("下書き", () => {
 
     await expect(toasts(page, "info")).toHaveText(["下書きを破棄しました"]);
     await expect(page.locator("#editor")).toContainText("function setup()");
+    // 消した下書きの時刻が出たままにならないこと (#41 の 6)。開き直さなくても、
+    // もう復元できるものは無い。
+    await expect(draftIndicator(page)).toBeHidden();
 
     // 消した先から書き戻されないこと (予約中の保存ごと捨てている)。
     await expect.poll(() => readStoredDraft(page)).toBeNull();
     await page.reload();
     // 復元するものが無いので、開き直しても何も知らせは出ない。
     await expect(toasts(page)).toHaveCount(0);
-    await expect(page.locator("#draft-status")).toHaveText("");
+    // 復元できるものが無いので印そのものが出ない。
+    await expect(draftIndicator(page)).toBeHidden();
     await expect(page.locator("#editor")).not.toContainText("e2e-draft");
   });
 });

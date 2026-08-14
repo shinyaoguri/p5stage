@@ -10,7 +10,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { FAKE_VIEWER } from "./fake-github/viewer";
-import { accountMenuToggle, login, openEditor, openSettings } from "./helpers";
+import {
+  accountMenuToggle,
+  expectGeneration,
+  login,
+  openEditor,
+  openSettings,
+  toasts,
+  typeIntoEditor,
+  warningIndicator,
+} from "./helpers";
 
 /** 操作列に出ているアイコンボタン。 */
 function toolbarButtons(page: Page) {
@@ -36,6 +45,36 @@ test.describe("操作列", () => {
         "true"
       );
     }
+  });
+
+  test("直すまで続く条件は警告アイコンに残り、押すと読み直せる", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    // 条件が無いうちは影も形も無い。
+    await expect(warningIndicator(page)).toBeHidden();
+
+    // 読めない作品を開く。開けなかったことに気付かないまま書き続けると、手元の
+    // 中身で上書きしてしまう — **直すまで続く条件**として出しっぱなしにする。
+    await page.goto("/edit?sketch=AAAAAAAAAAAAAAAA");
+    await expectGeneration(page, 1);
+
+    await expect(warningIndicator(page)).toBeVisible();
+    await expect(warningIndicator(page)).toHaveAttribute("data-count", "1");
+    await expect(warningIndicator(page)).toHaveAttribute(
+      "aria-label",
+      /ログインが必要です/
+    );
+    // 出しっぱなしにするものなので、トーストには載せない (#41 の 5 の線引き)。
+    await expect(toasts(page, "error")).toHaveCount(0);
+
+    // 打鍵では消えない。消えるのは条件そのものが無くなったときだけ。
+    await typeIntoEditor(page, 'console.log("e2e-warned");');
+    await expect(warningIndicator(page)).toBeVisible();
+
+    // ホバーで読み切れない文面は、押せばトーストで読み直せる。
+    await warningIndicator(page).click();
+    await expect(toasts(page, "error")).toContainText("ログインが必要です");
   });
 
   test("設定は開いている間そうと分かる", async ({ page }) => {
