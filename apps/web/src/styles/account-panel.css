@@ -15,7 +15,11 @@
   align-items: center;
 }
 
+/* メニューはアバターから浮かせる (`position: relative` の基準)。開閉のたびに
+   操作列の高さが変わって他のボタンが動く、ということが起きない
+   (settings-panel.css と同じ組み立て)。 */
 .account-signed-in {
+  position: relative;
   display: flex;
   align-items: center;
 }
@@ -27,14 +31,81 @@
   background: rgb(255 255 255 / 0.15);
 }
 
-.account-logout:has(.account-avatar) {
+.account-menu-toggle:has(.account-avatar) {
   color: inherit;
   opacity: 0.75;
 }
 
-.account-logout:has(.account-avatar):hover,
-.account-logout:has(.account-avatar):focus-visible {
+/* 開いている間もはっきり出す。アバターは絵なので、`is-active` の文字色は効かない。 */
+.account-menu-toggle:has(.account-avatar):hover,
+.account-menu-toggle:has(.account-avatar):focus-visible,
+.account-menu-toggle:has(.account-avatar).is-active {
   opacity: 1;
+}
+
+/*
+ * アカウントメニュー (#55)。
+ *
+ * アバターを押して開く面。ログアウトのような**戻せない操作を、押し間違いの届かない
+ * ところへ置く**ためのもの。設定パネルと同じ流儀 (ボタンの真下・右揃え・半透明) に
+ * 揃えて、開き方の作法を画面の中で統一する。
+ */
+.account-menu {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 9rem;
+  max-width: 14rem;
+  padding: 0.375rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.375rem;
+  background: rgb(0 0 0 / 0.72);
+  color: rgb(255 255 255 / 0.75);
+  font-size: 0.75rem;
+  backdrop-filter: blur(10px);
+}
+
+/* `display` を指定した時点でブラウザ既定の `[hidden] { display: none }` に勝つ
+   (toolbar-button.css で踏んだのと同じ罠)。 */
+.account-menu[hidden] {
+  display: none;
+}
+
+/* 誰としてログインしているか。操作列では絵しか出ないので、ここが唯一の文字になる。
+   login 名は長くなり得るので、面の幅は上限で止めて省略する。 */
+.account-menu-login {
+  margin: 0;
+  padding: 0.25rem 0.375rem;
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.45);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.account-menu-item {
+  padding: 0.25rem 0.375rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-menu-item:hover,
+.account-menu-item:focus-visible {
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+}
+
+.account-menu-item:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.5);
+  outline-offset: 1px;
 }
 
 /* 認可の失敗はその場で気付けるよう、操作列から改行して出す。 */

@@ -30,7 +30,9 @@ test.describe("ログインの導線", () => {
     await openEditor(page);
 
     await expect(page.locator("#login")).toBeVisible();
-    // ログアウトの口は出ていない (状態が取り違えられていない)。
+    // アカウントの口 (メニューとその中のログアウト) は出ていない
+    // — 状態が取り違えられていない。
+    await expect(page.locator("#account-menu-toggle")).toHaveCount(0);
     await expect(page.locator("#logout")).toHaveCount(0);
   });
 

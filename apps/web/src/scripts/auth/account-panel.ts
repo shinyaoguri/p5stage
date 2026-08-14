@@ -10,7 +10,11 @@
 
 import "../../styles/account-panel.css";
 
-import { makeToolbarButton, setToolbarButtonIcon } from "../ui/toolbar-button";
+import {
+  makeToolbarButton,
+  setToolbarButtonIcon,
+  setToolbarButtonLabel,
+} from "../ui/toolbar-button";
 
 /** 認可の結果を伝えるクエリ (`callback.ts` が付ける)。 */
 const AUTH_RESULT_PARAM = "auth";
@@ -27,15 +31,32 @@ interface Viewer {
   readonly avatarUrl: string | null;
 }
 
+/** ログイン済みのときに出るアカウントメニューと、その開閉ボタン。 */
+interface AccountMenu {
+  readonly toggle: HTMLButtonElement;
+  readonly body: HTMLElement;
+  /** 開閉ボタンの名前に添える login 名 (誰のメニューかを名前で言うため)。 */
+  readonly login: string;
+}
+
 export class AccountPanel {
   readonly #host: HTMLElement;
   #viewer: Viewer | null = null;
   /** 認可に失敗したときの知らせ。次に描き直すまで残す。 */
   #message: string | null = null;
+  /** アカウントメニューを開いているか。 */
+  #menuOpen = false;
+  /** いま出ているメニュー (未ログインでは null)。描き直すたびに持ち直す。 */
+  #menu: AccountMenu | null = null;
 
   constructor(host: HTMLElement) {
     this.#host = host;
     this.#host.classList.add("account-panel");
+
+    // 閉じ方は**ここで 1 度だけ**張る。`#render()` は中身を作り直すので、
+    // 描画のたびに張ると同じ処理が積み上がる。
+    this.#bindDismissals();
+
     this.#render();
   }
 
@@ -78,6 +99,10 @@ export class AccountPanel {
   }
 
   #render(): void {
+    // 中身ごと作り直すので、開いていたメニューはここで無くなる。状態も閉じた側へ戻す。
+    this.#menu = null;
+    this.#menuOpen = false;
+
     this.#host.textContent = "";
     this.#host.appendChild(
       this.#viewer === null ? this.#renderSignedOut() : this.#renderSignedIn()
@@ -162,11 +187,12 @@ export class AccountPanel {
    * ログイン済みの姿。
    *
    * **アバター 1 つに畳む** (#41)。login 名を文字で出していたが、操作列は他がすべて
-   * アイコンなので、そこだけ可変長の文字が入ると並びが崩れる。誰としてログイン
-   * しているかはアバターの絵で分かり、確かめたいときはホバー (`title`) で読める。
+   * アイコンなので、そこだけ可変長の文字が入ると並びが崩れる。
    *
-   * ログアウトの口はこのボタン自身が兼ねる。アイコンの下に隠すと辿り着けなくなるので、
-   * **名前は `ログアウト (login)` にして、押すと何が起きるかを先に言う**。
+   * **アバターを押すのはメニューを開くだけ**にする (#55)。以前はこのボタン自身が
+   * ログアウトを兼ねていたが、アバターは押しても壊れない場所という期待があり、
+   * 確認も無くセッションが切れるのは事故になる。ログアウトはメニューの中の項目にし、
+   * 誰としてログインしているかもそこで文字として読めるようにする。
    */
   #renderSignedIn(): HTMLElement {
     const viewer = this.#viewer;
@@ -174,16 +200,15 @@ export class AccountPanel {
     wrapper.className = "account-signed-in";
     if (viewer === null) return wrapper;
 
-    const logout = makeToolbarButton({
-      id: "logout",
+    const toggle = makeToolbarButton({
+      id: "account-menu-toggle",
       // アバターが無いときの代わり。下で画像に差し替える。
       icon: "person",
-      label: `ログアウト (${viewer.login})`,
-      onClick: () => {
-        void this.#logout();
-      },
+      // 実際の名前は #applyMenuState() が開閉に合わせて入れ直す。
+      label: `アカウントメニューを開く (${viewer.login})`,
+      onClick: () => this.#toggleMenu(),
     });
-    logout.classList.add("account-logout");
+    toggle.classList.add("account-menu-toggle");
 
     if (viewer.avatarUrl !== null) {
       const avatar = document.createElement("img");
@@ -195,13 +220,113 @@ export class AccountPanel {
       avatar.height = 20;
       // 読めなかったときに空のボタンにならないよう、人のアイコンへ戻す。
       avatar.addEventListener("error", () => {
-        setToolbarButtonIcon(logout, "person");
+        setToolbarButtonIcon(toggle, "person");
       });
-      logout.replaceChildren(avatar);
+      toggle.replaceChildren(avatar);
     }
 
-    wrapper.appendChild(logout);
+    const body = this.#buildMenu(viewer);
+    toggle.setAttribute("aria-controls", body.id);
+
+    this.#menu = { toggle, body, login: viewer.login };
+    this.#applyMenuState();
+
+    // メニューは開閉ボタンの直後に置く。Tab で開いた次に中身へ入れる並びになる。
+    for (const node of [toggle, body]) wrapper.appendChild(node);
     return wrapper;
+  }
+
+  /**
+   * アカウントメニューの中身。
+   *
+   * 矢印キーで辿る `menu` ではなく、**開閉するだけの面**として作る (設定パネルと同じ)。
+   * 項目は Tab で辿れる普通のボタンで、`role="menu"` を名乗って矢印キーの期待だけ
+   * 生む、ということをしない。
+   */
+  #buildMenu(viewer: Viewer): HTMLElement {
+    const body = document.createElement("div");
+    body.className = "account-menu";
+    body.id = "account-menu";
+    body.setAttribute("role", "group");
+    body.setAttribute("aria-label", "アカウント");
+
+    // アイコンだけでは分からない「誰としてログインしているか」を、ここで文字にする。
+    const login = document.createElement("p");
+    login.className = "account-menu-login";
+    login.textContent = `@${viewer.login}`;
+
+    const logout = document.createElement("button");
+    logout.type = "button";
+    logout.id = "logout";
+    logout.className = "account-menu-item";
+    logout.textContent = "ログアウト";
+    logout.addEventListener("click", () => {
+      void this.#logout();
+    });
+
+    for (const node of [login, logout]) body.appendChild(node);
+    return body;
+  }
+
+  /**
+   * メニューの閉じ方。
+   *
+   * 開閉ボタンの押し直し以外に 2 つ用意する。ドロップダウンは「外を触れば消える」面
+   * として期待されるし、キーボードだけで使う人には**触る外側が無い**ので Escape と
+   * フォーカス外れの両方が要る。
+   */
+  #bindDismissals(): void {
+    document.addEventListener("pointerdown", (event) => {
+      if (!this.#menuOpen) return;
+      const target = event.target;
+      if (target instanceof Node && this.#host.contains(target)) return;
+      this.#closeMenu();
+    });
+
+    // パネルの中で Escape を押したら閉じてボタンへ戻る (settings-panel と同じ流儀)。
+    this.#host.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !this.#menuOpen) return;
+      event.stopPropagation();
+      const toggle = this.#menu?.toggle;
+      this.#closeMenu();
+      toggle?.focus();
+    });
+
+    // Tab でメニューの外へ出たら閉じる (開いたまま置き去りにしない)。
+    this.#host.addEventListener("focusout", (event) => {
+      if (!this.#menuOpen) return;
+      const next = event.relatedTarget;
+      if (next instanceof Node && this.#host.contains(next)) return;
+      this.#closeMenu();
+    });
+  }
+
+  #toggleMenu(): void {
+    this.#menuOpen = !this.#menuOpen;
+    this.#applyMenuState();
+  }
+
+  #closeMenu(): void {
+    if (!this.#menuOpen) return;
+    this.#menuOpen = false;
+    this.#applyMenuState();
+  }
+
+  /** 開閉の状態を DOM へ映す。 */
+  #applyMenuState(): void {
+    const menu = this.#menu;
+    if (menu === null) return;
+
+    menu.body.hidden = !this.#menuOpen;
+    menu.toggle.setAttribute("aria-expanded", String(this.#menuOpen));
+    // 開いている間は押されたままに見せる (アイコンなので文字で示せない)。
+    menu.toggle.classList.toggle("is-active", this.#menuOpen);
+    setToolbarButtonLabel(
+      menu.toggle,
+      this.#menuOpen
+        ? `アカウントメニューを閉じる (${menu.login})`
+        : `アカウントメニューを開く (${menu.login})`
+    );
   }
 
   async #logout(): Promise<void> {

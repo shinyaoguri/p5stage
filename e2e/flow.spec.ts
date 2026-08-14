@@ -22,10 +22,12 @@ import {
 
 import { FAKE_VIEWER } from "./fake-github/viewer";
 import {
+  accountMenuToggle,
   addFile,
   fileTab,
   hasSketchCanvas,
   login,
+  logout,
   openEditor,
   saveAgain,
   saveNewSketch,
@@ -92,7 +94,7 @@ test.describe("ログインの往復", () => {
 
     // 誰としてログインしているかは、操作列ではアバター 1 つに畳んである (#41 の 2)。
     // 文字では出ないので、ボタンの名前 (ホバーと支援技術が読むもの) で確かめる。
-    await expect(page.locator("#logout")).toHaveAttribute(
+    await expect(accountMenuToggle(page)).toHaveAttribute(
       "aria-label",
       new RegExp(FAKE_VIEWER.login)
     );
@@ -114,10 +116,10 @@ test.describe("ログインの往復", () => {
   test("ログアウトすると未ログインに戻る", async ({ page }) => {
     await signedInEditor(page);
 
-    await page.locator("#logout").click();
+    await logout(page);
 
     await expect(page.locator("#login")).toBeVisible();
-    await expect(page.locator("#logout")).toHaveCount(0);
+    await expect(accountMenuToggle(page)).toHaveCount(0);
   });
 });
 
