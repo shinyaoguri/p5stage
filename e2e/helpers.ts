@@ -201,6 +201,21 @@ export async function saveAgain(page: Page): Promise<void> {
   await expect(saveStatus(page)).toContainText("保存しました");
 }
 
+/**
+ * 出ているトースト (#41 の 5)。
+ *
+ * 消える動きの最中 (`toast-exit`) は数えない。あれは DOM からまだ外れていないだけで、
+ * 利用者にとっては終わった知らせ。`data-type` で絞れる — 色ではなくそちらを見るのは、
+ * 意匠を変えてもテストが落ちないようにするため。
+ */
+export function toasts(
+  page: Page,
+  type?: "info" | "success" | "error"
+): Locator {
+  const kind = type === undefined ? "" : `[data-type="${type}"]`;
+  return page.locator(`#toast-container .toast${kind}:not(.toast-exit)`);
+}
+
 /** ファイルタブ (name はファイル名)。 */
 export function fileTab(page: Page, name: string): Locator {
   return page.locator(`#file-tabs [role="tab"][data-file="${name}"]`);

@@ -42,8 +42,6 @@ interface AccountMenu {
 export class AccountPanel {
   readonly #host: HTMLElement;
   #viewer: Viewer | null = null;
-  /** 認可に失敗したときの知らせ。次に描き直すまで残す。 */
-  #message: string | null = null;
   /** アカウントメニューを開いているか。 */
   #menuOpen = false;
   /** いま出ているメニュー (未ログインでは null)。描き直すたびに持ち直す。 */
@@ -57,12 +55,6 @@ export class AccountPanel {
     // 描画のたびに張ると同じ処理が積み上がる。
     this.#bindDismissals();
 
-    this.#render();
-  }
-
-  /** 認可の失敗などを利用者に知らせる。null で消す。 */
-  setMessage(message: string | null): void {
-    this.#message = message;
     this.#render();
   }
 
@@ -94,6 +86,9 @@ export class AccountPanel {
    * URL に残った認可結果を読み、失敗していればその文言を返す。
    *
    * 読んだあとはクエリを消す。リロードのたびに同じ知らせが出るのを防ぐため。
+   *
+   * 見せ方はこのパネルの仕事ではない。失敗は**もう終わった出来事**で、もう一度
+   * ログインすれば済む — 出し先はトースト (#41 の 5)。
    */
   static takeFailureMessage(): string | null {
     const url = new URL(window.location.href);
@@ -115,14 +110,6 @@ export class AccountPanel {
     this.#host.appendChild(
       this.#viewer === null ? this.#renderSignedOut() : this.#renderSignedIn()
     );
-
-    if (this.#message === null) return;
-    const message = document.createElement("p");
-    message.className = "account-message";
-    message.id = "auth-message";
-    message.setAttribute("role", "status");
-    message.textContent = this.#message;
-    this.#host.appendChild(message);
   }
 
   #renderSignedOut(): HTMLElement {
