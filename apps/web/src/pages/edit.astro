@@ -63,6 +63,8 @@ try {
           <div id="new-controls" />
           {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
           <div id="adopt-controls" />
+          {/* 作品が使うアセット (Phase 3-4)。 */}
+          <div id="assets" />
           <div id="settings" />
           <div id="account" />
         </div>
@@ -75,6 +77,7 @@ try {
 
 <script>
   import {
+    ASSET_MANIFEST_FILE,
     DEFAULT_SKETCH_FILES,
     assetUrlsForFiles,
     isTransitionId,
@@ -82,6 +85,7 @@ try {
     type TransitionRequest,
   } from "@p5stage/shared";
 
+  import { AssetsPanel } from "../scripts/assets/assets-panel";
   import { AccountPanel } from "../scripts/auth/account-panel";
   import { DraftIndicator } from "../scripts/draft/draft-indicator";
   import { DraftSaver, loadDraft } from "../scripts/draft/draft-store";
@@ -136,6 +140,7 @@ try {
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const newHost = document.getElementById("new-controls");
+  const assetsHost = document.getElementById("assets");
   const projectBarHost = document.getElementById("project-bar");
 
   const init = async () => {
@@ -151,6 +156,7 @@ try {
       !draftHost ||
       !saveHost ||
       !adoptHost ||
+      !assetsHost ||
       !projectBarHost
     ) {
       return;
@@ -393,6 +399,19 @@ try {
     };
 
     /**
+     * 作品が使うアセット (Phase 3-4)。
+     *
+     * 書き戻し先は `assets.json` 1 つ。エディタのファイルとして書くので、下書きも
+     * 保存も普段の編集と同じ道を通る (`writeFile` が `onChange` を起こす)。
+     */
+    const assetsPanel = new AssetsPanel(assetsHost, {
+      assetsOrigin,
+      getFiles: () => editor.getFiles(),
+      onWrite: (content) => editor.writeFile(ASSET_MANIFEST_FILE, content),
+      onNotice: showToast,
+    });
+
+    /**
      * 既にある自分の Gist を取り込んで、その続きから始める (Phase 2-6)。
      *
      * 取り込めた中身は応答に入っているので、開き直さずそのままエディタへ流し込む。
@@ -411,6 +430,9 @@ try {
         }
 
         editor.setFiles(adopted.files, preferredActiveFile(adopted.files));
+        // 取り込んだ作品のアセットに入れ替える (開いたままなら見えている一覧が
+        // 前の作品のものになる)。
+        assetsPanel.refresh();
         void draftSaver.clear();
         // 消した下書きの時刻を出したままにしない (#41 の 6)。復元できるものは
         // もう無い。
@@ -511,6 +533,8 @@ try {
           // 差し替えで onFilesChanged が走り保存が予約される。その予約ごと
           // 捨てるため、破棄はファイルを入れ替えた**後**に行う。
           editor.setFiles(DEFAULT_SKETCH_FILES, "sketch.js");
+          // 既定のファイルにアセットは無い。開いたままの一覧も空へ戻す。
+          assetsPanel.refresh();
           void draftSaver.clear();
           draftIndicator.setSavedAt(null);
           // 別の作品として始めるので名前も新しく振る (前の名前が残ると、

@@ -81,6 +81,7 @@ export class CodeEditor {
   readonly #viewStates = new Map<string, monaco.editor.ICodeEditorViewState>();
   readonly #disposables: monaco.IDisposable[] = [];
   readonly #onFilesChanged: CodeEditorOptions["onFilesChanged"];
+  readonly #onChange: CodeEditorOptions["onChange"];
   #activeFile: string;
   #settings: EditorSettings;
 
@@ -89,6 +90,7 @@ export class CodeEditor {
     configureJavaScriptDiagnostics();
 
     this.#onFilesChanged = options.onFilesChanged;
+    this.#onChange = options.onChange;
     this.#settings = options.settings;
 
     const names = Object.keys(options.files);
@@ -144,11 +146,12 @@ export class CodeEditor {
       })
     );
 
-    if (options.onChange) {
-      const onChange = options.onChange;
+    if (this.#onChange !== undefined) {
+      // **今付いているモデルの変更しか来ない。** 開いていないファイルへの書き込み
+      // (`writeFile`) は自分で伝える。
       this.#disposables.push(
         this.#editor.onDidChangeModelContent(() => {
-          onChange(this.#activeFile);
+          this.#onChange?.(this.#activeFile);
         })
       );
     }
@@ -206,6 +209,33 @@ export class CodeEditor {
     this.#models.set(fileName, this.#createModel(fileName, content));
     this.#activeFile = fileName;
     this.#editor.setModel(this.#models.get(fileName) ?? null);
+    this.#onFilesChanged?.(this.fileNames, this.#activeFile);
+  }
+
+  /**
+   * ファイル 1 つの中身を書き換える。無ければ足す (Phase 3-4)。
+   *
+   * `addFile` と違って**開いているファイルは動かさない**。これを使うのは
+   * アセットパネルのように**機械が書くファイル** (`assets.json`) で、書くたびに
+   * タブが JSON へ飛ぶと、書いていたコードが見えなくなる。
+   *
+   * 既にあるファイルは `setValue` で丸ごと差し替える。そのファイルの undo 履歴は
+   * 切れるが、機械が書いた 1 件の追加を**半分だけ戻せる**方が困る (戻した形が
+   * マニフェストとして読めるとは限らない)。
+   */
+  writeFile(fileName: string, content: string): void {
+    const model = this.#models.get(fileName);
+    if (model !== undefined) {
+      if (model.getValue() === content) return;
+      model.setValue(content);
+      // **開いていないファイルの変更はエディタのイベントに来ない**
+      // (`onDidChangeModelContent` が見るのは今付いているモデルだけ)。伝え損ねると
+      // 下書きにも Gist にも書かれないまま、画面のアセットだけが増える。
+      if (fileName !== this.#activeFile) this.#onChange?.(fileName);
+      return;
+    }
+
+    this.#models.set(fileName, this.#createModel(fileName, content));
     this.#onFilesChanged?.(this.fileNames, this.#activeFile);
   }
 

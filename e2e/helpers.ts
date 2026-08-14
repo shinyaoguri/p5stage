@@ -361,6 +361,21 @@ export async function openSettings(page: Page): Promise<void> {
   await expect(settingsDrawer(page)).toBeVisible();
 }
 
+/** アセットドロワー (Phase 3-4)。設定と同じく body 直下にある。 */
+export const assetsDrawer = (page: Page): Locator =>
+  page.locator("#assets-panel-body");
+
+/** アセットパネルを開く。 */
+export async function openAssets(page: Page): Promise<void> {
+  await page.locator("#assets-toggle").click();
+  await expect(assetsDrawer(page)).toBeVisible();
+}
+
+/** 一覧に並ぶアセット 1 件 (name はコードから引く名前)。 */
+export function assetRow(page: Page, name: string): Locator {
+  return assetsDrawer(page).locator(`.assets-row[data-asset="${name}"]`);
+}
+
 /**
  * 設定 1 項目のコントロール。
  *
