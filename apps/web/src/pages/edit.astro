@@ -63,6 +63,7 @@ try {
   import {
     DEFAULT_SKETCH_FILES,
     isTransitionId,
+    readAssetManifest,
     type TransitionRequest,
   } from "@p5stage/shared";
 
@@ -171,6 +172,10 @@ try {
       draft,
       remoteFiles: opened?.files ?? null,
     });
+    // アセットの一覧が壊れていると保存が通らない (Phase 3-2)。**開いた時点で**
+    // 言う — 保存で初めて弾かれると、書いた後に直す羽目になる。
+    const manifest = readAssetManifest(start.files);
+
     // 知らせは 1 行しか無いので、重い順に 1 つだけ出す。実行の状態 (右隣) は
     // 接続や実行のたびに上書きされるので、残したい知らせはこちらへ。
     if (loadFailure !== null) {
@@ -180,6 +185,8 @@ try {
       setDraftStatus(
         `次のファイルは大きすぎて読み込めませんでした: ${opened.truncated.join(", ")}`
       );
+    } else if (manifest !== null && !manifest.ok) {
+      setDraftStatus(`${manifest.message} (直すまで保存できません)`);
     } else if (start.source === "draft" && draft !== null) {
       setDraftStatus(`下書きを復元しました (${formatSavedAt(draft.savedAt)})`);
     }

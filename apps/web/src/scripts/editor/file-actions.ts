@@ -7,7 +7,12 @@
  * その操作ができるか」だけを見る。
  */
 
-import { ENTRY_FILE, MAX_FILE_COUNT, fileNameError } from "@p5stage/shared";
+import {
+  ASSET_MANIFEST_FILE,
+  ENTRY_FILE,
+  MAX_FILE_COUNT,
+  fileNameError,
+} from "@p5stage/shared";
 
 /** 新規ファイル名の初期値。拡張子まで入れておくと言語が決まって編集を始めやすい。 */
 const NEW_FILE_BASE = "untitled";
@@ -23,6 +28,23 @@ export function isProtectedFile(name: string): boolean {
   return name === ENTRY_FILE;
 }
 
+/**
+ * p5stage が管理するファイルか (Phase 3-2)。
+ *
+ * `assets.json` はアセットの一覧 (ADR 0003)。**予約名**として扱い、手で作る名前にも
+ * 変更後の名前にもさせない。中身の編集と削除は許す — 壊れたものを直せる必要があるし、
+ * 削除は「アセットを全部外す」という筋の通った意思表示になる。
+ */
+export function isManagedFile(name: string): boolean {
+  return name === ASSET_MANIFEST_FILE;
+}
+
+/** 予約名を使おうとしたときの理由。使ってよいなら null。 */
+function reservedNameError(name: string): string | null {
+  if (!isManagedFile(name)) return null;
+  return `${ASSET_MANIFEST_FILE} はアセットの一覧に使う名前です`;
+}
+
 /** ファイルを追加できるか。できなければ理由を返す。 */
 export function checkAddFile(
   name: string,
@@ -31,6 +53,8 @@ export function checkAddFile(
   const error = fileNameError(name);
   if (error !== null) return error;
   if (existing.includes(name)) return `${name} は既にあります`;
+  const reserved = reservedNameError(name);
+  if (reserved !== null) return reserved;
   if (existing.length >= MAX_FILE_COUNT) {
     return `ファイル数の上限 (${MAX_FILE_COUNT}) です`;
   }
@@ -49,9 +73,16 @@ export function checkRenameFile(
   }
   // 名前が変わらないのは操作の取り消しと同じで、失敗として扱う理由が無い。
   if (to === from) return null;
+  // 改名を許すと、**何のエラーも出ないままアセットだけが消える** (一覧を見に行く
+  // 名前が変わるだけなので、保存も実行も成功してしまう)。
+  if (isManagedFile(from)) {
+    return `${ASSET_MANIFEST_FILE} は名前を変えられません`;
+  }
   const error = fileNameError(to);
   if (error !== null) return error;
   if (existing.includes(to)) return `${to} は既にあります`;
+  const reserved = reservedNameError(to);
+  if (reserved !== null) return reserved;
   return null;
 }
 

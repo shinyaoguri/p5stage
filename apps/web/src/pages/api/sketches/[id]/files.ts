@@ -18,6 +18,11 @@ import {
 } from "@p5stage/shared";
 
 import {
+  checkManifest,
+  unclaimedMessage,
+} from "../../../../lib/assets/manifest-check";
+import { unclaimedDigests } from "../../../../lib/assets/store";
+import {
   createGist,
   deleteGist,
   fetchGist,
@@ -102,6 +107,30 @@ function readFiles(
   }
 
   return { files };
+}
+
+/**
+ * アセットの一覧 (assets.json) を確かめる (Phase 3-2)。断るなら応答を返す。
+ *
+ * 保存できてしまうと**正本の Gist に壊れたまま残る**ので、GitHub へ送る前に見る。
+ * 参照している blob を持ち込んでいるかは台帳に聞く — 所有していない blob を
+ * 参照できると、クォータを使わずにアセットを持つ作品が作れてしまう (ADR 0003 の補足)。
+ */
+async function checkManifestOwnership(
+  userId: number,
+  files: SketchFiles
+): Promise<Response | null> {
+  const check = checkManifest(files);
+  if (check.kind === "absent") return null;
+  if (check.kind === "invalid") {
+    return jsonError(400, "invalid_manifest", check.message);
+  }
+
+  const unclaimed = await unclaimedDigests(env.DB, userId, check.digests);
+  if (unclaimed.length > 0) {
+    return jsonError(400, "unknown_asset", unclaimedMessage(unclaimed.length));
+  }
+  return null;
 }
 
 /** 初回。Gist を作って作品に紐付ける。 */
@@ -189,6 +218,12 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
 
   const sketch = await ownedSketch(id, auth.session.user.id);
   if (sketch === null) return notFound();
+
+  const manifest = await checkManifestOwnership(
+    auth.session.user.id,
+    read.files
+  );
+  if (manifest !== null) return manifest;
 
   const apiOrigin = githubOrigins().api;
 

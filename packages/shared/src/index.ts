@@ -14,6 +14,23 @@ export {
 export type { AssetMime } from "./assets";
 
 export {
+  ASSET_MANIFEST_FILE,
+  ASSET_MANIFEST_VERSION,
+  emptyAssetManifest,
+  manifestDigests,
+  manifestNameConflicts,
+  parseAssetManifest,
+  readAssetManifest,
+  serializeAssetManifest,
+  withAssetManifest,
+} from "./asset-manifest";
+export type {
+  AssetEntry,
+  AssetManifest,
+  AssetManifestResult,
+} from "./asset-manifest";
+
+export {
   DEFAULT_FILE_NAMES,
   ENTRY_FILE,
   MAX_FILE_BYTES,
