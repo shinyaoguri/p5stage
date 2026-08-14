@@ -8,10 +8,13 @@
  *
  * 直し方は 2 つあった。
  *
- * - `wrangler dev --local-upstream localhost:<port>` を渡す → **これは使えない**。
- *   渡すと E2E の途中で wrangler dev がプロセスごと落ちる (#38)。外した途端に
- *   落ちなくなることを CI で確かめた
+ * - `wrangler dev --local-upstream localhost:<port>` を渡す
  * - ルートごと持たせない → こちら。本番の設定にもアプリのコードにも触らずに済む
+ *
+ * 当初はここに「`--local-upstream` を渡すと wrangler dev が落ちる (#38)」と書いていたが、
+ * **これは誤り**。外しても落ちることを後の切り分けで確かめた (#38 の原因は上流
+ * cloudflare/workers-sdk#14926 で、この引数とは無関係)。どちらでも直るので、
+ * 本番の設定に近い形で済むこちらを続ける。
  *
  * 触るのは**ビルド成果物**であって、リポジトリの設定ファイルではない
  * (`apps/web/wrangler.jsonc` はそのまま)。Astro の Cloudflare アダプタが

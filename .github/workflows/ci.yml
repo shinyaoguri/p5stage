@@ -55,12 +55,14 @@ jobs:
 
       # サーバ (両アプリの wrangler dev) の起動は playwright.config.ts が受け持つ。
       #
-      # web の wrangler dev が E2E の途中で**プロセスごと落ちる**ことがある (#38)。
-      # workerd 側のクラッシュで、中身の無い `✘ [ERROR]` しか残らない。以降のテストは
-      # 全部 ECONNREFUSED になるので、**テストの失敗とは意味が違う**。
+      # wrangler dev が E2E の途中で**プロセスごと落ちる**ことがある (#38)。原因は上流
+      # cloudflare/workers-sdk#14926 — miniflare が workerd を立て直しても wrangler が
+      # それに追随できず終了する。中身の無い `✘ [ERROR]` しか残らない。
       #
-      # そこだけ 1 度やり直す。テスト自体の失敗はやり直さない (揺れは Playwright の
-      # retries が受け持つ)。**これは #38 を隠しているだけ**で、直ったわけではない。
+      # 一次の守りは playwright.config.ts の serve-with-restart (落ちたら立て直す)。
+      # ここはその上限に達した場合の受け皿で、サーバが死んだときだけ 1 度やり直す。
+      # テスト自体の失敗はやり直さない (揺れは Playwright の retries が受け持つ)。
+      # **どちらも #38 を隠しているだけ**で、上流が直るまで原因は残る。
       - name: E2E (サーバが落ちたときだけやり直す)
         run: |
           set -o pipefail
