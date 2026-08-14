@@ -377,6 +377,32 @@ export function assetRow(page: Page, name: string): Locator {
 }
 
 /**
+ * 「持っているアセット」を開く (Phase 3-4b)。
+ *
+ * 作品の一覧の下に畳んで置いてある面なので、**開くまで中身は無い**。
+ */
+export async function openOwnedAssets(page: Page): Promise<void> {
+  const summary = assetsDrawer(page).locator(".assets-owned-summary");
+  await expect(summary).toBeVisible();
+  if (!(await assetsDrawer(page).locator(".assets-owned[open]").count())) {
+    await summary.click();
+  }
+  await expect(assetsDrawer(page).locator(".assets-owned[open]")).toBeVisible();
+}
+
+/**
+ * 持っているアセット 1 件 (sha256 で掴む)。
+ *
+ * 作品の一覧が名前で掴めるのに対してこちらが sha256 なのは、**blob が名前を
+ * 持たない**ため (名前は各作品の `assets.json` 側にある)。
+ */
+export function ownedAssetRow(page: Page, sha256: string): Locator {
+  return assetsDrawer(page).locator(
+    `.assets-owned-row[data-sha256="${sha256}"]`
+  );
+}
+
+/**
  * 設定 1 項目のコントロール。
  *
  * 群はアコーディオンで、既定では畳んである群がある。**畳んでいれば開いてから**

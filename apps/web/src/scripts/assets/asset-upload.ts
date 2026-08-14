@@ -50,23 +50,6 @@ interface UploadResponse {
   readonly usage?: AssetUsage;
 }
 
-/**
- * いまの使用量と上限を引く。ログインしていなければ null。
- *
- * 未ログインを失敗として扱わないのは、**エディタはログイン無しでも使える**ため
- * (要件 3.1)。アセットを足せないだけで、パネルは開いて中身を見られる。
- */
-export async function fetchAssetUsage(): Promise<AssetUsage | null> {
-  try {
-    const response = await fetch("/api/assets");
-    if (!response.ok) return null;
-    const body = (await response.json()) as { usage?: AssetUsage };
-    return body.usage ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /** アセットを 1 つ持ち込む。 */
 export async function uploadAsset(file: File): Promise<UploadResult> {
   // 形式はファイル名で決める。`File.type` は端末の関連付け次第で空にも嘘にもなり、

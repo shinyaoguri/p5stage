@@ -20,7 +20,16 @@ import { formatBytes } from "../../lib/assets/asset";
 import "../../styles/assets-panel.css";
 import type { ToastType } from "../ui/toast";
 import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
-import { fetchAssetUsage, uploadAsset, type AssetUsage } from "./asset-upload";
+import {
+  fetchAssetLibrary,
+  libraryRows,
+  releaseAsset,
+  type AssetBlob,
+  type AssetLibrary,
+  type AssetUsage,
+  type LibraryRow,
+} from "./asset-library";
+import { uploadAsset } from "./asset-upload";
 import {
   addAsset,
   readManifestState,
@@ -53,6 +62,15 @@ function typeBadge(mime: string): string {
   return (subtype.split(/[+-]/)[0] ?? subtype).toUpperCase();
 }
 
+/**
+ * 持ち込んだ日。名前を持たないアセットを見分ける手掛かりの 1 つ (3-4b)。
+ *
+ * 画面の文言は日本語で固定なので、日付も端末のロケールに委ねず揃える。
+ */
+function formatDate(createdAt: number): string {
+  return new Date(createdAt).toLocaleDateString("ja-JP");
+}
+
 export class AssetsPanel {
   readonly #container: HTMLElement;
   readonly #options: AssetsPanelOptions;
@@ -64,9 +82,17 @@ export class AssetsPanel {
   readonly #dropButton: HTMLButtonElement;
   /** 送るのを待っているファイル。取り込み中に落とされた分がここに積まれる。 */
   readonly #queue: File[] = [];
-  #usage: AssetUsage | null = null;
+  /** 持っているアセットとクォータ。ログインしていなければ null。 */
+  #library: AssetLibrary | null = null;
   #open = false;
   #busy = false;
+  /**
+   * 「持っているアセット」を開いているか。
+   *
+   * 一覧は書き換えのたびに組み直すので、`details` の開閉は要素の外に持たないと
+   * **削除した拍子に畳まれる** (次の 1 件を消すたびに開き直すことになる)。
+   */
+  #libraryOpen = false;
   /** ファイルを掴んだまま窓の上にいる。落とせる先を光らせる。 */
   #dragging = false;
 
@@ -141,7 +167,7 @@ export class AssetsPanel {
     this.#renderChrome();
     // 開くたびに読み直す。手で書き換えた `assets.json` もこれで映る。
     this.#render();
-    void this.#refreshUsage();
+    void this.#refreshLibrary();
   }
 
   close(): void {
@@ -235,6 +261,9 @@ export class AssetsPanel {
       nodes.push(list);
     }
 
+    const library = this.#createLibrary();
+    if (library !== null) nodes.push(library);
+
     this.#content.replaceChildren(...nodes);
     this.#renderFooter();
   }
@@ -290,9 +319,162 @@ export class AssetsPanel {
     return row;
   }
 
+  /**
+   * 持っているアセット (3-4b)。ログインしていない・1 つも無いなら出さない。
+   *
+   * 見出しを「使っていないアセット」にはしない。**サーバはどの作品がどの blob を
+   * 使っているかをまだ知らない** (参照台帳は 3-5) ので、突き合わせられるのは今
+   * 開いている作品だけ。ほかの作品で使っているものを「使っていない」と書くのは嘘になる。
+   */
+  #createLibrary(): HTMLElement | null {
+    const library = this.#library;
+    if (library === null || library.assets.length === 0) return null;
+
+    const rows = libraryRows(library.assets, this.#options.getFiles());
+
+    const details = document.createElement("details");
+    details.className = "assets-owned";
+    details.open = this.#libraryOpen;
+    details.addEventListener("toggle", () => {
+      this.#libraryOpen = details.open;
+    });
+
+    const summary = document.createElement("summary");
+    summary.className = "assets-owned-summary";
+    summary.textContent = `持っているアセット (${rows.length})`;
+
+    const note = document.createElement("p");
+    note.className = "assets-owned-note";
+    // 「作品から外す」との違いと、ここで見えていない危険 (ほかの作品) を先に言う。
+    note.textContent =
+      "作品から外しても保管は続き、容量を使います。削除すると容量は空きますが、" +
+      "ほかの作品で使っているアセットも並びます";
+
+    const list = document.createElement("ul");
+    list.className = "assets-owned-list";
+    for (const row of rows) list.appendChild(this.#createLibraryRow(row));
+
+    details.replaceChildren(summary, note, list);
+    return details;
+  }
+
+  /**
+   * 持っているアセット 1 件の行。
+   *
+   * 名前は出せない — **blob は名前を持たない** (名前は各作品の `assets.json` 側)。
+   * 代わりに見本と形式・大きさ・持ち込んだ日で見分ける。今の作品で使っていれば、
+   * その作品での名前を出す。
+   */
+  #createLibraryRow(row: LibraryRow): HTMLElement {
+    const { asset, usedAs } = row;
+    const item = document.createElement("li");
+    item.className = "assets-owned-row";
+    item.dataset.sha256 = asset.sha256;
+
+    const thumb = document.createElement("span");
+    thumb.className = "assets-thumb";
+    const origin = this.#options.assetsOrigin;
+    if (origin !== null && isPreviewable(asset.mime)) {
+      const image = document.createElement("img");
+      // 名前は引く鍵ではない (ADR 0014)。作品での名前が無いものは形式だけ添える。
+      image.src = assetUrl(origin, asset.sha256, usedAs[0] ?? asset.sha256);
+      image.loading = "lazy";
+      image.alt = "";
+      thumb.appendChild(image);
+    } else {
+      thumb.classList.add("is-badge");
+      thumb.textContent = typeBadge(asset.mime);
+    }
+
+    const meta = document.createElement("span");
+    meta.className = "assets-owned-meta";
+    meta.textContent = `${typeBadge(asset.mime)} · ${formatBytes(asset.size)} · ${formatDate(asset.createdAt)}`;
+
+    // 使用中の印は右端ではなくメタの下。横に並べると、どちらも省略されて
+    // 「PNG · 86B · 2026…」と「cat.pn…」の両方が読めなくなる。
+    const body = document.createElement("span");
+    body.className = "assets-owned-body";
+    body.replaceChildren(meta);
+    if (usedAs.length > 0) {
+      const used = document.createElement("span");
+      used.className = "assets-owned-used";
+      used.textContent = `${usedAs.join("・")} で使用中`;
+      body.appendChild(used);
+    }
+
+    const nodes: Node[] = [thumb, body];
+    const release = this.#createReleaseButton(row);
+    if (release !== null) nodes.push(release);
+
+    item.replaceChildren(...nodes);
+    return item;
+  }
+
+  /**
+   * 削除の口。今の作品が使っているアセットには出さない (null)。
+   *
+   * 手放すと**次の保存で断られる** (マニフェストが指せるのは自分が所有している
+   * blob だけ — 3-2)。手放した瞬間ではなく次に保存したときに壊れるので、気付ける
+   * 形にならない。先に「作品から外す」を通してもらう。
+   */
+  #createReleaseButton(row: LibraryRow): HTMLElement | null {
+    const { asset, usedAs } = row;
+    if (usedAs.length > 0) return null;
+
+    const release = document.createElement("button");
+    release.type = "button";
+    release.className = "assets-owned-release";
+    release.textContent = "削除";
+    release.title = "このアセットを削除して容量を空ける";
+    release.disabled = this.#busy;
+    release.addEventListener("click", () => {
+      release.disabled = true;
+      void this.#release(asset);
+    });
+    return release;
+  }
+
+  /**
+   * 所有を手放す。
+   *
+   * ここは確認を挟む。作品から外すのは取り消せる (実体も所有も残る) が、こちらは
+   * **同じ中身を手元から入れ直さないと戻らない**。
+   */
+  async #release(asset: AssetBlob): Promise<void> {
+    if (
+      !window.confirm(
+        "このアセットを削除して容量を空けます。ほかの作品で使っていると、" +
+          "その作品を保存できなくなります。"
+      )
+    ) {
+      this.#render();
+      return;
+    }
+
+    const result = await releaseAsset(asset.sha256);
+    if (!result.ok) {
+      this.#options.onNotice(result.message, "error");
+      // 消えていない・もう無いのどちらでも、正しい一覧は引き直さないと分からない。
+      await this.#refreshLibrary();
+      return;
+    }
+
+    this.#library = {
+      assets: (this.#library?.assets ?? []).filter(
+        (owned) => owned.sha256 !== asset.sha256
+      ),
+      usage: result.usage,
+    };
+    this.#render();
+    this.#options.onNotice(
+      `アセットを削除しました (${formatBytes(asset.size)} 空きました)`,
+      "info"
+    );
+  }
+
   /** 使用量。ログインしていなければ、その旨だけを出す。 */
   #renderFooter(): void {
-    const usage = this.#usage;
+    const usage = this.#library?.usage ?? null;
     if (usage === null) {
       const notice = document.createElement("p");
       notice.className = "assets-quota-text";
@@ -328,9 +510,15 @@ export class AssetsPanel {
     this.#footer.replaceChildren(bar, text);
   }
 
-  async #refreshUsage(): Promise<void> {
-    this.#usage = await fetchAssetUsage();
-    this.#renderFooter();
+  async #refreshLibrary(): Promise<void> {
+    this.#library = await fetchAssetLibrary();
+    // 使用量だけでなく所有一覧も変わるので、面ごと組み直す。
+    this.#render();
+  }
+
+  /** 取り込み・削除の応答が返した使用量を映す (所有一覧は後で引き直す)。 */
+  #setUsage(usage: AssetUsage): void {
+    this.#library = { assets: this.#library?.assets ?? [], usage };
   }
 
   /**
@@ -352,11 +540,11 @@ export class AssetsPanel {
 
     const added: string[] = [];
     try {
-      if (this.#usage === null) {
+      if (this.#library === null) {
         // 閉じたまま落とされたときのために、ここでも一度引き直す。
-        await this.#refreshUsage();
+        await this.#refreshLibrary();
       }
-      if (this.#usage === null) {
+      if (this.#library === null) {
         this.#queue.length = 0;
         this.#options.onNotice("ログインするとアセットを追加できます", "error");
         return;
@@ -372,7 +560,7 @@ export class AssetsPanel {
           this.#options.onNotice(result.message, "error");
           continue;
         }
-        this.#usage = result.usage;
+        this.#setUsage(result.usage);
 
         const edit = addAsset(
           this.#options.getFiles(),
@@ -399,6 +587,8 @@ export class AssetsPanel {
     if (added.length > 0) {
       this.#options.onNotice(`${added.join("・")} を追加しました`, "success");
     }
+    // 足したものは所有一覧にも並ぶ。応答が返すのは使用量だけなので引き直す。
+    await this.#refreshLibrary();
   }
 
   /**

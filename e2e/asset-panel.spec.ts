@@ -22,6 +22,8 @@ import {
   login,
   openAssets,
   openEditor,
+  openOwnedAssets,
+  ownedAssetRow,
   readStoredDraft,
   toasts,
 } from "./helpers";
@@ -187,6 +189,73 @@ test.describe("アセットパネル", () => {
     // 空になっても `assets.json` 自体は残す (「全部外した」と「一度も使って
     // いない」は別物 — 3-5 の GC がこの区別で参照を数える)。
     await expect.poll(() => draftManifest(page)).toMatchObject({ version: 1 });
+  });
+
+  test("作品から外したアセットは持ったままで、削除すると手放せる", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    await login(page);
+    await openAssets(page);
+
+    const asset = makePng();
+    await pickFile(page, asset, "cat.png");
+    await expect(assetRow(page, "cat.png")).toBeVisible();
+
+    await openOwnedAssets(page);
+    const owned = ownedAssetRow(page, asset.sha256);
+    await expect(owned).toBeVisible();
+    // 使っている間は手放せない。手放すと**次の保存で断られる** (3-2) ので、
+    // 気付けない壊れ方になる。
+    await expect(owned.locator(".assets-owned-release")).toHaveCount(0);
+    await expect(owned.locator(".assets-owned-used")).toContainText("cat.png");
+
+    // 作品から外しても所有は残る (ここが 3-4a との違い)。
+    await assetRow(page, "cat.png").locator(".assets-remove").click();
+    await expect(assetRow(page, "cat.png")).toHaveCount(0);
+    await expect(owned).toBeVisible();
+
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain("容量を空けます");
+      void dialog.accept();
+    });
+    await owned.locator(".assets-owned-release").click();
+
+    // 台帳から自分の行が消えた = クォータが空いた。**合計の数字では確かめない** —
+    // E2E は同じ利用者で並列に走るので、他のテストのアップロードで動く (3-1)。
+    await expect(owned).toHaveCount(0);
+    // 「外しました」の知らせがまだ残っているので、最後の 1 枚を見る。
+    await expect(toasts(page, "info").last()).toContainText("削除しました");
+
+    // 引き直しても戻らない (画面の中だけで消えたのではない)。
+    await page.reload();
+    await openAssets(page);
+    // **一覧を引き終えてから**見る。読む前の「まだ何も無い」を答えと取り違えない。
+    await expect(
+      assetsDrawer(page).locator(".assets-quota-text")
+    ).toContainText("使用中");
+    await expect(ownedAssetRow(page, asset.sha256)).toHaveCount(0);
+  });
+
+  test("削除をやめたら手放さない", async ({ page }) => {
+    await openEditor(page);
+    await login(page);
+    await openAssets(page);
+
+    const asset = makePng();
+    await pickFile(page, asset, "cat.png");
+    await expect(assetRow(page, "cat.png")).toBeVisible();
+    await assetRow(page, "cat.png").locator(".assets-remove").click();
+
+    await openOwnedAssets(page);
+    const owned = ownedAssetRow(page, asset.sha256);
+
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await owned.locator(".assets-owned-release").click();
+
+    await expect(owned).toBeVisible();
+    // 断った後もまた押せる (押した拍子に無効のまま残らない)。
+    await expect(owned.locator(".assets-owned-release")).toBeEnabled();
   });
 
   test("未ログインでは追加できないことを先に言う", async ({ page }) => {

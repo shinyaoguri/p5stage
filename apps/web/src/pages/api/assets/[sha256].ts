@@ -28,6 +28,7 @@ import {
   findBlob,
   hasClaim,
   recordBlob,
+  releaseBlob,
 } from "../../../lib/assets/store";
 import {
   jsonError,
@@ -181,6 +182,40 @@ async function upload(
     { status: 201, headers: { "Cache-Control": "private, no-store" } }
   );
 }
+
+/**
+ * 所有を手放す (3-4b)。
+ *
+ * 消えるのは台帳の「誰に計上するか」だけ。実体は残るので、同じ中身をもう一度
+ * 持ち込めば転送なしで戻る。回収は 3-5 の GC (詳細は `releaseBlob`)。
+ */
+export const DELETE: APIRoute = async ({ request, url, params }) => {
+  const foreign = rejectForeignOrigin(request, url);
+  if (foreign !== null) return foreign;
+
+  const auth = await requireSession(request, Date.now());
+  if ("response" in auth) return auth.response;
+
+  const sha256 = params.sha256 ?? "";
+  if (!isSha256Hex(sha256)) {
+    return jsonError(
+      400,
+      "invalid_input",
+      "sha256 は 64 桁の小文字 16 進で指定してください"
+    );
+  }
+
+  const userId = auth.session.user.id;
+  // 持っていないものを消したと答えると、一覧が古いことに気付けない。
+  if (!(await releaseBlob(env.DB, userId, sha256))) {
+    return jsonError(404, "not_found", "そのアセットは持っていません");
+  }
+
+  return Response.json(
+    { usage: await assetUsage(env.DB, userId) },
+    { status: 200, headers: { "Cache-Control": "private, no-store" } }
+  );
+};
 
 export const PUT: APIRoute = async ({ request, url, params }) => {
   const response = await upload(request, url, params.sha256 ?? "");
