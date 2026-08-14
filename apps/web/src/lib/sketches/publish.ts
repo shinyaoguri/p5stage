@@ -10,6 +10,7 @@ import { env } from "cloudflare:workers";
 import { referencedDigests, type SketchFiles } from "@p5stage/shared";
 
 import { recordRefs } from "../assets/store";
+import { notifyRevision } from "../live/notify";
 
 import { recordRevision } from "./revision-log";
 import { putRevision } from "./revision-store";
@@ -19,9 +20,9 @@ import { setCurrentRevision } from "./store";
  * リビジョンの写しを R2 へ置き、それが使うアセットを参照台帳へ記し (3-5a)、
  * 版そのものを履歴の台帳へ載せる (4-1)。
  *
- * **R2 へ書く経路はここに集める。** 写しが増えるのは保存・取り込み (`publishRevision`)
- * だけでなく、閲覧時の埋め合わせと再検証 (`delivery.ts` の `fill` / `revalidate`
- * — 作者が GitHub 側で直接編集した分) もある。どれか一つでも素通りすると、
+ * **R2 へ書く経路はここに集める。** 写しが増えるのは 4 つ — 保存・取り込み・
+ * 閲覧時の埋め合わせ・再検証 (作者が GitHub 側で直接編集した分) で、4-2 からは
+ * どれも `publishRevision` を通る。どれか一つでも素通りすると、
  * **配られているのに台帳に無い** blob ができ、回収 (3-5b) がそれを孤児と見なす。
  *
  * 記録はどちらも R2 へ書けた後。書けていないリビジョンは配られないので、参照を守る
@@ -39,7 +40,16 @@ export async function storeRevision(
 }
 
 /**
- * R2 へ書いて、配信するリビジョンを進める。書けたら true。
+ * R2 へ書いて、配信するリビジョンを進め、開いている閲覧者へ知らせる。書けたら true。
+ *
+ * **配信の進行点はここ 1 つ。** 4-1 の時点では保存・取り込みがここを通る一方、
+ * 閲覧時の埋め合わせと再検証 (`delivery.ts` の `fill` / `revalidate`) は
+ * `storeRevision` + `setCurrentRevision` を自分で並べていて、進行点が 3 か所あった。
+ * 同期の知らせ (4-2) を足すにあたって寄せてある — **散ったままだと知らせも 3 か所に
+ * 散り、どれか一つを書き忘れた経路だけ追従しなくなる**。
+ *
+ * `etag` は取れた経路だけが渡す。保存と取り込みの応答には無い形で来るので `null` で、
+ * その場合は次の再検証で埋まる。
  *
  * **失敗しても呼び出し側は成功として返してよい**。正本 (Gist) には既に書けている
  * ので、ここで失敗を返すと利用者が同じ操作を繰り返すことになる。配信側は次の閲覧で
@@ -47,20 +57,21 @@ export async function storeRevision(
  *
  * ポインタを進めるのは参照を記した後。順を逆にすると、記録に失敗した瞬間から
  * 「配っているのに守られていない」リビジョンが残る。この順なら、失敗しても
- * 配信が進まないだけで済む。
+ * 配信が進まないだけで済む。知らせを最後に置くのも同じ理由で、**配れる状態に
+ * なってから**呼ぶ (受け取った閲覧者はすぐ中身を取りに来る)。
  */
 export async function publishRevision(
   sketchId: string,
   gistId: string,
   revision: string,
-  files: SketchFiles
+  files: SketchFiles,
+  etag: string | null
 ): Promise<boolean> {
   try {
     const now = Date.now();
     await storeRevision(gistId, revision, files, now);
-    // ETag はここでは取れない (保存の応答にも読み出しの応答にも無い形で来る)。
-    // 次の再検証で埋まる。
-    await setCurrentRevision(env.DB, sketchId, revision, null, now);
+    await setCurrentRevision(env.DB, sketchId, revision, etag, now);
+    notifyRevision(sketchId, revision);
     return true;
   } catch {
     return false;

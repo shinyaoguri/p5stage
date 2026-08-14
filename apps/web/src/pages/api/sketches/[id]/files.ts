@@ -240,7 +240,9 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
         sketch.id,
         created.revision.id,
         created.revision.revision,
-        read.files
+        read.files,
+        // ETag は保存の応答には無い形で来る。次の再検証で埋まる。
+        null
       );
       return noStore({
         sketch: { ...sketch, gistId: created.revision.id },
@@ -260,7 +262,8 @@ export const PUT: APIRoute = async ({ request, url, params }) => {
       sketch.id,
       sketch.gistId,
       revision.revision,
-      read.files
+      read.files,
+      null
     );
     return noStore({ sketch, gist: revision, published });
   } catch (error) {
