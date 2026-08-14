@@ -51,9 +51,12 @@ try {
         {/* ステータスは長さが変わるので左端に置く (伸びてもボタンが動かない)。
             下書きの状態は実行の状態とは別に出す (片方がもう片方を消さない)。
 
-            並びは「文字 → アイコン」。実行と停止だけまだテキストボタンなので
-            (#41 の 3 で中央の ▶/■ トグルに作り替えるため、ここでは触らない)、
-            文字が続く左側に寄せて、アイコン列が右端で途切れないようにする。 */}
+            ここに残るのは**今そうである状態**だけ (#41 の 5)。もう終わった出来事の
+            報告はトースト (scripts/ui/toast.ts) へ移した — 行が 1 本しか無いので、
+            混ぜると後から来た知らせが前のものを消していた。
+
+            並びは「文字 → アイコン」。文字が続く左側に寄せて、アイコン列が右端で
+            途切れないようにする。 */}
         <div class="chrome">
           <span id="draft-status" class="status draft-status" role="status" />
           <span id="status" class="status" role="status" />
@@ -109,6 +112,7 @@ try {
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
+  import { showToast } from "../scripts/ui/toast";
   import { makeToolbarButton } from "../scripts/ui/toolbar-button";
   import {
     SettingsSaver,
@@ -163,6 +167,13 @@ try {
     const setStatus = (text: string) => {
       if (status) status.textContent = text;
     };
+    /**
+     * 下書きまわりの**状態**を出す (#41 の 5)。
+     *
+     * 出来事の報告はここではなくトーストへ渡す。ここに残すのは「消えると気付けない
+     * まま書き続けることになる」もの — 直すまで続く条件と、下書きが今どうなって
+     * いるか。
+     */
     const setDraftStatus = (text: string) => {
       if (draftStatus) draftStatus.textContent = text;
     };
@@ -199,8 +210,9 @@ try {
     // 言う — 保存で初めて弾かれると、書いた後に直す羽目になる。
     const manifest = readAssetManifest(start.files);
 
-    // 知らせは 1 行しか無いので、重い順に 1 つだけ出す。実行の状態 (右隣) は
-    // 接続や実行のたびに上書きされるので、残したい知らせはこちらへ。
+    // 開いた時点で分かる**直すまで続く条件**。行は 1 本しか無いので重い順に
+    // 1 つだけ出す。どれも消えると気付けないまま保存して中身を失うので、
+    // トーストには載せない (#41 の 5)。
     if (loadFailure !== null) {
       setDraftStatus(loadFailure);
     } else if (opened !== null && opened.truncated.length > 0) {
@@ -210,8 +222,16 @@ try {
       );
     } else if (manifest !== null && !manifest.ok) {
       setDraftStatus(`${manifest.message} (直すまで保存できません)`);
-    } else if (start.source === "draft" && draft !== null) {
-      setDraftStatus(`下書きを復元しました (${formatSavedAt(draft.savedAt)})`);
+    }
+
+    // 復元は**もう終わった出来事**なので、上の条件とは別にトーストで言う。
+    // 「読み込めなかったので下書きから始めた」は同時に成り立つ状況で、片方が
+    // もう片方を消していた頃は後者が見えなかった。
+    if (start.source === "draft" && draft !== null) {
+      showToast(
+        `下書きを復元しました (${formatSavedAt(draft.savedAt)})`,
+        "info"
+      );
     }
 
     const consolePanel = new ConsolePanel(consoleHost);
@@ -323,7 +343,9 @@ try {
     });
 
     // 名前の書き戻し。保存済みの作品だけが対象 (#41 の 3)。
-    const titleSaver = new TitleSaver({ onError: setDraftStatus });
+    const titleSaver = new TitleSaver({
+      onError: (message) => showToast(message, "error"),
+    });
 
     const savePanel = new SavePanel(saveHost, {
       // 名前は画面上部の入力欄が持つ。初回の保存はそれと公開範囲を束ねて送る。
@@ -359,16 +381,18 @@ try {
       try {
         await detachSketchGist(current);
       } catch (error) {
-        setDraftStatus(
+        showToast(
           error instanceof GistAdoptError
             ? error.message
-            : "切り離せませんでした"
+            : "切り離せませんでした",
+          "error"
         );
         return;
       }
       saver.forgetGist();
-      setDraftStatus(
-        "Gist から切り離しました (保存すると新しい Gist を作ります)"
+      showToast(
+        "Gist から切り離しました (保存すると新しい Gist を作ります)",
+        "success"
       );
     };
 
@@ -399,7 +423,7 @@ try {
         projectBar.setName(adoptedName);
         titleSaver.markSent(adopted.sketchId, adoptedName);
         showSketchIdInUrl(adopted.sketchId);
-        setDraftStatus("Gist から取り込みました");
+        showToast("Gist から取り込みました", "success");
         run();
         editor.focus();
         return null;
@@ -466,7 +490,9 @@ try {
         editor.removeFile(name);
         editor.focus();
       },
-      onError: setStatus,
+      // 使えない名前・消せないファイルはトーストで断る (#41 の 5)。実行の状態
+      // (`#status`) に出していた頃は、次の実行が来た瞬間に理由が消えていた。
+      onError: (message) => showToast(message, "error"),
     });
     tabs.render(editor.fileNames, editor.activeFile);
 
@@ -494,7 +520,7 @@ try {
           // 前の作品の Gist を上書きする。
           saver.detach();
           clearSketchIdInUrl();
-          setDraftStatus("下書きを破棄しました");
+          showToast("下書きを破棄しました", "info");
           run();
           editor.focus();
         },
@@ -525,8 +551,10 @@ try {
     if (!accountHost) return;
 
     const panel = new AccountPanel(accountHost);
-    // 認可から戻った直後の失敗はここで拾う (成功時は何も出さない)。
-    panel.setMessage(AccountPanel.takeFailureMessage());
+    // 認可から戻った直後の失敗はここで拾う (成功時は何も出さない)。もう一度
+    // ログインすれば済む出来事なので、パネルに残さずトーストで言う (#41 の 5)。
+    const failure = AccountPanel.takeFailureMessage();
+    if (failure !== null) showToast(failure, "error");
     await panel.refresh();
   };
 

@@ -15,6 +15,7 @@ import {
   fileTabNames,
   openEditor,
   openFile,
+  toasts,
   typeIntoEditor,
 } from "./helpers";
 
@@ -58,7 +59,9 @@ test.describe("ファイルタブ", () => {
     await input.fill("dir/file.js");
     await input.press("Enter");
 
-    await expect(page.locator("#status")).toContainText("フォルダは作れません");
+    // 断る理由はトーストで出す (#41 の 5)。実行の状態に出していた頃は、次の実行が
+    // 来た瞬間に消えていた。
+    await expect(toasts(page, "error")).toContainText("フォルダは作れません");
     // 打ち直せるよう入力は残す (閉じてしまうと名前を一から入れ直しになる)。
     await expect(input).toBeVisible();
 
@@ -96,7 +99,7 @@ test.describe("ファイルタブ", () => {
 
     await fileTab(page, "index.html").press("Delete");
 
-    await expect(page.locator("#status")).toContainText(
+    await expect(toasts(page, "error")).toContainText(
       "index.html は実行の起点なので削除できません"
     );
     await expect(fileTab(page, "index.html")).toBeVisible();

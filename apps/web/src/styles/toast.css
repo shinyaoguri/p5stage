@@ -1,0 +1,104 @@
+/*
+ * 一過性の知らせ (#41 の 5)。
+ *
+ * 面は toast.ts が body 直下に作るので、Astro のスコープ付き CSS は届かない
+ * (設定ドロワーと同じ事情)。置き場所もここが決める。
+ *
+ * 移植元は canvastage の `#toast-container` / `.toast` (`src/style.css`)。
+ * 右上に積み、0.25s で降りてきて 0.3s で上へ消える。
+ */
+
+#toast-container {
+  position: fixed;
+  /*
+   * 設定ドロワー (30) より上。ドロワーを開いたまま操作した結果もそこで読める
+   * 必要がある (下に潜ると、何が起きたか分からないまま面だけが残る)。
+   */
+  z-index: 40;
+  /* 操作列の下。28px のボタンと上下の余白 (0.5rem) の分だけ空ける。 */
+  top: 3rem;
+  /* 右端は操作列・エディタと同じ縦線 (styles/editor-chrome.css)。 */
+  right: max(0.5rem, var(--editor-padding));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* 狭い画面では画面幅に収める。左右の余白ぶんを引く。 */
+  max-width: calc(100% - 2 * max(0.5rem, var(--editor-padding)));
+  /*
+   * 触れない面にする。canvastage は URL 付きの知らせにリンクとコピーボタンを
+   * 持たせるので `auto` に戻しているが、こちらは読ませるだけ。押せるものが無い面が
+   * 右上の操作列やスケッチへのクリックを吸うと、消えるまで触れない場所ができる。
+   */
+  pointer-events: none;
+}
+
+.toast {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.6);
+  /* 操作系と同じ書体。設定の「書体」には追従させない (クロームの一員なので)。 */
+  font-family: var(--ui-font-family);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  backdrop-filter: blur(12px);
+  /*
+   * canvastage は `white-space: nowrap` で 1 行に収めるが、こちらは折り返す。
+   * 失敗の文言が「次に何をすればいいか」まで含むぶん長く、狭い画面では 1 行に
+   * 収まらない (収まらないものを収めると画面の外へ出る)。
+   */
+  animation: toast-enter 0.25s ease-out;
+}
+
+/*
+ * 色は console-panel.css に揃える。
+ *
+ * canvastage の色 (info #6bb3ff / success #50fa7b / error #ff6b6b) をそのまま
+ * 持ち込まない。p5stage の暗いクロームには既に語彙があり (コンソールの
+ * ログ / 警告 / エラー)、同じ画面で 2 通りの「エラーの色」が出るのは避ける。
+ * 緑だけは元から無いので canvastage の値を採る。
+ */
+.toast-info {
+  border-color: rgb(142 199 255 / 0.35);
+  color: #8ec7ff;
+}
+
+.toast-success {
+  border-color: rgb(80 250 123 / 0.35);
+  color: #50fa7b;
+}
+
+.toast-error {
+  border-color: rgb(255 128 149 / 0.35);
+  color: #ff8095;
+}
+
+@keyframes toast-enter {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 消える動き。終わってから DOM を外すので、最後の姿で止める (`forwards`)。
+   モーション低減は editor-chrome.css が画面全体で止める。 */
+.toast-exit {
+  animation: toast-exit 0.3s ease-in forwards;
+}
+
+@keyframes toast-exit {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+}
