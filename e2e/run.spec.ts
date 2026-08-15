@@ -100,7 +100,7 @@ test.describe("スケッチの実行", () => {
       .toBe(false);
   });
 
-  test("実行してから編集すると、実行ボタンが再実行の口になる", async ({
+  test("実行してから編集しても、押す先は停止のまま変わらない", async ({
     page,
   }) => {
     await openEditor(page);
@@ -108,20 +108,36 @@ test.describe("スケッチの実行", () => {
     await expect(runButton(page)).toHaveAttribute("data-running", "true");
     await expect(runButton(page)).toHaveAttribute("aria-label", "停止");
 
-    await typeIntoEditor(page, 'console.log("e2e-restale");');
+    // 書き換えた後も canvas が出ることまで見たいので、**描くコード**に差し替える
+    // (`console.log` だけにすると setup も draw も無くなり、p5 はそもそも起動しない)。
+    await typeIntoEditor(
+      page,
+      'function setup(){createCanvas(100,100);console.log("e2e-restale");}'
+    );
 
-    // 書き換えた時点で、画面のスケッチは今の中身ではなくなる。ここで押して
-    // 止まってしまうと、最も多い操作 (再実行) がマウスから届かない (#41 の 6)。
-    await expect(runButton(page)).toHaveAttribute("aria-label", /^再実行/);
+    // 書き換えても**押す先は動かない** (canvastage と同じ)。画面が古いことは
+    // ドットだけが示し、■ が ▶ に化けたりはしない — 押すつもりの操作が
+    // 打っている最中に入れ替わらないようにする。
+    await expect(runButton(page)).toHaveClass(/is-stale/);
+    await expect(runButton(page)).toHaveAttribute("aria-label", "停止");
+
     await runButton(page).click();
+    await expect(runButton(page)).toHaveAttribute("data-running", "false");
+    await expect
+      .poll(() => hasSketchCanvas(page), {
+        message: "停止したのにスケッチが残っています",
+      })
+      .toBe(false);
 
-    await expectGeneration(page, 2);
+    // もう一度押すと、書き換えた後の内容で動き出す。世代が 2 ではなく 3 なのは、
+    // 停止も 1 つ使うため (PreviewHost の `stop` も世代を進める)。
+    await runButton(page).click();
+    await expectGeneration(page, 3);
     await expect(consolePanel(page)).toContainText("e2e-restale");
-    // 実行したので古くなくなった = また止められる。
     await expect(runButton(page)).toHaveAttribute("aria-label", "停止");
     await expect
       .poll(() => hasSketchCanvas(page), {
-        message: "再実行したのにスケッチが出ていません",
+        message: "実行し直したのにスケッチが出ていません",
       })
       .toBe(true);
   });
