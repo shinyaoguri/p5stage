@@ -133,9 +133,19 @@ upgrade のステータスが読めないので、503 だとクライアント�
 - **デプロイの形が変わった。** DO クラスの作成・削除・改名は原子的な操作で段階的
   ロールアウトに載らないため、`wrangler deploy` でしか適用できない。PR プレビューが使う
   `wrangler versions upload` は code 10211 で拒否するので、**新しい DO を入れる PR は
-  必ずプレビューを出せない** (main への deploy で適用され、以降は出る)。落とし続けると
+  バージョンを上げられない** (main への deploy で適用される)。落とし続けると
   required check が詰まって適用の道に辿り着けないので、CI はこのコードに限って
   skip 扱いにする。見逃すのは 1 コードだけで、他のデプロイ失敗は今までどおり止める
+- **web の PR プレビュー URL は、この ADR の時点で永久に出なくなった。**
+  Cloudflare は [DO を実装した Worker にプレビュー URL を発行しない](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/#limitations)。
+  `preview_urls: true` を書いても出ない (アップロードは成功し、URL の行だけが出力に
+  現れない)。上の 10211 とは別の話で、**migration を適用した後も出ないまま**。
+  当初はここを「以降は出るようになる」と書いていたが、実際には 404 が返り続けていた。
+
+  確認の道は 2 つに置き換えた — **CI が撮る画面の証跡** (`e2e/screenshots.spec.ts` /
+  `npm run shots`。PR に artifact として付く) と、**手元の `npm run dev`**。
+  実行環境 (`p5stage-preview`) は DO を持たないのでプレビュー URL が出るが、
+  本体が無いと単体では実行の入口が無い — 「上がっているか」の確認に留まる
 - **この変更をまたぐロールバックはできない。** DO のライフサイクル変更より前の
   バージョンへは戻せなくなる (Cloudflare の制約)。同じ理由で、あちらは「ライフサイクル
   変更は他のコード変更と独立してデプロイする」ことを勧めている — 今回は 1 つ目の DO で

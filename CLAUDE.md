@@ -16,11 +16,16 @@ npm run typecheck     # wrangler types → 各ワークスペースの型検査
 npm test              # Vitest (DOM に依存しない純ロジック)
 npm run build         # 全ワークスペースのビルド
 npm run test:e2e      # Playwright (実ブラウザ。サーバ起動は config が受け持つ)
+npm run shots         # 画面の証跡を e2e/shots/ へ撮る (検証はしない。普段の E2E からは外してある)
 ```
 
 CI (.github/workflows/ci.yml) は上から順に `verify` ジョブで、`test:e2e` は
 並行する `e2e` ジョブで実行する。required check は集約ジョブ `ci-gate` 1 本。可逆な変更の PR は `gh pr merge <番号> --auto --squash` で
 CI green を待って自動マージする。
+
+**web (本体) に PR プレビュー URL は出ない。** Durable Object を持つ Worker には
+Cloudflare がプレビュー URL を発行しないため (ADR 0017 の申し送り)。PR での見た目の確認は
+`e2e` ジョブが撮る証跡 (artifact `screenshots`)、動きの確認は手元の `npm run dev`。
 
 ## リポ固有の注意
 

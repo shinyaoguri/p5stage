@@ -23,6 +23,9 @@ worker-configuration.d.ts
 playwright-report/
 test-results/
 blob-report/
+# 画面の証跡 (npm run shots)。**リポジトリに画像はコミットしない** — PR へは
+# CI が artifact として上げる (.github/workflows/ci.yml)。
+e2e/shots/
 
 # ログ
 *.log
