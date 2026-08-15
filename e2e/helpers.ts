@@ -243,24 +243,41 @@ export async function setProjectName(page: Page, name: string): Promise<void> {
 }
 
 /**
+ * 新しく作る作品の公開範囲を決める (#87 の段階 5)。
+ *
+ * 保存では尋ねられないので、押す前に設定で決めておく。**押した時点の設定**が読まれる
+ * ので、ここで変えた値がそのまま次に作る作品へ効く。
+ */
+export async function setDefaultVisibility(
+  page: Page,
+  visibility: "public" | "unlisted"
+): Promise<void> {
+  await openSettings(page);
+  const control = await settingControl(page, "defaultVisibility");
+  await control.selectOption(visibility);
+  // 面を出したままにしない (保存ボタンは中央にあるが、開いた面は視界を塞ぐ)。
+  await settingsDrawer(page).locator(".settings-panel-close").click();
+  await expect(settingsDrawer(page)).toBeHidden();
+}
+
+/**
  * 初回の保存。作品 ID を返す。
  *
- * 尋ねられるのは公開範囲だけ (後から変えられない — ADR 0010)。名前は画面上部の
- * 入力欄が常時持つので、ここでは押す前に付け替える (#41 の 3)。
+ * **何も尋ねられない** (#87 の段階 5)。名前は画面上部の入力欄が、公開範囲は設定が、
+ * それぞれ押す前から持っている。
  */
 export async function saveNewSketch(
   page: Page,
   title: string,
   visibility: "public" | "unlisted"
 ): Promise<string> {
-  // 名前は画面上部の入力欄が常時持つ (#41 の 3)。保存ダイアログでは尋ねられない。
+  // 名前は画面上部の入力欄が常時持つ (#41 の 3)。
   await setProjectName(page, title);
+  // 既定 (公開) を求めているだけなら設定は触らない。ここを通る呼び出しは 20 近く
+  // あり、そのたびにドロワーを開け閉てすると全体が目に見えて遅くなる。**既定が
+  // 公開であること自体は単体テストが固定している** (settings.test.ts)。
+  if (visibility !== "public") await setDefaultVisibility(page, visibility);
   await page.locator("#save").click();
-  await expect(page.locator("#save-dialog-title")).toHaveText(title);
-  await page
-    .locator(`#save-dialog input[name="visibility"][value="${visibility}"]`)
-    .check();
-  await page.locator("#save-confirm").click();
 
   await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
 
@@ -428,14 +445,19 @@ export function clearStoredDraft(page: Page): Promise<void> {
 /**
  * 設定ドロワー (#41 の 4)。
  *
- * 面は操作列の中ではなく body 直下にあるので、トグルと同じ祖先では指せない。
+ * 面は開く口の中ではなく body 直下にあるので、項目と同じ祖先では指せない。
  */
 export const settingsDrawer = (page: Page): Locator =>
   page.locator("#settings-panel-body");
 
-/** 設定パネルを開く。 */
+/**
+ * 設定パネルを開く。
+ *
+ * 開く口はアカウントメニューの中にある (#87 の段階 5)。操作列に歯車は無い。
+ */
 export async function openSettings(page: Page): Promise<void> {
-  await page.locator("#settings .settings-panel-toggle").click();
+  await openAccountMenu(page);
+  await page.locator("#settings-toggle").click();
   await expect(settingsDrawer(page)).toBeVisible();
 }
 

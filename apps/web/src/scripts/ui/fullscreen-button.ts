@@ -29,6 +29,12 @@ import {
  * 今どちらの状態かは**この関数が覚えない**。`document.fullscreenElement` が正本で、
  * Escape キーやブラウザの UI からも解除されるため、自前の真偽値を持つと実態から
  * ずれる。`fullscreenchange` を聞いて、そのつど DOM から引き直す。
+ *
+ * **`is-active` は付けない。** あれは「この面を今開いている」印 (設定ドロワー・
+ * メニュー) で、押している間だけ何かが画面に居座っていることを示す。全画面は面では
+ * なく、広がったこと自体が画面全体で見えている — その上さらに白い背景を乗せると、
+ * いちばん静かにしたい場面で操作列がいちばん目立つ。**押すと何が起きるか**は絵
+ * (内向きの四隅) とラベル (「全画面表示を終わる」) が既に言っている。
  */
 export function mountFullscreenButton(
   host: HTMLElement
@@ -46,8 +52,6 @@ export function mountFullscreenButton(
     const on = document.fullscreenElement !== null;
     setToolbarButtonIcon(button, on ? "exitFullscreen" : "fullscreen");
     setToolbarButtonLabel(button, on ? "全画面表示を終わる" : "全画面表示");
-    // 全画面の間は押されたままに見せる (他の面を開くボタンと同じ扱い)。
-    button.classList.toggle("is-active", on);
     // 今どちらかは意匠ではなく構造で読めるようにする (E2E は四隅の向きではなく
     // こちらを見る — project-bar の `data-running` と同じ流儀)。
     button.dataset.fullscreen = String(on);

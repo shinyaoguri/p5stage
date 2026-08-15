@@ -38,6 +38,8 @@ import {
   saveButton,
   saveNewSketch,
   saveStatus,
+  setProjectName,
+  toasts,
   typeIntoEditor,
 } from "./helpers";
 import { FAKE_GITHUB_ORIGIN, WEB_ORIGIN } from "./origins";
@@ -87,6 +89,37 @@ async function readGistFiles(
   return Object.fromEntries(
     Object.entries(body.files).map(([name, file]) => [name, file.content])
   );
+}
+
+/**
+ * 正本 (Gist) が公開として作られたか。
+ *
+ * D1 の `visibility` だけを見ても足りない。**両方が揃って初めて約束が守られる** —
+ * 片方だけ合っている状態こそ ADR 0010 が避けている「限定公開のつもりが Gist は
+ * 公開のまま」で、そこは正本を読まないと分からない。
+ */
+async function readGistIsPublic(
+  request: APIRequestContext,
+  gistId: string
+): Promise<boolean> {
+  const response = await request.get(`${FAKE_GITHUB_ORIGIN}/gists/${gistId}`, {
+    headers: { Authorization: "Basic e2e" },
+  });
+  expect(response.status()).toBe(200);
+
+  const body = (await response.json()) as { public: boolean };
+  return body.public;
+}
+
+/** 器 (D1 の作品) 側の公開範囲。 */
+async function readVisibility(page: Page, sketchId: string): Promise<string> {
+  const response = await page.request.get(`/api/sketches/${sketchId}`);
+  expect(response.ok()).toBe(true);
+
+  const body = (await response.json()) as {
+    sketch?: { visibility?: string };
+  };
+  return body.sketch?.visibility ?? "";
 }
 
 test.describe("ログインの往復", () => {
@@ -164,6 +197,54 @@ test.describe("保存から閲覧まで", () => {
     await expect(saveButton(page)).toHaveAttribute(
       "aria-describedby",
       "save-status"
+    );
+  });
+
+  /**
+   * 保存は尋ねない (#87 の段階 5)。
+   *
+   * エディタは投影されながら書かれる場所でもあるので、押した先に画面いっぱいの
+   * 面を出さない。決めるべき値 (名前・公開範囲) は押す前から揃っている。
+   */
+  test("保存はダイアログを出さず、設定の公開範囲 (既定は公開) で作る", async ({
+    page,
+    request,
+  }) => {
+    await signedInEditor(page);
+    await setProjectName(page, "e2e-尋ねない保存");
+
+    await page.locator("#save").click();
+
+    // 尋ねる面はどれも開かない (以前はここで公開範囲を選ばせていた)。
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
+    await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
+
+    // 尋ねない代わりに、**何として作られたか**は言う。公開範囲は後から変えられない
+    // ので (ADR 0010)、違っていたときは早く気付けるほど作り直しが軽い。
+    await expect(toasts(page, "success")).toContainText("公開で保存しました");
+
+    const id = new URL(page.url()).searchParams.get("sketch") ?? "";
+    expect(id).not.toBe("");
+    expect(await readVisibility(page, id)).toBe("public");
+    expect(await readGistIsPublic(request, await savedGistId(page))).toBe(true);
+  });
+
+  test("設定を限定公開にすると、Gist も secret として作られる", async ({
+    page,
+    request,
+  }) => {
+    await signedInEditor(page);
+
+    // `saveNewSketch` は設定で公開範囲を決めてから保存する (helpers.ts)。
+    const id = await saveNewSketch(page, "e2e-限定公開で保存", "unlisted");
+
+    await expect(toasts(page, "success")).toContainText(
+      "限定公開で保存しました"
+    );
+    expect(await readVisibility(page, id)).toBe("unlisted");
+    // 器だけ限定公開で正本が公開、が起きていないことを正本側で確かめる。
+    expect(await readGistIsPublic(request, await savedGistId(page))).toBe(
+      false
     );
   });
 

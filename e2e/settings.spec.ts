@@ -13,6 +13,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  accountMenuToggle,
   openEditor,
   openSettings,
   readStoredSettings,
@@ -99,9 +100,9 @@ test.describe("エディタ設定", () => {
 
     // スケッチの上に重なる面なので、「消して手元を見たい」がすぐ叶うようにする。
     await expect(settingsDrawer(page)).toBeHidden();
-    await expect(
-      page.locator("#settings .settings-panel-toggle")
-    ).toBeFocused();
+    // 開けた項目はアカウントメニューの中で畳まれているので、フォーカスはその
+    // 開閉ボタンへ返る (#87 の段階 5 — 押せない項目へは返さない)。
+    await expect(accountMenuToggle(page)).toBeFocused();
   });
 
   test("閉じるボタンでも閉じ、フォーカスは開いたボタンへ戻る", async ({
@@ -110,14 +111,13 @@ test.describe("エディタ設定", () => {
     await openEditor(page);
     await openSettings(page);
 
-    // 開いた面の中にも閉じる口が要る。全高のドロワーに隠れて、開けた歯車は遠い。
+    // 開いた面の中にも閉じる口が要る。全高のドロワーに隠れて、開けた歯車は遠い
+    // (しかもメニューの中なので、開き直すところから始めることになる)。
     await settingsDrawer(page).locator(".settings-panel-close").click();
 
     await expect(settingsDrawer(page)).toBeHidden();
     // 閉じた面は inert になる。中にフォーカスを取り残さない。
-    await expect(
-      page.locator("#settings .settings-panel-toggle")
-    ).toBeFocused();
+    await expect(accountMenuToggle(page)).toBeFocused();
   });
 
   test("画面の右端に貼り付く全高の面として開く", async ({ page }) => {

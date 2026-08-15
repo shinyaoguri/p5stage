@@ -117,6 +117,24 @@ describe("sanitizeSettings", () => {
     expect(settings.cursorColor).toBe(DEFAULT_SETTINGS.cursorColor);
   });
 
+  /**
+   * 公開範囲だけは**作品の作られ方**を決める (#87 の段階 5)。
+   *
+   * 他の項目は壊れても見た目が既定に戻るだけだが、これは Gist が public として
+   * 作られるか secret として作られるかを左右し、作った後は変えられない
+   * (ADR 0010)。倒れる先を名指しで固定しておく。
+   */
+  it("公開範囲は保存された値を活かし、知らない値は既定へ倒す", () => {
+    expect(DEFAULT_SETTINGS.defaultVisibility).toBe("public");
+    expect(
+      sanitizeSettings({ defaultVisibility: "unlisted" }).defaultVisibility
+    ).toBe("unlisted");
+    // `private` は p5stage に無い (要件 3.4)。知らない値は既定へ。
+    expect(
+      sanitizeSettings({ defaultVisibility: "private" }).defaultVisibility
+    ).toBe("public");
+  });
+
   it("知らないキーは持ち込まない", () => {
     const settings = sanitizeSettings({ evil: "x", fontSize: 16 });
     expect(Object.keys(settings).sort()).toEqual(

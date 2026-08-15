@@ -53,13 +53,16 @@ try {
             出来事はトースト (scripts/ui/toast.ts) が受け持つ。
 
             残る文字は 2 種類だけで、どちらも常時は出ない — ホバーの文面と、
-            支援技術にだけ渡す状態 (色とドットは読み上げられないため)。 */}
+            支援技術にだけ渡す状態 (色とドットは読み上げられないため)。
+
+            **常時出るのは全画面とアカウントの 2 つだけ** (#87 の段階 5)。設定は
+            アカウントメニューへ畳んだ。ここは投影されている画面の隅なので、
+            残すのは「今すぐ押す口」に限る。 */}
         <div class="chrome">
           {/* 直すまで続く条件。無い間は何も出ない (#41 の 6)。 */}
           <div id="warning-controls" />
           {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
           <div id="draft-controls" />
-          <div id="settings" />
           {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
           <div id="fullscreen-controls" />
           <div id="account" />
@@ -143,7 +146,6 @@ try {
   const tabsHost = document.getElementById("file-tabs");
   const stage = document.getElementById("stage");
   const consoleHost = document.getElementById("console");
-  const settingsHost = document.getElementById("settings");
   const warningHost = document.getElementById("warning-controls");
   const draftHost = document.getElementById("draft-controls");
   const adoptHost = document.getElementById("adopt-controls");
@@ -171,7 +173,6 @@ try {
       !tabsHost ||
       !stage ||
       !consoleHost ||
-      !settingsHost ||
       !warningHost ||
       !draftHost ||
       !adoptHost ||
@@ -405,7 +406,9 @@ try {
           visibility === null ? null : { title: projectBar.name, visibility }
         ),
       onDetach: () => void detachCurrentSketch(),
-      getTitle: () => projectBar.name,
+      // 公開範囲は設定が持つ (#87 の段階 5)。押した時点の値を引くので、ドロワーで
+      // 変えた直後の保存にもその値が効く。
+      getVisibility: () => settings.defaultVisibility,
     });
     const saver = new SketchSaver({
       sketchId,
@@ -425,7 +428,22 @@ try {
           }
         }
       },
-      onCreated: showSketchIdInUrl,
+      onCreated: (id) => {
+        showSketchIdInUrl(id);
+        /*
+         * 尋ねずに作った以上、**何として作られたか**は必ず言う (#87 の段階 5)。
+         *
+         * もう終わった出来事なのでトースト (#41 の 5)。それでも黙って済ませないのは、
+         * 公開範囲だけは後から変えられず (ADR 0010)、違っていたときの直し方が
+         * 「別の作品として作り直す」しかないため — 気付くのが早いほど軽く済む。
+         */
+        showToast(
+          settings.defaultVisibility === "public"
+            ? "公開で保存しました (ギャラリーに載ります。公開範囲は後から変えられません)"
+            : "限定公開で保存しました (URL を知る人は見られます。公開範囲は後から変えられません)",
+          "success"
+        );
+      },
     });
 
     /**
@@ -533,7 +551,9 @@ try {
     }
 
     const settingsSaver = new SettingsSaver();
-    new SettingsPanel(settingsHost, settings, {
+    // 開く口はアカウントメニューの中 (#87 の段階 5)。面そのものは画面の直下に
+    // 置かれるので、ここに器は要らない。
+    const settingsPanel = new SettingsPanel(settings, {
       onChange: (next) => {
         settings = next;
         applyCssVariables(next);
@@ -643,6 +663,15 @@ try {
         onClick: () => adoptPanel.open(),
       })
     );
+
+    /*
+     * エディタの設定 (#87 の段階 5)。
+     *
+     * 上の 2 つとは別の群なので区切りを挟む。あちらは「これから何を書き始めるか」、
+     * こちらは「自分の見え方」で、どちらもアカウントの持ち物ではあるが話が違う。
+     */
+    accountPanel?.addSeparator();
+    accountPanel?.addItem(settingsPanel.menuItem);
 
     // エディタの外 (ボタンやファイル選択) にフォーカスがあるときの ⌘/Ctrl+Enter。
     // エディタ内の keydown は CodeEditor 側が拾って伝播を止めるので二重に走らない。
@@ -770,9 +799,10 @@ try {
     /* エディタの左端と同じ縦線に揃える (#41 の 1-1)。 */
     left: max(0.5rem, var(--editor-padding));
     /* 右上の操作列に譲る幅。左の余白ぶんを差し引き、揃えた縦線を保ったまま
-       操作列と重ならないところで止める。**操作列は 3 つになった** (#87) ので、
-       条件付きの 2 つ (警告・下書きの印) が出ても 13rem に収まる。 */
-    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 13rem);
+       操作列と重ならないところで止める。**操作列は 2 つになった** (#87 の段階 5 で
+       設定をメニューへ畳んだ) ので、条件付きの 2 つ (警告・下書きの印) が出ても
+       11rem に収まる。 */
+    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 11rem);
   }
 
   /* 中身が無いことがある器は、場所ごと消える。器そのものが箱を作らないようにして、

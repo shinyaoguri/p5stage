@@ -14,9 +14,11 @@ import {
   accountMenuToggle,
   expectGeneration,
   login,
+  openAccountMenu,
   openEditor,
   openSettings,
   openWorkMenu,
+  settingsDrawer,
   toasts,
   typeIntoEditor,
   warningIndicator,
@@ -32,9 +34,10 @@ test.describe("操作列", () => {
     await openEditor(page);
 
     const buttons = toolbarButtons(page);
-    // 出るのは 設定 / 全画面 / アカウント の 3 つだけ。作品に属する操作は中央の
-    // 作品メニューへ (#87 の段階 3)、保存は中央の名前の右へ移した (段階 4)。
-    await expect(buttons).toHaveCount(3);
+    // 出るのは 全画面 / アカウント の 2 つだけ。作品に属する操作は中央の作品
+    // メニューへ (#87 の段階 3)、保存は中央の名前の右へ (段階 4)、設定は
+    // アカウントメニューの中へ移した (段階 5)。
+    await expect(buttons).toHaveCount(2);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");
@@ -79,18 +82,42 @@ test.describe("操作列", () => {
     await expect(toasts(page, "error")).toContainText("ログインが必要です");
   });
 
-  test("設定は開いている間そうと分かる", async ({ page }) => {
+  /**
+   * 設定はアカウントメニューの中 (#87 の段階 5)。
+   *
+   * 操作列に歯車は無く、メニューを開いて初めて出る。**押すとメニューは畳まれ**、
+   * 開いたドロワーが右上ごと覆う — 閉じる口は面の中にある (settings.spec)。
+   */
+  test("設定はアカウントメニューの中にあり、押すと面が開く", async ({
+    page,
+  }) => {
     await openEditor(page);
 
-    const toggle = page.locator("#settings .settings-panel-toggle");
+    // 畳んだ先はメニューの中なので、開くまでは見えない。
+    const toggle = page.locator("#settings-toggle");
+    await expect(toggle).toBeHidden();
+
+    await openAccountMenu(page);
+    await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // 縦に並ぶ行なので、絵だけでなく文字も持つ (アイコンだけの行は見分けが付かない)。
+    await expect(toggle.locator(".menu-item-label")).toHaveText(
+      "エディタの設定を開く"
+    );
 
     await openSettings(page);
 
-    // アイコンなので文字で「開いている」と言えない。状態は名前と見た目で示す。
+    // 面が開いた = 開く口の役目は終わり、メニューは畳まれる。
+    await expect(toggle).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(toggle).toHaveAttribute("aria-label", "設定を閉じる");
-    await expect(toggle).toHaveClass(/is-active/);
+
+    // 面の中の閉じる口で戻すと、メニューはまた開ける (押す場所は変わっていない)。
+    await settingsDrawer(page).locator(".settings-panel-close").click();
+    await openAccountMenu(page);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle.locator(".menu-item-label")).toHaveText(
+      "エディタの設定を開く"
+    );
   });
 
   /**
@@ -110,7 +137,9 @@ test.describe("操作列", () => {
     await expect(button).toHaveAttribute("data-fullscreen", "true");
     // アイコンの向きが変わるだけでは「押すと戻る」ことが読み上げに伝わらない。
     await expect(button).toHaveAttribute("aria-label", "全画面表示を終わる");
-    await expect(button).toHaveClass(/is-active/);
+    // **押されたままには見せない** (#87 の段階 5)。`is-active` は面を開いている印で、
+    // 全画面は面ではない。広がったことは画面全体が示している。
+    await expect(button).not.toHaveClass(/is-active/);
     expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(
       true
     );

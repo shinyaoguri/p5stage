@@ -12,10 +12,10 @@
  * 有無で操作列のアイコンが増減すると、押す場所も覚え直しになる。**器は常に同じ**に
  * して、中身だけが入れ替わる形にする。
  *
- * メニューには**アカウント以外の項目も入る** (新しいスケッチ・Gist から開く)。
- * どちらも「これから何を書き始めるか」の操作で、今開いている作品には属さない
- * (作品に属するものは中央の作品メニューが持つ)。足すのは持ち主 (edit.astro) の
- * 仕事で、ここは置き場と並び順だけを決める。
+ * メニューには**アカウント以外の項目も入る** (新しいスケッチ・Gist から開く・
+ * エディタの設定)。前の 2 つは「これから何を書き始めるか」、最後は「自分の見え方」で、
+ * どれも今開いている作品には属さない (作品に属するものは中央の作品メニューが持つ)。
+ * 足すのは持ち主 (edit.astro) の仕事で、ここは置き場と並び順だけを決める。
  */
 
 import "../../styles/account-panel.css";
@@ -126,6 +126,17 @@ export class AccountPanel {
     this.#render();
   }
 
+  /**
+   * 足した項目の間に区切りを入れる (#87 の段階 5)。
+   *
+   * 「これから何を書き始めるか」と「自分の見え方の設定」は別の話なので、同じ群に
+   * 並べない。区切りは項目ではないため、下の空判定 (`#render`) は数に入れない。
+   */
+  addSeparator(): void {
+    this.#extras.appendChild(makeMenuSeparator());
+    this.#render();
+  }
+
   /** ログイン状態を引き直して描く。 */
   async refresh(): Promise<void> {
     try {
@@ -211,8 +222,8 @@ export class AccountPanel {
     this.#logoutItem.hidden = viewer === null;
 
     // 区切りは**間に何かがあるときだけ**。足された項目が 1 つも無ければ線だけが
-    // 残る。
-    this.#extras.hidden = this.#extras.childElementCount === 0;
+    // 残る (中にある区切りは項目ではないので数えない)。
+    this.#extras.hidden = this.#extras.querySelector(".menu-item") === null;
     this.#extrasSeparator.hidden = this.#extras.hidden;
   }
 

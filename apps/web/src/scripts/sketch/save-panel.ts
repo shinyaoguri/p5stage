@@ -1,10 +1,15 @@
 /**
  * 保存の導線 (Phase 2-3)。
  *
- * 初回だけ、タイトルと公開範囲を尋ねる。**公開範囲は後から変えられない**ため
- * (GitHub の Gist は作成後に public / secret を変更できない — ADR 0010)、
- * 選ぶ機会をここに置くしかない。限定公開が private ではないことも同じ画面で見せる
- * (要件 3.4)。
+ * **何も尋ねない** (#87 の段階 5)。押せばその場で保存される。エディタは大勢の前へ
+ * 投影されながら書かれる場所でもあるので、保存のたびに画面いっぱいの尋ねる面が
+ * 出るのは邪魔でしかない。
+ *
+ * 公開範囲は**設定で 1 度決める** (`settings/definitions.ts` の `defaultVisibility`)。
+ * **後から変えられない**値ではあるが (GitHub の Gist は作成後に public / secret を
+ * 変更できない — ADR 0010)、だからといって毎回聞く理由にはならない — 決め方は
+ * 「作るたびに選ぶ」ではなく「自分の既定を持つ」で足りる。決めた通りに作られたことは
+ * 初回の保存でトーストが言う (edit.astro)。
  *
  * 保存の状態は文字ではなく**保存アイコンそのもの**が持つ (#41 の 6)。移植元は
  * canvastage の `#share-btn.saved` / `.dirty`。
@@ -25,7 +30,6 @@
  *   なかったのはこのため — 打鍵で消えると、保存できていないまま書き続ける)
  */
 
-import "../../styles/dialog.css";
 import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
@@ -50,11 +54,6 @@ const DETACH_CONFIRM = [
   "・作品ページは「まだ保存されていません」に戻ります",
   "・次に保存すると新しい Gist が作られます",
 ].join("\n");
-
-const VISIBILITY_LABELS: Record<SketchMeta["visibility"], string> = {
-  unlisted: "限定公開 — URL を知っている人だけが見られます",
-  public: "公開 — ギャラリーに載り、誰でも見られます",
-};
 
 function describe(state: SaveState): string {
   switch (state.status) {
@@ -83,8 +82,13 @@ export interface SavePanelOptions {
   onSave(visibility: SketchMeta["visibility"] | null): void;
   /** 切り離しが確認された (Phase 2-6)。 */
   onDetach(): void;
-  /** 保存する名前。ダイアログで「何が保存されるか」を見せるために引く。 */
-  getTitle(): string;
+  /**
+   * 初回に作るときの公開範囲 (#87 の段階 5)。
+   *
+   * 押した時点の設定を引く。設定はドロワーでいつでも変えられるので、作った時の
+   * 値を覚え込まない。
+   */
+  getVisibility(): SketchMeta["visibility"];
 }
 
 export class SavePanel {
@@ -96,16 +100,14 @@ export class SavePanel {
   readonly #link: HTMLAnchorElement;
   readonly #pageLink: HTMLAnchorElement;
   readonly #detach: HTMLButtonElement;
-  readonly #dialog: HTMLDialogElement;
-  readonly #dialogTitle: HTMLElement;
-  readonly #getTitle: SavePanelOptions["getTitle"];
+  readonly #getVisibility: SavePanelOptions["getVisibility"];
   #state: SaveState | null = null;
 
   constructor(host: HTMLElement, options: SavePanelOptions) {
     this.#host = host;
     this.#onSave = options.onSave;
     this.#onDetach = options.onDetach;
-    this.#getTitle = options.getTitle;
+    this.#getVisibility = options.getVisibility;
     this.#host.classList.add("save-panel");
 
     this.#button = makeToolbarButton({
@@ -161,13 +163,9 @@ export class SavePanel {
     });
     this.#detach.hidden = true;
 
-    this.#dialogTitle = document.createElement("strong");
-    this.#dialogTitle.id = "save-dialog-title";
-    this.#dialog = this.#buildDialog();
-
     // 器に残るのは保存そのものと、その状態を支援技術へ渡す文字だけ。
     // 作品の置き場へ行く 3 つ (作品ページ・Gist・切り離し) は作品メニューへ移した。
-    for (const node of [this.#status, this.#button, this.#dialog]) {
+    for (const node of [this.#status, this.#button]) {
       this.#host.appendChild(node);
     }
   }
@@ -214,93 +212,19 @@ export class SavePanel {
     this.#link.href = state.gist.url;
   }
 
+  /**
+   * 押されたら保存する。**尋ねない** (#87 の段階 5)。
+   *
+   * 初回だけは器を作る値 (名前と公開範囲) が要る。名前は画面上部の入力欄が、
+   * 公開範囲は設定が、それぞれ押す前から持っているので、ここで聞き直すものは何も
+   * 残らない。
+   */
   #handleClick(): void {
-    // 2 回目からはそのまま送る。尋ねる必要があるのは初回だけ。
+    // 2 回目からは公開範囲も要らない (作った後は変えられない — ADR 0010)。
     if (this.#state !== null && this.#state.sketchId !== null) {
       this.#onSave(null);
       return;
     }
-    // 何という名前で保存されるかを、押す前に見せる。名前は上の入力欄にあるが、
-    // ダイアログを開くと視線がこちらへ移るので、ここでも一度言う。
-    this.#dialogTitle.textContent = this.#getTitle();
-    this.#dialog.showModal();
-  }
-
-  #buildDialog(): HTMLDialogElement {
-    const dialog = document.createElement("dialog");
-    dialog.className = "app-dialog";
-    dialog.id = "save-dialog";
-
-    const heading = document.createElement("h2");
-    heading.textContent = "あなたの Gist に保存します";
-
-    // 保存される名前。変えたいときは上の入力欄で直せるので、ここでは読ませるだけ。
-    const name = document.createElement("p");
-    name.className = "save-dialog-name";
-    name.textContent = "名前: ";
-    name.appendChild(this.#dialogTitle);
-
-    const visibility = this.#buildVisibilityChoice();
-
-    const note = document.createElement("p");
-    note.className = "app-note";
-    note.textContent =
-      "公開範囲は保存後に変更できません (GitHub の Gist は作成後に公開範囲を変えられないため)。変えたいときは別の作品として作り直してください。";
-
-    const actions = document.createElement("div");
-    actions.className = "app-dialog-actions";
-
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "やめる";
-    cancel.addEventListener("click", () => dialog.close());
-
-    const proceed = document.createElement("button");
-    proceed.type = "button";
-    proceed.id = "save-confirm";
-    proceed.className = "app-dialog-proceed";
-    proceed.textContent = "保存";
-    proceed.addEventListener("click", () => {
-      const selected = visibility.querySelector<HTMLInputElement>(
-        "input[name='visibility']:checked"
-      );
-      dialog.close();
-      // 選択が読めないときは限定公開へ倒す。黙って公開になる方向へは倒さない。
-      this.#onSave(selected?.value === "public" ? "public" : "unlisted");
-    });
-
-    for (const node of [cancel, proceed]) actions.appendChild(node);
-    for (const node of [heading, name, visibility, note, actions]) {
-      dialog.appendChild(node);
-    }
-    return dialog;
-  }
-
-  #buildVisibilityChoice(): HTMLElement {
-    const group = document.createElement("fieldset");
-    group.className = "save-visibility";
-
-    const legend = document.createElement("legend");
-    legend.textContent = "公開範囲";
-    group.appendChild(legend);
-
-    for (const value of ["unlisted", "public"] as const) {
-      const label = document.createElement("label");
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = "visibility";
-      radio.value = value;
-      // 既定は限定公開。指定漏れが公開に倒れると、意図しない公開が黙って起きる。
-      radio.defaultChecked = value === "unlisted";
-
-      const text = document.createElement("span");
-      text.textContent = VISIBILITY_LABELS[value];
-
-      label.appendChild(radio);
-      label.appendChild(text);
-      group.appendChild(label);
-    }
-
-    return group;
+    this.#onSave(this.#getVisibility());
   }
 }
