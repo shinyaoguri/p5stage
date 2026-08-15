@@ -1,0 +1,124 @@
+---
+/**
+ * タグ別の一覧 (Phase 5)。同じ主題の公開作品を新しい順に並べる。
+ *
+ * 発見の 3 本目の線。トップページ (新着) が「今」、ユーザーページが「誰」で、
+ * ここが「何について」を担う。閲覧にログインは要らない。
+ *
+ * URL の値は正規化してから引く。**綴りが違えば正典へ 302** して、同じタグに
+ * 複数の URL を持たせない (ユーザーページと同じ考え方)。
+ */
+import { env } from "cloudflare:workers";
+
+import SketchGrid from "../../components/SketchGrid.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { assetsOrigin } from "../../lib/assets/delivery-origin";
+import { toSketchCards } from "../../lib/sketches/card";
+import { tagPath } from "../../lib/sketches/content";
+import { listPublicSketchesByTag } from "../../lib/sketches/store";
+import { canonicalTag } from "../../lib/sketches/tags";
+
+export const prerender = false;
+
+/** 1 ページに並べる件数。ページングは Phase 5 の一覧 UI を広げるときに決める。 */
+const TAG_LIST_LIMIT = 24;
+
+const raw = decodeURIComponent(Astro.params.tag ?? "");
+const tag = canonicalTag(raw);
+
+// 形が違う値は D1 まで持って行かない (長すぎる・制御文字が混ざる)。
+// 存在の確認ではなく足切りなので、共有キャッシュにも載せない。
+if (tag === null) {
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+const canonicalUrl = new URL(tagPath(tag), Astro.url.origin).href;
+
+// 大小違い・空白の入った綴りで来たら正典へ寄せる。
+if (tag !== raw) {
+  return Astro.redirect(canonicalUrl, 302);
+}
+
+const sketches = await listPublicSketchesByTag(env.DB, tag, TAG_LIST_LIMIT);
+const cards = toSketchCards(sketches, assetsOrigin());
+
+// 公開作品しか出さないのでエッジに載せる (トップページ・ユーザーページと同じ)。
+// **誰も付けていないタグでも 404 にしない** — タグは自由語彙で、「まだ無い」は
+// 壊れた URL ではなく普通の状態。空の一覧を返す。
+Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+---
+
+<BaseLayout
+  title={`${tag} のスケッチ | p5stage`}
+  description={`${tag} のタグが付いた p5.js スケッチ`}
+  canonical={canonicalUrl}
+>
+  <main>
+    <header class="tag-header">
+      <p class="eyebrow">タグ</p>
+      <h1>{tag}</h1>
+    </header>
+
+    <section aria-labelledby="works-heading">
+      <h2 id="works-heading" class="sr-only">このタグの作品</h2>
+      {
+        cards.length === 0 ? (
+          <p class="empty">
+            このタグが付いた公開作品はまだありません。
+            <a href="/">新着の作品を見る</a>
+          </p>
+        ) : (
+          <SketchGrid cards={cards} />
+        )
+      }
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  main {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  .tag-header {
+    margin-bottom: 2.5rem;
+  }
+
+  .eyebrow {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    /* 日本語のタグは長くなりうる。見出しで横に溢れさせない。 */
+    overflow-wrap: anywhere;
+  }
+
+  /* 見出しは構造のために置くが、上のタグ名と同じことを言うので目には出さない。 */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .empty {
+    color: var(--muted);
+  }
+
+  .empty a {
+    color: var(--accent);
+  }
+</style>

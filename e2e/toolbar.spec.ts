@@ -31,8 +31,9 @@ test.describe("操作列", () => {
     await openEditor(page);
 
     const buttons = toolbarButtons(page);
-    // 未ログインで出るのは 保存 / 新規 / Gist から開く / アセット / 設定 / ログイン。
-    await expect(buttons).toHaveCount(6);
+    // 未ログインで出るのは
+    // 保存 / 新規 / Gist から開く / タグ / アセット / 設定 / ログイン。
+    await expect(buttons).toHaveCount(7);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");

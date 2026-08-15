@@ -47,6 +47,8 @@ export interface OpenedSketch {
   readonly truncated: readonly string[];
   /** 付いている名前 (#41 の 3)。応答に無ければ null。 */
   readonly title: string | null;
+  /** 付いているタグ (Phase 5)。無ければ空。 */
+  readonly tags: readonly string[];
 }
 
 /** 作品を開けなかった理由。利用者に見せる文言にする。 */
@@ -88,6 +90,7 @@ export async function loadSketch(id: string): Promise<OpenedSketch> {
     files?: SketchFiles | null;
     truncated?: string[];
     sketch?: { title?: string } | null;
+    tags?: unknown;
   };
   const title = body.sketch?.title;
   return {
@@ -95,6 +98,10 @@ export async function loadSketch(id: string): Promise<OpenedSketch> {
     files: body.files ?? null,
     truncated: body.truncated ?? [],
     title: typeof title === "string" && title !== "" ? title : null,
+    // 応答の形を信じ切らない (他の項目と同じ扱い)。読めなければタグ無しとして開く。
+    tags: Array.isArray(body.tags)
+      ? body.tags.filter((tag): tag is string => typeof tag === "string")
+      : [],
   };
 }
 

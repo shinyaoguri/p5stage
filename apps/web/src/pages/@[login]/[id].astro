@@ -24,6 +24,7 @@ import {
   orderedFileNames,
   sketchPath,
   sketchRevisionPath,
+  tagPath,
   userPath,
 } from "../../lib/sketches/content";
 import {
@@ -37,7 +38,10 @@ import {
   planRevisionView,
   REVISION_LIST_LIMIT,
 } from "../../lib/sketches/revision-view";
-import { getSketchWithOwner } from "../../lib/sketches/store";
+import {
+  getSketchWithOwner,
+  listTagsForSketch,
+} from "../../lib/sketches/store";
 
 export const prerender = false;
 
@@ -139,6 +143,12 @@ const parent =
   sketch.forkedFromSketchId === null
     ? null
     : await getSketchWithOwner(env.DB, sketch.forkedFromSketchId);
+
+/**
+ * タグ (Phase 5)。**限定公開の作品にも出す** — タグはこのページの中身の一部で、
+ * 隠す理由は無い。タグ別の一覧に出ないこと (`listPublicSketchesByTag`) とは別の話。
+ */
+const tags = await listTagsForSketch(env.DB, sketch.id);
 
 // 実行環境のオリジン (要件 5.1 / ADR 0007) とアセットの配信オリジン (ADR 0014)。
 let previewOrigin: string | null = null;
@@ -303,6 +313,17 @@ const notice = (() => {
       {
         sketch.description !== "" && (
           <p class="sketch-description">{sketch.description}</p>
+        )
+      }
+      {
+        tags.length > 0 && (
+          <ul class="sketch-tags" aria-label="タグ">
+            {tags.map((tag) => (
+              <li>
+                <a href={tagPath(tag)}>{tag}</a>
+              </li>
+            ))}
+          </ul>
         )
       }
       {
@@ -489,6 +510,33 @@ const notice = (() => {
   .sketch-description {
     margin: 1rem 0 0;
     white-space: pre-wrap;
+  }
+
+  /* タグ (Phase 5)。同じ主題の作品へ渡る道。 */
+  .sketch-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sketch-tags a {
+    display: inline-block;
+    padding: 0.125rem 0.625rem;
+    border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    text-decoration: none;
+    /* 日本語のタグは長くなりうる。1 つが横に伸びても行が崩れないようにする。 */
+    overflow-wrap: anywhere;
+  }
+
+  .sketch-tags a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   /* 限定公開が private ではないことの明示 (要件 3.4)。 */

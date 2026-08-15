@@ -97,6 +97,20 @@ VALUES
    'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL);
 
+-- タグ (Phase 5)。公開の種に 2 つ、限定公開の種にも同じタグを 1 つ付ける。
+--
+-- **限定公開にも付けるのが肝**で、タグ別一覧 (`/tags/e2e-tag`) に公開の種だけが
+-- 出ることを確かめる材料になる (出ない理由がタグの有無ではなく公開範囲であること)。
+-- 実行のたびに同じ状態から始めるため、先に落としてから入れる (ローカルの D1 は
+-- 実行をまたいで残る。付け替えのテストが最後に置いた値もここで消える)。
+DELETE FROM sketch_tags
+ WHERE sketch_id IN ('E2EPublicSketch0', 'E2EUnlistedSkt01');
+INSERT INTO sketch_tags (sketch_id, tag, position)
+VALUES
+  ('E2EPublicSketch0', 'e2e-tag', 0),
+  ('E2EPublicSketch0', 'e2e-別のタグ', 1),
+  ('E2EUnlistedSkt01', 'e2e-tag', 0);
+
 -- 新着一覧 (Phase 5) に出ない側の残り 2 状態。開いても中身が出ない作品は
 -- 一覧に見せない (`listPublicSketches`) — 未保存はまだ Gist へ書き出していない器、
 -- tombstone は元の Gist が GitHub 側で消された印付き (要件 6)。
@@ -205,3 +219,10 @@ VALUES
 DELETE FROM sketches
  WHERE forked_from_sketch_id IN
    ('E2EForeignSkt001', 'E2EForeignUnl001', 'E2EForeignAst001');
+
+-- タグ付けのテスト (e2e/tags.spec.ts) が保存した作品も同じ理由で落とす。あちらは
+-- **自分で付けたタグで一覧を引く**ので、前回の作品が残っていると同じ名前の
+-- カードが 2 枚並び、掴めなくなる。タグの行を先に落とす (作品を参照している)。
+DELETE FROM sketch_tags
+ WHERE sketch_id IN (SELECT id FROM sketches WHERE title LIKE 'E2E タグ%');
+DELETE FROM sketches WHERE title LIKE 'E2E タグ%';
