@@ -1,29 +1,128 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
+/**
+ * トップページ (Phase 5)。公開作品の新着ギャラリー。
+ *
+ * ログイン無しで作品を発見できることが Phase 5 の完了条件の入口。一覧は D1 だけで
+ * 引き、中身 (R2) には触れない — カードに要るのはメタデータとサムネイルの URL だけ。
+ */
+import { thumbnailPath } from "@p5stage/shared";
+import { env } from "cloudflare:workers";
 
-// トップは DB を引かないので静的に出す。
-export const prerender = true;
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { assetsOrigin } from "../lib/assets/delivery-origin";
+import { sketchPath } from "../lib/sketches/content";
+import { listPublicSketches } from "../lib/sketches/store";
+
+export const prerender = false;
+
+/** 新着に並べる件数。ページングは Phase 5 の一覧 UI を広げるときに決める。 */
+const HOME_LIST_LIMIT = 24;
+
+const sketches = await listPublicSketches(env.DB, HOME_LIST_LIMIT);
+
+/**
+ * サムネイルの配信オリジン (ADR 0014)。`/t/` は配信ホストからしか出ないので
+ * 絶対 URL にする。未設定でも一覧は成立する (絵だけ諦めてプレースホルダを出す)
+ * ので、作品ページと違いここでは設定エラーをページに出さない。
+ */
+const thumbsOrigin = assetsOrigin();
+
+// 公開作品しか出さないのでエッジに載せる (作品ページの公開時と同じ)。
+Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+
+const formatTime = (value: number): string =>
+  new Date(value).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const cards = sketches.map((sketch) => ({
+  href: sketchPath(sketch.ownerLogin, sketch.id),
+  title: sketch.title,
+  ownerLogin: sketch.ownerLogin,
+  ownerAvatarUrl: sketch.ownerAvatarUrl,
+  updatedAt: sketch.updatedAt,
+  thumbnailUrl:
+    sketch.gistId !== null &&
+    sketch.thumbnailRevision !== null &&
+    thumbsOrigin !== null
+      ? new URL(
+          thumbnailPath(sketch.gistId, sketch.thumbnailRevision),
+          thumbsOrigin
+        ).href
+      : null,
+}));
 ---
 
 <BaseLayout title="p5stage">
   <main>
-    <h1>p5stage</h1>
-    <p class="lead">p5.js スケッチの開発・共有プラットフォーム</p>
-    <p class="note">
-      現在 Phase 0 (基盤) を構築中です。実装計画は
-      <a href="https://github.com/shinyaoguri/p5stage/blob/main/docs/roadmap.md"
-        >roadmap</a
-      >
-      を参照してください。
-    </p>
+    <header class="hero">
+      <h1>p5stage</h1>
+      <p class="lead">p5.js スケッチの開発・共有プラットフォーム</p>
+      <a class="cta" href="/edit">スケッチを作る</a>
+    </header>
+
+    <section class="latest" aria-labelledby="latest-heading">
+      <h2 id="latest-heading">新着の作品</h2>
+      {
+        cards.length === 0 ? (
+          <p class="empty">公開された作品はまだありません。</p>
+        ) : (
+          <ul class="grid">
+            {cards.map((card) => (
+              <li>
+                <a class="card" href={card.href}>
+                  {card.thumbnailUrl !== null ? (
+                    <img
+                      class="thumb"
+                      src={card.thumbnailUrl}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div class="thumb thumb-placeholder" aria-hidden="true" />
+                  )}
+                  <h3 class="card-title">{card.title}</h3>
+                  <p class="card-meta">
+                    <span class="card-author">
+                      {card.ownerAvatarUrl !== null && (
+                        <img
+                          class="card-avatar"
+                          src={card.ownerAvatarUrl}
+                          alt=""
+                          width="20"
+                          height="20"
+                          loading="lazy"
+                        />
+                      )}
+                      {card.ownerLogin}
+                    </span>
+                    <time datetime={new Date(card.updatedAt).toISOString()}>
+                      {formatTime(card.updatedAt)}
+                    </time>
+                  </p>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </section>
   </main>
 </BaseLayout>
 
 <style>
   main {
-    max-width: 42rem;
+    max-width: 60rem;
     margin: 0 auto;
-    padding: 4rem 1.5rem;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  .hero {
+    margin-bottom: 3rem;
   }
 
   h1 {
@@ -33,16 +132,82 @@ export const prerender = true;
   }
 
   .lead {
-    margin: 0.5rem 0 2rem;
+    margin: 0.5rem 0 1.5rem;
     font-size: 1.125rem;
   }
 
-  .note {
-    color: var(--muted);
-    font-size: 0.9375rem;
+  .cta {
+    display: inline-block;
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.375rem;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
   }
 
-  a {
+  h2 {
+    margin: 0 0 1rem;
+    font-size: 1.25rem;
+  }
+
+  .empty {
+    color: var(--muted);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 1.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* 絵の比率は撮る側の canvas 次第 (ADR 0019) なので、カードでは 4:3 に切り揃える。 */
+  .thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--muted) 12%, transparent);
+  }
+
+  .card-title {
+    margin: 0.625rem 0 0;
+    font-size: 1rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .card:hover .card-title {
     color: var(--accent);
+  }
+
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    align-items: center;
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .card-author {
+    display: inline-flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .card-avatar {
+    border-radius: 50%;
   }
 </style>

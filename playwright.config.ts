@@ -79,8 +79,8 @@ const SEED_REVISION = "e2e1111111111111111111111111111111111111";
 const SEED_REVISION_PREV = "e2e0000000000000000000000000000000000000";
 
 const SEED_OBJECTS = [
-  ["e2e-gist-public", SEED_REVISION, SEED_CONTENT],
-  ["e2e-gist-public", SEED_REVISION_PREV, SEED_CONTENT_PREV],
+  ["e2e10000000000000000000000000001", SEED_REVISION, SEED_CONTENT],
+  ["e2e10000000000000000000000000001", SEED_REVISION_PREV, SEED_CONTENT_PREV],
   ["e2e-gist-unlisted", SEED_REVISION, SEED_CONTENT],
   ["e2e-gist-unlisted", SEED_REVISION_PREV, SEED_CONTENT_PREV],
   ["e2e-gist-assets", SEED_REVISION, SEED_ASSET_CONTENT],
@@ -126,7 +126,15 @@ const SEED_BLOBS = [
   )
   .join(" && ");
 
-const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOBS}`;
+/**
+ * サムネイルの実体 (Phase 4-4 / ADR 0019)。トップページの新着カード (Phase 5) に
+ * 絵が出ることを確かめる。キーは (gistId, revision) で、seed.sql の
+ * `thumbnail_revision` と組。絵は 1x1 の dot.png で足りる — 見るのは
+ * 「配信ホストから絵が返ること」で、絵の中身ではない。
+ */
+const SEED_THUMBS = `npx wrangler r2 object put p5stage-content/thumbs/e2e10000000000000000000000000001/${SEED_REVISION}.png --file=../../e2e/fixtures/dot.png --content-type=image/png --local --persist-to ${PERSIST_DIR}`;
+
+const SEED_COMMANDS = `npx wrangler d1 execute p5stage --local --persist-to ${PERSIST_DIR} --file=${SEED_SQL} && ${SEED_OBJECTS} && ${SEED_BLOBS} && ${SEED_THUMBS}`;
 
 /**
  * ビルド成果物を E2E 用に整える (#38 / Phase 3-5b / `e2e/prepare-dev-worker.ts`)。

@@ -258,6 +258,40 @@ export async function getSketch(
   return row === null ? null : toSketch(row);
 }
 
+/**
+ * 公開作品を新しい順に、作者ごと引く (Phase 5 の新着ギャラリー)。
+ *
+ * `visibility` を先頭に置いた `sketches_public` インデックス (0002) に乗る形。
+ * **開けない作品は並べない** — 未保存 (`current_revision IS NULL`) と、GitHub 側で
+ * 消された印の付いたもの (`gist_deleted_at`) は、開いても中身が出ないので
+ * 一覧に見せても 404 の入口が増えるだけ。
+ */
+export async function listPublicSketches(
+  db: D1Database,
+  limit: number
+): Promise<SketchWithOwner[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${SKETCH_COLUMNS},
+              u.login AS owner_login, u.avatar_url AS owner_avatar_url
+         FROM sketches s
+         JOIN users u ON u.id = s.owner_id
+        WHERE s.visibility = 'public'
+          AND s.current_revision IS NOT NULL
+          AND s.gist_deleted_at IS NULL
+        ORDER BY s.updated_at DESC
+        LIMIT ?`
+    )
+    .bind(limit)
+    .all<SketchWithOwnerRow>();
+
+  return results.map((row) => ({
+    ...toSketch(row),
+    ownerLogin: row.owner_login,
+    ownerAvatarUrl: row.owner_avatar_url,
+  }));
+}
+
 /** 作者の作品を新しい順に。 */
 export async function listSketchesByOwner(
   db: D1Database,

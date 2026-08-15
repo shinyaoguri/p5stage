@@ -11,20 +11,29 @@
 -- リビジョンは**本物と同じ 16 進 40 桁**にしてある (偽 GitHub が返す形も同じ)。
 -- 作品ページの `?rev=` は形で足切りするので、種だけ現実と違う形にしておくと
 -- 「テストでは通るが本番では弾かれる」経路ができる (Phase 4-1)。
+-- 公開の種の gist_id も同じ理由で 16 進 (サムネイル配信 `/t/` が `isGistId` で
+-- 足切りする — Phase 5)。他の種の gist_id はまだ `e2e-gist-*` のままで、
+-- 揃える作業は別途 (該当の配信経路を踏むテストが無いため)。
 
 INSERT OR REPLACE INTO users (id, login, avatar_url, created_at, updated_at)
 VALUES (424242, 'e2e-author', NULL, 0, 0);
 
--- 公開。作品ページの本体を見るのはこちら。
+-- 公開。作品ページの本体を見るのはこちら。トップページの新着一覧 (Phase 5) にも
+-- この種が出る。時刻を今にしてあるのはそのため — 一覧は `updated_at DESC` で
+-- 24 件に切るので、1970 年のままだと並列の spec が保存する作品に押し出されうる。
+-- `thumbnail_revision` は新着カードの絵 (Phase 4-4 の仕組みを Phase 5 が使う)。
+-- 実体は playwright.config.ts が `thumbs/` へ同じキーで置く。
 INSERT OR REPLACE INTO sketches
   (id, owner_id, gist_id, title, description, visibility,
    created_at, updated_at, current_revision, revision_etag,
-   revision_checked_at, gist_deleted_at)
+   revision_checked_at, gist_deleted_at, thumbnail_revision)
 VALUES
-  ('E2EPublicSketch0', 424242, 'e2e-gist-public', 'E2E 公開スケッチ',
+  ('E2EPublicSketch0', 424242, 'e2e10000000000000000000000000001', 'E2E 公開スケッチ',
    'E2E のための作品です。', 'public',
-   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
-   unixepoch() * 1000, NULL);
+   unixepoch() * 1000, unixepoch() * 1000,
+   'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL,
+   'e2e1111111111111111111111111111111111111');
 
 -- アセットを使う作品 (Phase 3-3)。中身は e2e/seed-content-assets.json、
 -- 実体 (e2e/fixtures/dot.png) は R2 の p5stage-assets へ同じ sha256 で置く。
@@ -75,6 +84,8 @@ VALUES
    '7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91', 0);
 
 -- 限定公開。共有キャッシュに載らないこと・注意書き・noindex を見る。
+-- 新着一覧には**出ない**ことも見る。時刻を今にするのは公開の種と同じ理由で、
+-- こちらは「LIMIT の外に落ちたから出なかった」という偽陰性を防ぐため。
 INSERT OR REPLACE INTO sketches
   (id, owner_id, gist_id, title, description, visibility,
    created_at, updated_at, current_revision, revision_etag,
@@ -82,8 +93,27 @@ INSERT OR REPLACE INTO sketches
 VALUES
   ('E2EUnlistedSkt01', 424242, 'e2e-gist-unlisted', 'E2E 限定公開スケッチ',
    '', 'unlisted',
-   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, unixepoch() * 1000,
+   'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL);
+
+-- 新着一覧 (Phase 5) に出ない側の残り 2 状態。開いても中身が出ない作品は
+-- 一覧に見せない (`listPublicSketches`) — 未保存はまだ Gist へ書き出していない器、
+-- tombstone は元の Gist が GitHub 側で消された印付き (要件 6)。
+-- どちらも公開 (visibility='public') にしてあるのが肝で、除外の理由が
+-- 公開範囲ではないことを確かめる。
+INSERT OR REPLACE INTO sketches
+  (id, owner_id, gist_id, title, description, visibility,
+   created_at, updated_at, current_revision, revision_etag,
+   revision_checked_at, gist_deleted_at)
+VALUES
+  ('E2EUnsavedSkt001', 424242, NULL, 'E2E 未保存スケッチ', '', 'public',
+   unixepoch() * 1000, unixepoch() * 1000, NULL, NULL, NULL, NULL),
+  ('E2ETombstoneSk01', 424242, 'e2e-gist-tombstone', 'E2E 削除済みスケッチ',
+   '', 'public',
+   unixepoch() * 1000, unixepoch() * 1000,
+   'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, unixepoch() * 1000);
 
 -- リビジョンの台帳 (Phase 4-1)。**中身 (R2) を置いた版だけ**を載せる — 履歴に並ぶ
 -- 版は開けることが前提 (ADR 0016)。公開作品とアセット作品には旧版があり、
@@ -92,9 +122,9 @@ VALUES
 -- 画面の確認や PR の証跡で**何を見ているのか読めなくなる**。
 INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
 VALUES
-  ('e2e-gist-public', 'e2e0000000000000000000000000000000000000',
+  ('e2e10000000000000000000000000001', 'e2e0000000000000000000000000000000000000',
    (unixepoch() - 86400) * 1000),
-  ('e2e-gist-public', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000001', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000),
   ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
    (unixepoch() - 86400) * 1000),
