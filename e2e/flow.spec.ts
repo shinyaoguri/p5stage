@@ -29,6 +29,8 @@ import {
   hasSketchCanvas,
   login,
   logout,
+  openAccountMenu,
+  openAdopt,
   openEditor,
   saveAgain,
   saveButton,
@@ -118,8 +120,13 @@ test.describe("ログインの往復", () => {
 
     await logout(page);
 
+    // 開閉ボタンは残り、絵がアバターから人へ戻る。中身はログインの口へ入れ替わる。
+    await expect(
+      accountMenuToggle(page).locator("img.account-avatar")
+    ).toHaveCount(0);
+    await openAccountMenu(page);
     await expect(page.locator("#login")).toBeVisible();
-    await expect(accountMenuToggle(page)).toHaveCount(0);
+    await expect(page.locator("#logout")).toBeHidden();
   });
 });
 
@@ -330,7 +337,7 @@ test.describe("正本の出入り (Phase 2-6)", () => {
     await page.locator("#detach").click();
     await expect(page.locator("#detach")).toBeHidden();
 
-    await page.locator("#adopt").click();
+    await openAdopt(page);
     await page.locator("#adopt-ref").fill(String(gistUrl));
     await page.locator("#adopt-confirm").click();
 

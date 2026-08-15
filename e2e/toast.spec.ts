@@ -11,7 +11,7 @@
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { openEditor, toasts } from "./helpers";
+import { newSketch, openEditor, toasts } from "./helpers";
 
 /** 追加の入力を開く。以後は fill + Enter を繰り返せる。 */
 async function openAddFileInput(page: Page): Promise<Locator> {
@@ -77,7 +77,7 @@ test.describe("トースト", () => {
 
     // 破棄の知らせ (info) を出す。4 秒で引き上げる側なので、待ち時間が短い。
     page.once("dialog", (dialog) => void dialog.accept());
-    await page.locator("#new").click();
+    await newSketch(page);
     await expect(toasts(page, "info")).toHaveText(["下書きを破棄しました"]);
 
     // 押さなくても消える。消える動き (0.3s) の分まで待つ。

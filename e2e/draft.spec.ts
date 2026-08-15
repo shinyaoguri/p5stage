@@ -13,6 +13,7 @@ import {
   draftIndicator,
   fileTab,
   fileTabNames,
+  newSketch,
   openEditor,
   openFile,
   readStoredDraft,
@@ -74,11 +75,11 @@ test.describe("下書き", () => {
 
     // 復元は黙ってやるが、破棄は取り消せないので確認を挟む。
     page.once("dialog", (dialog) => void dialog.dismiss());
-    await page.locator("#new").click();
+    await newSketch(page);
     await expect(page.locator("#editor")).toContainText("e2e-draft");
 
     page.once("dialog", (dialog) => void dialog.accept());
-    await page.locator("#new").click();
+    await newSketch(page);
 
     await expect(toasts(page, "info")).toHaveText(["下書きを破棄しました"]);
     await expect(page.locator("#editor")).toContainText("function setup()");

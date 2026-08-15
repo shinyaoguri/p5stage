@@ -71,6 +71,12 @@ export const ICONS = {
   stop: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
     <rect x="5" y="5" width="14" height="14" rx="2"/>
   </svg>`,
+  /** ログアウト (外へ出る矢印)。 */
+  logout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+    <polyline points="16 17 21 12 16 7"/>
+    <line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>`,
   /** 人 (アバターが読めないときの代わり)。 */
   person: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>

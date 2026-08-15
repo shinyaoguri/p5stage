@@ -9,9 +9,6 @@
  */
 
 import "../../styles/dialog.css";
-import "../../styles/adopt-panel.css";
-
-import { makeToolbarButton } from "../ui/toolbar-button";
 
 export interface AdoptPanelOptions {
   /**
@@ -33,25 +30,23 @@ export class AdoptPanel {
 
   constructor(host: HTMLElement, options: AdoptPanelOptions) {
     this.#onAdopt = options.onAdopt;
-    host.classList.add("adopt-panel");
 
     this.#input = document.createElement("input");
     this.#error = document.createElement("p");
     this.#proceed = document.createElement("button");
     this.#dialog = this.#buildDialog();
 
-    const open = makeToolbarButton({
-      id: "adopt",
-      icon: "import",
-      label: "Gist から開く",
-      onClick: () => this.#open(),
-    });
-
-    host.appendChild(open);
     host.appendChild(this.#dialog);
   }
 
-  #open(): void {
+  /**
+   * 尋ねる面を開く。
+   *
+   * **開く口はここが持たない。** 取り込みはアカウントメニューの項目になった
+   * (#87 の段階 2) ので、ボタンを作るのは持ち主の仕事で、ここはダイアログだけを
+   * 受け持つ。
+   */
+  open(): void {
     this.#input.value = "";
     this.#setError(null);
     this.#dialog.showModal();

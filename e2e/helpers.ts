@@ -116,13 +116,12 @@ export async function typeIntoEditor(page: Page, code: string): Promise<void> {
  * `__Host-` の cookie でログイン済みになる。
  */
 export async function login(page: Page): Promise<void> {
-  // ログイン状態を引き終わるまで待つ。引き終えるとパネルは描き直され、それまでの
-  // DOM は捨てられるので、待たずに押すと同意ダイアログごと入れ替わって空振りする
-  // (#51)。**利用者も同じ競合を踏むが、それは #51 で直す話**。ここでは押して
-  // よい時点から始める。
+  // ログイン状態を引き終わるまで待つ。引き終える前は「まだ分からない」状態の姿で、
+  // ログインの導線が出てよい時点はここでしか分からない (#51)。
   await expect(
     page.locator(".account-panel[data-ready='true']")
   ).toBeAttached();
+  await openAccountMenu(page);
   await page.locator("#login").click();
   // ここはリンク (トップレベル遷移で cookie を確実に載せるため)。
   await page.locator("#login-consent .account-consent-proceed").click();
@@ -130,9 +129,44 @@ export async function login(page: Page): Promise<void> {
   await expect(accountMenuToggle(page)).toBeVisible();
 }
 
-/** ログイン済みのアバター (押すとアカウントメニューが開く)。 */
+/**
+ * アカウントメニューの開閉ボタン (#87 の段階 2)。
+ *
+ * **ログインしていなくても同じボタン**。ログインすると人のアイコンがアバターに
+ * 替わるだけで、押す場所は動かない。
+ */
 export function accountMenuToggle(page: Page): Locator {
   return page.locator("#account-menu-toggle");
+}
+
+/**
+ * アカウントメニューを開く。
+ *
+ * 開いている面は押し直すと閉じてしまうので、**閉じているときだけ押す**。
+ */
+export async function openAccountMenu(page: Page): Promise<void> {
+  const toggle = accountMenuToggle(page);
+  if ((await toggle.getAttribute("aria-expanded")) === "true") return;
+  await toggle.click();
+  await expect(page.locator("#account-menu")).toBeVisible();
+}
+
+/**
+ * 「新しいスケッチ」を押す (アカウントメニューの中にある — #87 の段階 2)。
+ *
+ * 押した先の確認ダイアログは呼ぶ側が扱う (`page.on("dialog")` を張る場所が
+ * テストごとに違う)。
+ */
+export async function newSketch(page: Page): Promise<void> {
+  await openAccountMenu(page);
+  await page.locator("#new").click();
+}
+
+/** 「Gist から開く」を押して、尋ねる面が出るまで待つ。 */
+export async function openAdopt(page: Page): Promise<void> {
+  await openAccountMenu(page);
+  await page.locator("#adopt").click();
+  await expect(page.locator("#adopt-dialog")).toBeVisible();
 }
 
 /**

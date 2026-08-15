@@ -31,9 +31,9 @@ test.describe("操作列", () => {
     await openEditor(page);
 
     const buttons = toolbarButtons(page);
-    // 未ログインで出るのは
-    // 保存 / 新規 / Gist から開く / タグ / アセット / 設定 / 全画面 / ログイン。
-    await expect(buttons).toHaveCount(8);
+    // 出るのは 保存 / タグ / アセット / 設定 / 全画面 / アカウント。
+    // 新規・取り込み・ログインはアカウントメニューの中へ移した (#87 の段階 2)。
+    await expect(buttons).toHaveCount(6);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");
@@ -164,7 +164,7 @@ test.describe("アカウントメニュー", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(toggle).toHaveClass(/is-active/);
     // 押しただけではログインしたまま (ここが #56 の事故)。
-    await expect(page.locator("#login")).toHaveCount(0);
+    await expect(page.locator("#login")).toBeHidden();
     // アイコンだけでは分からない「誰としてログインしているか」を文字で読める。
     await expect(menu).toContainText(FAKE_VIEWER.login);
     // ログアウトの口はこの中にある。
