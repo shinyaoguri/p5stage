@@ -1,0 +1,12 @@
+-- ユーザーページ (Phase 5) が login から引くための索引。
+--
+-- 作品は ID (主キー) で引くが、ユーザーページの URL に載るのは login なので、
+-- ここだけは login が入口になる。GitHub の login は**大文字小文字を区別しない**
+-- ので、引く側は `= ? COLLATE NOCASE`。索引にも同じ照合順序を書かないと乗らない。
+--
+-- **UNIQUE にはしない。** users.id は GitHub 側の数値 ID で、login は改名で変わる
+-- (だから id を主キーにしてある — 0001)。改名を D1 が知るのはその人が次にログイン
+-- したときなので、「古い login を持ったままの行」と「その login を新たに取った人」が
+-- 並ぶ時間帯がありうる。一意性を宣言するとそのとき upsert が落ちる。索引の狙いは
+-- 引く速さで、一意性の保証ではない。
+CREATE INDEX users_login ON users (login COLLATE NOCASE);

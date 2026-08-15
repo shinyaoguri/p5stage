@@ -292,6 +292,44 @@ export async function listPublicSketches(
   }));
 }
 
+/**
+ * ある作者の公開作品を新しい順に (Phase 5 のユーザーページ)。
+ *
+ * 選定は `listPublicSketches` と同じで、絞りに作者が加わるだけ。`owner_id` を
+ * 先頭に置いた `sketches_owner` インデックス (0002) に乗る。
+ *
+ * **本人が自分のページを見ていても限定公開は出さない。** 閲覧者ごとに中身の違う
+ * HTML を作ると、共有キャッシュ (`s-maxage=60`) 越しに他人へ配られる。自分の作品の
+ * 一覧はエディタ側が持っている (`listSketchesByOwner`)。
+ */
+export async function listPublicSketchesByOwner(
+  db: D1Database,
+  ownerId: number,
+  limit: number
+): Promise<SketchWithOwner[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${SKETCH_COLUMNS},
+              u.login AS owner_login, u.avatar_url AS owner_avatar_url
+         FROM sketches s
+         JOIN users u ON u.id = s.owner_id
+        WHERE s.owner_id = ?
+          AND s.visibility = 'public'
+          AND s.current_revision IS NOT NULL
+          AND s.gist_deleted_at IS NULL
+        ORDER BY s.updated_at DESC
+        LIMIT ?`
+    )
+    .bind(ownerId, limit)
+    .all<SketchWithOwnerRow>();
+
+  return results.map((row) => ({
+    ...toSketch(row),
+    ownerLogin: row.owner_login,
+    ownerAvatarUrl: row.owner_avatar_url,
+  }));
+}
+
 /** 作者の作品を新しい順に。 */
 export async function listSketchesByOwner(
   db: D1Database,

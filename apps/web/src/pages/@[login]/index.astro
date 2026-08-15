@@ -1,0 +1,150 @@
+---
+/**
+ * ユーザーページ (Phase 5)。その人の公開作品を新しい順に並べる。
+ *
+ * 閲覧にログインは要らない。作品ページのヘッダーから辿れる先がここで、
+ * 「作品 → 作者 → その人の他の作品」が Phase 5 の完了条件にある発見の動線。
+ *
+ * 正典 URL は `/@<login>`。作品ページと違い **login が引く鍵**になるが、鍵として
+ * 使うのは大文字小文字を無視した突き合わせまでで、綴りが今の値と違えば正典へ 302
+ * する (`users.login` は改名で変わる — ADR 0011)。
+ */
+import { env } from "cloudflare:workers";
+
+import SketchGrid from "../../components/SketchGrid.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { assetsOrigin } from "../../lib/assets/delivery-origin";
+import { toSketchCards } from "../../lib/sketches/card";
+import {
+  isCanonicalLogin,
+  isGitHubLogin,
+  userPath,
+} from "../../lib/sketches/content";
+import { listPublicSketchesByOwner } from "../../lib/sketches/store";
+import { getUserByLogin } from "../../lib/users/store";
+
+export const prerender = false;
+
+/** 1 ページに並べる件数。ページングは Phase 5 の一覧 UI を広げるときに決める。 */
+const USER_LIST_LIMIT = 24;
+
+const login = Astro.params.login ?? "";
+
+// 形が違う値を D1 まで持って行かない。存在の確認ではなく足切り。
+const user = isGitHubLogin(login) ? await getUserByLogin(env.DB, login) : null;
+
+// p5stage を使ったことのない人は、GitHub にいてもここには居ない。
+// 404 は共有キャッシュに載せない — その人が後でログインすれば居るようになる。
+if (user === null) {
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+const canonicalUrl = new URL(userPath(user.login), Astro.url.origin).href;
+
+// 大小違い・改名前の綴りで来たら正典へ寄せる (同じ人に複数の URL を持たせない)。
+if (!isCanonicalLogin(login, user.login)) {
+  return Astro.redirect(canonicalUrl, 302);
+}
+
+const sketches = await listPublicSketchesByOwner(
+  env.DB,
+  user.id,
+  USER_LIST_LIMIT
+);
+
+const cards = toSketchCards(sketches, assetsOrigin());
+
+// 公開作品しか出さないのでエッジに載せる (トップページ・公開の作品ページと同じ)。
+Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+---
+
+<BaseLayout
+  title={`${user.login} | p5stage`}
+  description={`${user.login} の p5.js スケッチ`}
+  canonical={canonicalUrl}
+>
+  <main>
+    <header class="profile">
+      {
+        user.avatarUrl !== null && (
+          <img
+            class="avatar"
+            src={user.avatarUrl}
+            alt=""
+            width="48"
+            height="48"
+          />
+        )
+      }
+      <div class="identity">
+        <h1>{user.login}</h1>
+        <a
+          class="github"
+          href={`https://github.com/${encodeURIComponent(user.login)}`}
+          target="_blank"
+          rel="noopener noreferrer">GitHub</a
+        >
+      </div>
+    </header>
+
+    <section aria-labelledby="works-heading">
+      <h2 id="works-heading">公開中の作品</h2>
+      {
+        cards.length === 0 ? (
+          /* 限定公開しか無い人もここに来る。**その事実は出さない** —
+             一覧に出さないものの存在を文言で漏らしては同じことになる */
+          <p class="empty">公開された作品はまだありません。</p>
+        ) : (
+          <SketchGrid cards={cards} />
+        )
+      }
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  main {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  .profile {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .avatar {
+    border-radius: 50%;
+  }
+
+  .identity {
+    display: flex;
+    flex-direction: column;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .github {
+    color: var(--accent);
+    font-size: 0.875rem;
+  }
+
+  h2 {
+    margin: 0 0 1rem;
+    font-size: 1.25rem;
+  }
+
+  .empty {
+    color: var(--muted);
+  }
+</style>

@@ -1,10 +1,20 @@
 /**
- * 作品ページの URL と、中身の並べ方 (Phase 2-4)。
+ * 作品ページ・ユーザーページの URL と、中身の並べ方 (Phase 2-4 / Phase 5)。
  *
  * D1 にも DOM にも触らない純ロジック。
  */
 
 import { DEFAULT_FILE_NAMES, type SketchFiles } from "@p5stage/shared";
+
+/**
+ * ユーザーページの正典 URL (Phase 5)。
+ *
+ * `/@<login>` を組む場所をここ 1 つにして、作品ページの URL
+ * (`/@<login>/<id>`) と綴りがずれないようにする。
+ */
+export function userPath(login: string): string {
+  return `/@${encodeURIComponent(login)}`;
+}
 
 /**
  * 作品ページの正典 URL。
@@ -14,7 +24,7 @@ import { DEFAULT_FILE_NAMES, type SketchFiles } from "@p5stage/shared";
  * `<username>/<id>` が改名で 404 になるが、こちらはそうならない。
  */
 export function sketchPath(ownerLogin: string, sketchId: string): string {
-  return `/@${encodeURIComponent(ownerLogin)}/${encodeURIComponent(sketchId)}`;
+  return `${userPath(ownerLogin)}/${encodeURIComponent(sketchId)}`;
 }
 
 /**
@@ -53,6 +63,20 @@ export const SKETCH_PARAM = "sketch";
  */
 export function editorPath(sketchId: string): string {
   return `/edit?${SKETCH_PARAM}=${encodeURIComponent(sketchId)}`;
+}
+
+/**
+ * GitHub の login として受け付ける形 (Phase 5)。
+ *
+ * 英数字とハイフンで 39 文字まで。ハイフンの位置 (先頭・末尾・連続) までは見ない —
+ * ここは**外から来た値を D1 へ持って行かないための足切り**で、存在の確認ではない。
+ * 規則を厳しく写すほど、歴史的な例外を持つ実在アカウントを弾く事故に近づく。
+ */
+const GITHUB_LOGIN = /^[A-Za-z0-9-]{1,39}$/;
+
+/** GitHub の login の形か。`isSketchId` / `isGistId` と同じ位置づけの関門。 */
+export function isGitHubLogin(value: string): boolean {
+  return GITHUB_LOGIN.test(value);
 }
 
 /**
