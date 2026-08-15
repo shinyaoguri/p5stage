@@ -66,7 +66,13 @@
  * エディタの設定に追従する側。
  */
 .project-name {
-  width: 100px;
+  /*
+   * canvastage は 100px だが、**こちらは名前が長い**。保存前の作品にも名前を
+   * 振る仕組み (#41 の 3) があり、自動生成の `tidal-glow-z2w` は 14 文字 —
+   * 11px の等幅で 92px、左右の余白を足すと 100px には収まらず、常に頭が切れる。
+   * 文字の分だけ広げる (それ以上は伸ばさない)。
+   */
+  width: 120px;
   padding: 4px 8px;
   border: none;
   border-bottom: 1px solid transparent;
@@ -93,6 +99,6 @@
 
 @media (max-width: 600px) {
   .project-name {
-    width: 90px;
+    width: 100px;
   }
 }
