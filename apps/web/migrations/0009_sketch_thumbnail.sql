@@ -1,0 +1,18 @@
+-- サムネイル (Phase 4-4 / ADR 0019)。
+--
+-- 実体は R2 の `thumbs/<gist_id>/<revision>.png` で、**版ごとに不変**
+-- (`gists/<gist_id>/<revision>.json` の兄弟キー — ADR 0011)。ここに持つのは
+-- 「どの版の絵が撮れているか」の 1 点だけ。
+--
+-- 表を分けずに列 1 つで足りるのは、**出したい絵が常に 1 枚**だから。作品ページの
+-- OGP に使うのは最新の版の絵で、過去の版のページは `noindex` なのでカードを出さない
+-- (ADR 0016)。版ごとの一覧が要るなら `gist_revisions` に足す方が自然だが、
+-- その用途はまだ無い。
+--
+-- `current_revision` と別に持つのは、**撮影が保存に必ず追いつくとは限らない**ため。
+-- canvas を作らないスケッチ・外部画像で汚れた canvas では撮れず、そのときは
+-- 前の版の絵を出し続ける (何も出さないより、少し古い絵の方が役に立つ)。
+--
+-- R2 のキーが `gist_id` を含むので、**Gist が変わればこの値は無効になる**。
+-- 切り離し (`detachGist`) が一緒に NULL へ戻す。
+ALTER TABLE sketches ADD COLUMN thumbnail_revision TEXT;

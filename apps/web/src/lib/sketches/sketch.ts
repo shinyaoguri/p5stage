@@ -46,6 +46,13 @@ export interface Sketch {
   readonly forkedFromSketchId: string | null;
   /** 派生した時点で親が配っていたリビジョン。新しい Gist 自身の SHA ではない。 */
   readonly forkedFromRevision: string | null;
+  /**
+   * サムネイルが撮れている版 (Phase 4-4 / ADR 0019)。
+   *
+   * `currentRevision` と同じとは限らない — 撮れないスケッチもあるので、最後に
+   * 撮れた版を指したままになる。実体は `thumbs/<gistId>/<revision>.png`。
+   */
+  readonly thumbnailRevision: string | null;
 }
 
 /** 派生の出どころ。作品を作るときに一緒に刻む。 */

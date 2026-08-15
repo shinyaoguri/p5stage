@@ -73,7 +73,10 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 - **フォーク** (4-3): 系譜の正典は D1 (`forked_from_*`)。他人の作品は Gist fork API、
   自分の作品からの派生は新規 Gist の作成 (自分の Gist は fork できない — #44)。
   他人の blob を自分に計上する唯一の経路でもある → **ADR 0018**
-- サムネイル自動取得の**新規実装** (canvastage に相当実装は無い。別オリジン iframe から postMessage で受け渡す) → R2、Cloudflare Images リサイズ
+- **サムネイル** (4-4): プロトコル版 3 の `capture` / `thumbnail` で別オリジン iframe から
+  PNG を受け取り、`thumbs/<gistId>/<revision>.png` として R2 へ。作品ページの OGP に出す。
+  **Cloudflare Images は使わない** — 撮る側で 1 枚に正規化する (ADR 0019)。
+  版を上げると実行が止まる作りだったので、先に本体の版判定を範囲へ直した (4-4a)
 - 完了条件: 作者がライブコーディングし、閲覧者が数秒遅れで追従できる
 
 **限定公開 (secret gist + 注意書き) は Phase 2 で完了済み**。`visibility` の 2 段階・

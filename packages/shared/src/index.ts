@@ -75,6 +75,16 @@ export type {
 } from "./protocol";
 
 export {
+  MAX_THUMBNAIL_BYTES,
+  MAX_THUMBNAIL_EDGE,
+  THUMBNAIL_MIME,
+  THUMBNAIL_ROUTE_PREFIX,
+  thumbnailPath,
+  thumbnailSize,
+} from "./thumbnails";
+export type { ThumbnailSize } from "./thumbnails";
+
+export {
   DEFAULT_TRANSITION_ID,
   DEFAULT_TRANSITION_MS,
   MAX_TRANSITION_MS,

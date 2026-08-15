@@ -12,6 +12,7 @@ import {
   parseSketchFiles,
   type SketchFiles,
 } from "./files";
+import { MAX_THUMBNAIL_BYTES, THUMBNAIL_MIME } from "./thumbnails";
 import { clampTransitionMs, isTransitionId } from "./transitions";
 
 /**
@@ -20,8 +21,9 @@ import { clampTransitionMs, isTransitionId } from "./transitions";
  * 本体とランナーは別々にデプロイされるため、片方だけ古い状態が起こりうる。
  *
  * 2: 実行の指示にアセットの URL 表を載せた (ADR 0014)。
+ * 3: サムネイルの取得を足した (`capture` / `thumbnail` — ADR 0019)。
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * 本体が動かせるランナーの最低版。
@@ -97,7 +99,12 @@ export type HostMessage =
       /** null なら即時切替。 */
       readonly transition: TransitionRequest | null;
     }
-  | { readonly type: "stop"; readonly gen: number };
+  | { readonly type: "stop"; readonly gen: number }
+  /**
+   * 今表示している実行の 1 枚絵をくれ (ADR 0019)。
+   * 画素に触れるのは実行環境だけなので、本体は「撮ってくれ」としか言えない。
+   */
+  | { readonly type: "capture"; readonly gen: number };
 
 /** ランナー → 本体。 */
 export type RunnerMessage =
@@ -108,6 +115,18 @@ export type RunnerMessage =
       readonly level: ConsoleLevel;
       readonly message: string;
       readonly timestamp: number;
+    }
+  /**
+   * `capture` の答え。撮れなければ `image` は null で、`reason` に理由が入る。
+   *
+   * **撮れなかったことも必ず答える**。黙って返事をしないと、本体からは
+   * 「サムネイルを知らない古いランナー」と区別が付かなくなる。
+   */
+  | {
+      readonly type: "thumbnail";
+      readonly gen: number;
+      readonly image: Blob | null;
+      readonly reason: string | null;
     };
 
 /** postMessage に載せる封筒。中身だけでは自分宛てか判別できない。 */
@@ -212,9 +231,25 @@ export function parseHostMessage(value: unknown): HostMessage | null {
     }
     case "stop":
       return { type: "stop", gen };
+    case "capture":
+      return { type: "capture", gen };
     default:
       return null;
   }
+}
+
+/**
+ * 受け取った画像を確かめる。形式・大きさが約束と違えば null。
+ *
+ * 送り主は実行環境 (origin と source を確かめた相手) だが、**そこで動いているのは
+ * 他者のコードが触れる文書**なので、信頼境界の作法どおり中身を確かめる。ここを
+ * 通った Blob だけが本体から保存の口へ送られる。
+ */
+function parseThumbnailImage(value: unknown): Blob | null {
+  if (!(value instanceof Blob)) return null;
+  if (value.type !== THUMBNAIL_MIME) return null;
+  if (value.size === 0 || value.size > MAX_THUMBNAIL_BYTES) return null;
+  return value;
 }
 
 /** 受信データをランナー → 本体のメッセージとして読み取る。妥当でなければ null。 */
@@ -232,6 +267,20 @@ export function parseRunnerMessage(value: unknown): RunnerMessage | null {
       return isNonNegativeInteger(record.gen)
         ? { type: "rendered", gen: record.gen }
         : null;
+    case "thumbnail": {
+      if (!isNonNegativeInteger(record.gen)) return null;
+      const image = parseThumbnailImage(record.image);
+      // 中身が読めなかったときも「撮れなかった」として通す。捨ててしまうと
+      // 本体は返事を待ち続け、タイムアウトまで次の保存を待たせることになる。
+      const reason = typeof record.reason === "string" ? record.reason : null;
+      return {
+        type: "thumbnail",
+        gen: record.gen,
+        image,
+        reason:
+          image === null ? (reason ?? "画像を受け取れませんでした") : null,
+      };
+    }
     case "console": {
       const { level, message: text, timestamp } = record;
       if (typeof level !== "string" || !CONSOLE_LEVELS.includes(level)) {

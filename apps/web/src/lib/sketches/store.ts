@@ -31,6 +31,7 @@ interface SketchRow {
   readonly gist_deleted_at: number | null;
   readonly forked_from_sketch_id: string | null;
   readonly forked_from_revision: string | null;
+  readonly thumbnail_revision: string | null;
 }
 
 interface SketchWithOwnerRow extends SketchRow {
@@ -53,6 +54,7 @@ const COLUMN_NAMES = [
   "gist_deleted_at",
   "forked_from_sketch_id",
   "forked_from_revision",
+  "thumbnail_revision",
 ] as const;
 
 const COLUMNS = COLUMN_NAMES.join(", ");
@@ -77,6 +79,7 @@ function toSketch(row: SketchRow): Sketch {
     gistDeletedAt: row.gist_deleted_at,
     forkedFromSketchId: row.forked_from_sketch_id,
     forkedFromRevision: row.forked_from_revision,
+    thumbnailRevision: row.thumbnail_revision,
   };
 }
 
@@ -121,6 +124,7 @@ export async function createSketch(
     gistDeletedAt: null,
     forkedFromSketchId: null,
     forkedFromRevision: null,
+    thumbnailRevision: null,
   };
 }
 
@@ -185,6 +189,7 @@ export async function createSketchFromGist(
     gistDeletedAt: null,
     forkedFromSketchId,
     forkedFromRevision,
+    thumbnailRevision: null,
   };
 }
 
@@ -373,6 +378,9 @@ export async function attachGist(
  * tombstone も外す。「作者が GitHub 側で消した」という事実は、その Gist に付いて
  * いたもので、切り離した後の作品には掛からない。
  *
+ * サムネイルの指す版も落とす。R2 のキーは `thumbs/<gistId>/<revision>.png` なので
+ * (ADR 0019)、Gist が外れた時点でその版はもうこの作品の絵ではない。
+ *
  * GitHub には何もしない。利用者の Gist は利用者のもので、こちらが消す筋合いは無い。
  */
 export async function detachGist(
@@ -385,7 +393,8 @@ export async function detachGist(
     .prepare(
       `UPDATE sketches
           SET gist_id = NULL, current_revision = NULL, revision_etag = NULL,
-              revision_checked_at = NULL, gist_deleted_at = NULL, updated_at = ?
+              revision_checked_at = NULL, gist_deleted_at = NULL,
+              thumbnail_revision = NULL, updated_at = ?
         WHERE id = ? AND owner_id = ? AND gist_id IS NOT NULL`
     )
     .bind(now, id, ownerId)
@@ -422,6 +431,32 @@ export async function setCurrentRevision(
     )
     .bind(revision, etag, now, id)
     .run();
+}
+
+/**
+ * サムネイルが撮れている版を記す (Phase 4-4 / ADR 0019)。
+ *
+ * 所有者で絞る。**これは持ち主の操作の結果**で、書けるのは自分の作品の絵を
+ * 上げた本人だけ (`setCurrentRevision` が絞らないのは、あちらが GitHub にある
+ * 事実の写しで閲覧経路からも書かれるため)。
+ *
+ * `updated_at` は動かさない。一覧の並びは「最後に手を入れた順」であってほしく、
+ * 保存に付いてくる撮影で順番が動くと、中身が変わっていない作品が上がってくる。
+ */
+export async function setThumbnailRevision(
+  db: D1Database,
+  id: string,
+  ownerId: number,
+  revision: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "UPDATE sketches SET thumbnail_revision = ? WHERE id = ? AND owner_id = ?"
+    )
+    .bind(revision, id, ownerId)
+    .run();
+
+  return result.meta.changes > 0;
 }
 
 /** 突き合わせたが変わっていなかった。次に確かめるまでの時計を進めるだけ。 */

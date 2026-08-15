@@ -35,6 +35,14 @@ export interface PreviewHostOptions {
 /** ランナーのパス。 */
 const RUNNER_PATH = "/runner/";
 
+/**
+ * サムネイルの返事を待つ上限 (Phase 4-4)。
+ *
+ * サムネイルを知らない古いランナーは `capture` を無視するので、**待ち切りは
+ * 通常運転の一部**。実行には何の影響も無いので、待ちは短くてよい。
+ */
+const CAPTURE_TIMEOUT_MS = 3000;
+
 export class PreviewHost {
   readonly #frame: HTMLIFrameElement;
   readonly #origin: string;
@@ -45,6 +53,8 @@ export class PreviewHost {
   #generation = 0;
   /** ランナーが ready を返す前に来た実行。つながった時点で流す。 */
   #pending: HostMessage | null = null;
+  /** 答えを待っているサムネイルの要求 (世代 → 受け取り口)。 */
+  readonly #captures = new Map<number, (image: Blob | null) => void>();
 
   constructor(container: HTMLElement, options: PreviewHostOptions) {
     this.#options = options;
@@ -93,9 +103,48 @@ export class PreviewHost {
     this.#send({ type: "stop", gen: this.#generation });
   }
 
+  /**
+   * 今出ている絵を PNG で受け取る。撮れなければ null (Phase 4-4 / ADR 0019)。
+   *
+   * 撮るのは実行環境で、本体は画素に触れない。待ち切り・古いランナー・撮影の失敗は
+   * すべて null に倒す — **サムネイルは飾りなので、呼び出し側に失敗の分岐を作らせない**。
+   *
+   * 実行を待たせない (`#pending` に溜めない) のは、つながる前に撮った絵が存在しない
+   * ため。溜めても、流れる頃には別の世代になっている。
+   */
+  capture(timeoutMs: number = CAPTURE_TIMEOUT_MS): Promise<Blob | null> {
+    const target = this.#frame.contentWindow;
+    if (!this.#ready || target === null) return Promise.resolve(null);
+
+    const gen = this.#generation;
+    return new Promise<Blob | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.#captures.delete(gen);
+        resolve(null);
+      }, timeoutMs);
+
+      // 同じ世代で二度頼んだら、後の呼び出しに答えを渡す (前の待ちは null で閉じる)。
+      this.#captures.get(gen)?.(null);
+      this.#captures.set(gen, (image) => {
+        clearTimeout(timer);
+        this.#captures.delete(gen);
+        resolve(image);
+      });
+
+      target.postMessage(
+        envelope({ type: "capture", gen } satisfies HostMessage),
+        this.#origin
+      );
+    });
+  }
+
   dispose(): void {
     this.#abort.abort();
     this.#frame.remove();
+    // 待っている要求は閉じてから捨てる。放っておくと、消えたランナーの返事を
+    // 待つ Promise がタイムアウトまで残る。
+    for (const settle of this.#captures.values()) settle(null);
+    this.#captures.clear();
   }
 
   #send(message: HostMessage): void {
@@ -141,6 +190,10 @@ export class PreviewHost {
           message.message,
           message.timestamp
         );
+        return;
+      case "thumbnail":
+        // 待っていない世代の答えは捨てる (追い越された実行の絵)。
+        this.#captures.get(message.gen)?.(message.image);
         return;
     }
   };

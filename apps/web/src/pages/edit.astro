@@ -113,6 +113,7 @@ try {
   import { generateProjectName } from "../scripts/sketch/project-name";
   import { SavePanel } from "../scripts/sketch/save-panel";
   import { SketchSaver } from "../scripts/sketch/sketch-saver";
+  import { ThumbnailUploader } from "../scripts/sketch/thumbnail-uploader";
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
@@ -344,6 +345,10 @@ try {
       },
     });
 
+    // 保存に付いてくるサムネイルの撮影 (Phase 4-4)。画素に触れるのは実行環境で、
+    // ここは「撮ってくれ」と頼んで受け取った PNG を送るだけ。
+    const thumbnails = new ThumbnailUploader({ capture: () => host.capture() });
+
     // 名前の書き戻し。保存済みの作品だけが対象 (#41 の 3)。
     const titleSaver = new TitleSaver({
       onError: (message) => showToast(message, "error"),
@@ -366,6 +371,11 @@ try {
         // 器ができた時点で、その名前は正本に載っている。開き直しの往復を省く。
         if (state.sketchId !== null && state.status === "saved") {
           titleSaver.markSent(state.sketchId, projectBar.name);
+          // 保存できた版の絵を撮って上げる (Phase 4-4)。実行 → 間引き保存 →
+          // 着地の順なので、今画面に出ているのは保存された中身そのもの。
+          if (state.gist !== null) {
+            void thumbnails.onSaved(state.sketchId, state.gist.revision);
+          }
         }
       },
       onCreated: showSketchIdInUrl,

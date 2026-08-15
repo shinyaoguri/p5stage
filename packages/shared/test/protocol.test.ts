@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { MAX_THUMBNAIL_BYTES } from "../src/thumbnails";
+
 import {
   CHANNEL,
   MIN_RUNNER_PROTOCOL_VERSION,
@@ -135,6 +137,13 @@ describe("parseHostMessage", () => {
     expect(parseHostMessage(envelope({ type: "stop", gen: "1" }))).toBeNull();
   });
 
+  it("capture を読み取る", () => {
+    expect(parseHostMessage(envelope({ type: "capture", gen: 7 }))).toEqual({
+      type: "capture",
+      gen: 7,
+    });
+  });
+
   it("ファイル構成が不正な run を無視する", () => {
     expect(parseHostMessage(envelope({ type: "run", gen: 1 }))).toBeNull();
     expect(
@@ -201,6 +210,68 @@ describe("parseRunnerMessage", () => {
     expect(
       parseRunnerMessage(
         envelope({ type: "console", level: "log", message: 1, timestamp: 0 })
+      )
+    ).toBeNull();
+  });
+
+  it("thumbnail の PNG を読み取る", () => {
+    const image = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+    expect(
+      parseRunnerMessage(
+        envelope({ type: "thumbnail", gen: 4, image, reason: null })
+      )
+    ).toEqual({ type: "thumbnail", gen: 4, image, reason: null });
+  });
+
+  it("撮れなかった知らせを理由ごと読み取る", () => {
+    expect(
+      parseRunnerMessage(
+        envelope({
+          type: "thumbnail",
+          gen: 1,
+          image: null,
+          reason: "スケッチに canvas がありません",
+        })
+      )
+    ).toEqual({
+      type: "thumbnail",
+      gen: 1,
+      image: null,
+      reason: "スケッチに canvas がありません",
+    });
+  });
+
+  it("PNG でない中身は「撮れなかった」に倒す", () => {
+    const parse = (image: unknown) =>
+      parseRunnerMessage(
+        envelope({ type: "thumbnail", gen: 1, image, reason: null })
+      );
+
+    // 受け取った Blob はそのまま保存の口へ送られるので、形式を確かめる。
+    expect(parse(new Blob(["x"], { type: "image/svg+xml" }))).toMatchObject({
+      image: null,
+    });
+    expect(parse("data:image/png;base64,xxxx")).toMatchObject({ image: null });
+    expect(parse(new Blob([], { type: "image/png" }))).toMatchObject({
+      image: null,
+    });
+  });
+
+  it("上限を超える画像を捨てる", () => {
+    const image = new Blob([new Uint8Array(MAX_THUMBNAIL_BYTES + 1)], {
+      type: "image/png",
+    });
+    expect(
+      parseRunnerMessage(
+        envelope({ type: "thumbnail", gen: 1, image, reason: null })
+      )
+    ).toMatchObject({ image: null });
+  });
+
+  it("世代の無い thumbnail は無視する", () => {
+    expect(
+      parseRunnerMessage(
+        envelope({ type: "thumbnail", image: null, reason: null })
       )
     ).toBeNull();
   });
