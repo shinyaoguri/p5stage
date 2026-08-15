@@ -6,10 +6,11 @@
  */
 
 import {
-  PROTOCOL_VERSION,
+  MIN_RUNNER_PROTOCOL_VERSION,
   SKETCH_ALLOW,
   SKETCH_SANDBOX,
   envelope,
+  isSupportedRunnerVersion,
   parseRunnerMessage,
   type AssetUrls,
   type ConsoleLevel,
@@ -116,9 +117,11 @@ export class PreviewHost {
 
     switch (message.type) {
       case "ready": {
-        if (message.protocolVersion !== PROTOCOL_VERSION) {
+        // 断るのは古すぎるランナーだけ。新しい版は受ける — 知らないメッセージは
+        // 両側のパーサが捨てるので、追加された機能が効かないだけで実行は通る。
+        if (!isSupportedRunnerVersion(message.protocolVersion)) {
           this.#options.onError?.(
-            `実行環境のプロトコルが一致しません (本体 ${PROTOCOL_VERSION} / 実行環境 ${message.protocolVersion})`
+            `実行環境のプロトコルが古すぎます (必要 ${MIN_RUNNER_PROTOCOL_VERSION} 以上 / 実行環境 ${message.protocolVersion})`
           );
           return;
         }

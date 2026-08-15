@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   CHANNEL,
+  MIN_RUNNER_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   envelope,
+  isSupportedRunnerVersion,
   parseHostMessage,
   parseRunnerMessage,
 } from "../src/protocol";
@@ -207,5 +209,31 @@ describe("parseRunnerMessage", () => {
     expect(
       parseRunnerMessage(envelope({ type: "run", gen: 1, files }))
     ).toBeNull();
+  });
+});
+
+describe("isSupportedRunnerVersion", () => {
+  it("最低版のランナーを受ける", () => {
+    expect(isSupportedRunnerVersion(MIN_RUNNER_PROTOCOL_VERSION)).toBe(true);
+  });
+
+  it("本体より新しいランナーを受ける", () => {
+    // デプロイはランナーが先に出る。ここで断ると、本体が追いつくまでの間
+    // すべてのスケッチが動かなくなる (ADR 0007 の補足)。
+    expect(isSupportedRunnerVersion(PROTOCOL_VERSION + 1)).toBe(true);
+    expect(isSupportedRunnerVersion(PROTOCOL_VERSION + 99)).toBe(true);
+  });
+
+  it("古すぎるランナーを断る", () => {
+    expect(isSupportedRunnerVersion(MIN_RUNNER_PROTOCOL_VERSION - 1)).toBe(
+      false
+    );
+    expect(isSupportedRunnerVersion(0)).toBe(false);
+  });
+
+  it("整数でない版を断る", () => {
+    expect(isSupportedRunnerVersion(2.5)).toBe(false);
+    expect(isSupportedRunnerVersion(Number.NaN)).toBe(false);
+    expect(isSupportedRunnerVersion(Number.POSITIVE_INFINITY)).toBe(false);
   });
 });

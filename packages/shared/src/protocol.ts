@@ -16,12 +16,39 @@ import { clampTransitionMs, isTransitionId } from "./transitions";
 
 /**
  * プロトコルのバージョン。
- * ランナーは `ready` に載せて返し、本体は自分の期待と一致するかを確かめる。
+ * ランナーは `ready` に載せて返し、本体は自分が動かせる版かを確かめる。
  * 本体とランナーは別々にデプロイされるため、片方だけ古い状態が起こりうる。
  *
  * 2: 実行の指示にアセットの URL 表を載せた (ADR 0014)。
  */
 export const PROTOCOL_VERSION = 2;
+
+/**
+ * 本体が動かせるランナーの最低版。
+ *
+ * **版は「増える」方向にしか動かさない**。新しいメッセージ型を足しても、
+ * 知らない型は両側のパーサが null で捨てるので (`parseHostMessage` /
+ * `parseRunnerMessage`)、古い側は「その機能だけ効かない」で済む。壊れるのは
+ * **既存のメッセージの意味を変えたとき**だけで、そのときにこの値を上げる。
+ *
+ * 厳密一致で見ないのは、**デプロイの順序が必ずどちらかを先にする**ため。
+ * CI はランナー (preview) を先に出す — 本体を先に出すと iframe の参照先が
+ * 欠けるからで、この順は変えられない。一致を求めると、ランナーの版を上げた
+ * 瞬間から本体が追いつくまでの数分、**全スケッチが動かない窓**ができる
+ * (作品ページの HTML は `s-maxage=60` なので、その分さらに延びる)。
+ * 「新しいランナーは受ける」にしておけば、その窓は構造的に生まれない。
+ */
+export const MIN_RUNNER_PROTOCOL_VERSION = 2;
+
+/**
+ * そのランナーを本体が動かせるか。
+ *
+ * 断るのは**古すぎるランナー**だけ。新しい版は、本体が知っている範囲のやり取りが
+ * そのまま通るので受ける。
+ */
+export function isSupportedRunnerVersion(version: number): boolean {
+  return Number.isInteger(version) && version >= MIN_RUNNER_PROTOCOL_VERSION;
+}
 
 /**
  * 交信を識別する印。
