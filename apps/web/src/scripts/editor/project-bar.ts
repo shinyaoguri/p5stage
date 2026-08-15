@@ -8,11 +8,13 @@
  * ような文字はここに畳んだ。
  *
  * - 動いていない … ▶ (押すと実行)
- * - 動いていて、実行してから編集した … ▶ + 青いドット (押すと再実行)
- * - 動いていて、画面の中身が今のコードのまま … ■ (押すと停止)
+ * - 動いている … ■ (押すと停止)
+ * - 動いていて、実行してから編集した … ■ + 青いドット (押すと停止)
  *
- * **止まらない道は作らない。** 押した先が再実行に変わるのは「実行すべきものが
- * ある」間だけで、実行してしまえば ■ に戻る。
+ * **絵と押す先を決めるのは「動いているか」だけ** (canvastage の `runStopBtn` と
+ * 同じ)。実行してから編集したことは**ドットだけ**が示し、■ が ▶ に化けることは
+ * ない — 打っている最中に押す先が入れ替わると、止めるつもりで押した手が
+ * 再実行を起こす。書き換えた内容を動かす道は ⌘/Ctrl+Enter が常に持っている。
  *
  * 実行の**世代**は `data-generation` に載せる。文字を消しても、往復の
  * ハンドシェイクが通ったことを機械が読めるようにしておく必要がある (ADR 0007)。
@@ -66,10 +68,10 @@ export class ProjectBar {
       id: "run",
       icon: "play",
       label: "実行",
-      // 止めるのは「動いていて、かつ画面が今のコードのまま」のときだけ。
-      // 書き換えた後に押すのは、ほぼ必ず再実行のつもりなので実行へ倒す。
+      // 動いていれば止める、止まっていれば動かす。それだけ。実行してから
+      // 編集したかどうかは押す先を変えない (絵と食い違わせないため)。
       onClick: () => {
-        if (this.#running && !this.#stale) this.#options.onStop();
+        if (this.#running) this.#options.onStop();
         else this.#options.onRun();
       },
     });
@@ -159,15 +161,11 @@ export class ProjectBar {
   }
 
   #renderButton(): void {
-    // 停止できるのは「動いていて、画面が今のコードのまま」のときだけ。それ以外は
-    // 押すと実行なので ▶ を出す — アイコンと押した結果を食い違わせない。
-    const canStop = this.#running && !this.#stale;
-    setToolbarButtonIcon(this.#button, canStop ? "stop" : "play");
+    // 絵も名前も「動いているか」だけで決まる。押すと何が起きるかと食い違わせない。
+    setToolbarButtonIcon(this.#button, this.#running ? "stop" : "play");
     setToolbarButtonLabel(
       this.#button,
-      canStop
-        ? "停止"
-        : `${this.#running ? "再実行" : "実行"} (${runShortcutLabel()})`
+      this.#running ? "停止" : `実行 (${runShortcutLabel()})`
     );
     // 「実行中で、かつ実行後に編集した」だけ。止まっているときは出さない。
     this.#button.classList.toggle("is-stale", this.#running && this.#stale);
