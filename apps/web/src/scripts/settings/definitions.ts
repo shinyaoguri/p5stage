@@ -21,6 +21,7 @@ import {
 } from "@p5stage/shared";
 
 import { DEFAULT_THEME_NAME, THEME_OPTIONS } from "../editor/themes";
+import type { Visibility } from "../../lib/sketches/sketch";
 
 /** 選択肢 1 つ分。 */
 export interface SettingOption {
@@ -86,6 +87,22 @@ export type SettingDef =
  * フォント名は自由入力にしてあるので、端末に入れてあるフォントは今でも指定できる。
  */
 const DEFAULT_FONT_FAMILY = "ui-monospace, SFMono-Regular, Menlo, monospace";
+
+/**
+ * 保存するときの公開範囲 (#87 の段階 5)。
+ *
+ * **エディタは見せながら書く場所**なので、保存のたびに尋ねる面を出さない。
+ * 代わりにここで 1 度決めて、保存ボタンはその通りに作る。Gist は作成後に公開範囲を
+ * 変えられない (ADR 0010) ため、決めるのは**新しく作る作品**についてだけで、
+ * 既にある作品には遡らない。
+ *
+ * 限定公開は secret gist であって private ではない (要件 3.4)。選択肢の文言で
+ * そのことを言う — ここが唯一その説明の出る場所になる。
+ */
+const VISIBILITY_OPTIONS = [
+  { value: "public", label: "公開 (ギャラリーに載る)" },
+  { value: "unlisted", label: "限定公開 (URL を知る人は見られる)" },
+] as const satisfies readonly { value: Visibility; label: string }[];
 
 export const SETTING_DEFS = {
   editorTheme: {
@@ -316,6 +333,13 @@ export const SETTING_DEFS = {
     default: DEFAULT_TRANSITION_MS,
     unit: "ms",
   },
+
+  defaultVisibility: {
+    kind: "enum",
+    label: "新しい作品",
+    options: VISIBILITY_OPTIONS,
+    default: "public",
+  },
 } as const satisfies Record<string, SettingDef>;
 
 export type SettingKey = keyof typeof SETTING_DEFS;
@@ -405,4 +429,6 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     ],
   },
   { title: "再実行の演出", keys: ["transitionId", "transitionMs"] },
+  // 保存のたびに尋ねる代わりに、ここで 1 度決める (#87 の段階 5)。
+  { title: "公開範囲", keys: ["defaultVisibility"] },
 ];

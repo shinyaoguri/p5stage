@@ -15,6 +15,12 @@
  *
  * **項目の群はアコーディオン**。30 項目を一度に広げると、目当ての 1 つを探すのに
  * スクロールが要る。畳んだ見出しの列なら全体が 1 画面に収まり、開くのは触る群だけで済む。
+ *
+ * **開く口はアカウントメニューの中** (#87 の段階 5)。設定は書いている間ずっと触る
+ * ものではなく、最初に自分の見え方を決めたら以降はほとんど押さない。右上に出したまま
+ * にする理由が無いので、同じ「自分の持ち物」であるアカウントメニューへ畳む
+ * (作品に属するものは中央の作品メニューが持つ、という #87 の分け方はそのまま)。
+ * 開く口の作りは AssetsPanel と同じ (scripts/assets/assets-panel.ts の `menuItem`)。
  */
 
 import "../../styles/settings-panel.css";
@@ -27,7 +33,7 @@ import {
   type SettingKey,
 } from "./definitions";
 import { DEFAULT_SETTINGS, withSetting } from "./settings";
-import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
+import { focusMenuOpener, makeMenuItem, setMenuItemLabel } from "../ui/menu";
 
 export interface SettingsPanelOptions {
   /** 設定が変わった (即時反映と保存の受け口)。 */
@@ -53,7 +59,6 @@ const CHEVRON = `<svg class="settings-group-chevron" viewBox="0 0 24 24" width="
 </svg>`;
 
 export class SettingsPanel {
-  readonly #container: HTMLElement;
   readonly #options: SettingsPanelOptions;
   readonly #body: HTMLElement;
   readonly #toggle: HTMLButtonElement;
@@ -61,21 +66,16 @@ export class SettingsPanel {
   #settings: EditorSettings;
   #open = false;
 
-  constructor(
-    container: HTMLElement,
-    settings: EditorSettings,
-    options: SettingsPanelOptions
-  ) {
-    this.#container = container;
+  constructor(settings: EditorSettings, options: SettingsPanelOptions) {
     this.#settings = settings;
     this.#options = options;
 
-    this.#toggle = makeToolbarButton({
+    this.#toggle = makeMenuItem({
+      id: "settings-toggle",
       icon: "settings",
       label: "エディタの設定を開く",
       onClick: () => this.toggle(),
     });
-    this.#toggle.classList.add("settings-panel-toggle");
 
     this.#body = document.createElement("div");
     this.#body.className = "settings-panel-body";
@@ -96,20 +96,19 @@ export class SettingsPanel {
       this.#createFooter()
     );
 
-    // パネルかトグルの上で Escape を押したら閉じる。透過エディタの上に乗る面
-    // なので、「消して手元を見たい」がすぐ叶うようにする。
-    const closeOnEscape = (event: KeyboardEvent) => {
+    // パネルの上で Escape を押したら閉じる。透過エディタの上に乗る面なので、
+    // 「消して手元を見たい」がすぐ叶うようにする。開く口の側は見なくてよい —
+    // 開いている間、トグルはメニューの中で閉じられている (押した時点でメニューが
+    // 畳まれる) ので、そこに Escape が来ることは無い。
+    this.#body.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !this.#open) return;
       event.stopPropagation();
       this.close();
-    };
-    this.#container.addEventListener("keydown", closeOnEscape);
-    this.#body.addEventListener("keydown", closeOnEscape);
+    });
 
-    this.#container.replaceChildren(this.#toggle);
     // **ドロワーは画面に対して置く面なので、DOM も画面の直下に置く。**
-    // トグルが並ぶ操作列 (edit.astro の `.chrome`) は z-index で重なりの層を
-    // 作っており、その中に残すと全高の面がファイルタブや実行ボタンより下に潜る。
+    // 開く口が並ぶメニューは z-index で重なりの層を作っており、その中に残すと
+    // 全高の面がファイルタブや実行ボタンより下に潜る。
     document.body.appendChild(this.#body);
     this.#syncControls();
     this.#renderChrome();
@@ -126,6 +125,11 @@ export class SettingsPanel {
     this.#syncControls();
   }
 
+  /** アカウントメニューへ差す項目 (開く口)。 */
+  get menuItem(): HTMLButtonElement {
+    return this.#toggle;
+  }
+
   open(): void {
     this.#open = true;
     this.#renderChrome();
@@ -133,8 +137,12 @@ export class SettingsPanel {
 
   close(): void {
     // 閉じた面は `inert` にするので、中にフォーカスが残っていると行き場を失う
-    // (キーボードだけの人は画面の先頭まで戻される)。開けたボタンへ返す。
-    if (this.#body.contains(document.activeElement)) this.#toggle.focus();
+    // (キーボードだけの人は画面の先頭まで戻される)。開けた項目へ返す — ただし
+    // 項目はアカウントメニューの中にあり、閉じていれば押せない。そのときは
+    // メニューの開閉ボタンへ返す (#87 の段階 5)。
+    if (this.#body.contains(document.activeElement)) {
+      focusMenuOpener(this.#toggle);
+    }
     this.#open = false;
     this.#renderChrome();
   }
@@ -145,8 +153,9 @@ export class SettingsPanel {
   }
 
   dispose(): void {
-    this.#container.replaceChildren();
-    // ドロワーはコンテナの外 (body 直下) にあるので、一緒には消えない。
+    // 開く口はメニューの持ち物、ドロワーは body 直下。どちらもこの器の外にあるので
+    // 明示的に外す。
+    this.#toggle.remove();
     this.#body.remove();
     this.#controls.clear();
   }
@@ -158,9 +167,9 @@ export class SettingsPanel {
     // フォーカスも読み上げも届かないようにする。
     this.#body.toggleAttribute("inert", !this.#open);
     this.#toggle.setAttribute("aria-expanded", String(this.#open));
-    // 開いている間は押されたままに見せる (アイコンなので文字で示せない)。
+    // 開いている項目の印 (アセットの項目と同じ扱い)。
     this.#toggle.classList.toggle("is-active", this.#open);
-    setToolbarButtonLabel(
+    setMenuItemLabel(
       this.#toggle,
       this.#open ? "設定を閉じる" : "エディタの設定を開く"
     );
