@@ -11,6 +11,9 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.astro/**",
       "**/.wrangler/**",
+      // 並行セッション用の worktree。リポジトリ一式が入れ子で入るので、
+      // 無視しないと typescript-eslint が根を決められなくなる (#84)
+      "**/.claude/worktrees/**",
       "**/worker-configuration.d.ts",
       "playwright-report/**",
       "test-results/**",
