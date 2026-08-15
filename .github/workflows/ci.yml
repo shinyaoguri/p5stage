@@ -399,7 +399,7 @@ jobs:
             const body = [
               marker,
               "",
-              `- preview (実行環境): ${process.env.PREVIEW_URL}`,
+              `- preview (実行環境): ${process.env.PREVIEW_URL} — **開いても何も動きません**。本体の iframe から読まれる前提の実行環境で、直接開くとプレースホルダが出るだけ (要件 5.1 / ADR 0007)。上がったことの確認用`,
               "- web (本体): **プレビュー URL は出せません** — ライブ同期の Durable Object を持つ Worker には、Cloudflare がプレビュー URL を発行しないため ([制約](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/#limitations) / ADR 0017 の申し送り)。画面は「📸 画面の証跡」のコメントで、動きは手元の `npm run dev` で確かめてください",
               ...(pending
                 ? [
