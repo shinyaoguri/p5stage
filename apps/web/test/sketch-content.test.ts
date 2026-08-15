@@ -10,10 +10,44 @@ import { describe, expect, it } from "vitest";
 import {
   initialFileName,
   isCanonicalLogin,
+  isGitHubLogin,
   orderedFileNames,
   sketchPath,
   sketchPermalink,
+  userPath,
 } from "../src/lib/sketches/content";
+
+describe("userPath", () => {
+  it("正典 URL は @login", () => {
+    expect(userPath("shinyaoguri")).toBe("/@shinyaoguri");
+  });
+
+  it("login に URL の区切りが混ざっても経路をはみ出さない", () => {
+    expect(userPath("a/b")).toBe("/@a%2Fb");
+  });
+});
+
+describe("isGitHubLogin", () => {
+  it("英数字とハイフンの login を通す", () => {
+    expect(isGitHubLogin("shinya-oguri42")).toBe(true);
+  });
+
+  it("39 文字までは通し、40 文字は弾く", () => {
+    expect(isGitHubLogin("a".repeat(39))).toBe(true);
+    expect(isGitHubLogin("a".repeat(40))).toBe(false);
+  });
+
+  it("空文字は弾く", () => {
+    // 経路に login が無いときの `?? ""` がそのまま D1 へ行かないこと。
+    expect(isGitHubLogin("")).toBe(false);
+  });
+
+  it("URL の区切りや記号が混ざったものは弾く", () => {
+    expect(isGitHubLogin("a/b")).toBe(false);
+    expect(isGitHubLogin("@shinyaoguri")).toBe(false);
+    expect(isGitHubLogin("shinya oguri")).toBe(false);
+  });
+});
 
 describe("sketchPath", () => {
   it("正典 URL は @login/sketchId", () => {

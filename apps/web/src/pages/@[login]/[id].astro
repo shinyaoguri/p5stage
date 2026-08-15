@@ -24,6 +24,7 @@ import {
   orderedFileNames,
   sketchPath,
   sketchRevisionPath,
+  userPath,
 } from "../../lib/sketches/content";
 import {
   resolveRevisionContent,
@@ -269,7 +270,7 @@ const notice = (() => {
     <header class="sketch-header">
       <h1>{sketch.title}</h1>
       <p class="sketch-meta">
-        <a class="sketch-author" href={`/@${sketch.ownerLogin}`}>
+        <a class="sketch-author" href={userPath(sketch.ownerLogin)}>
           {
             sketch.ownerAvatarUrl !== null && (
               <img
