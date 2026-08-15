@@ -51,6 +51,7 @@ export interface ProjectBarOptions {
 export class ProjectBar {
   readonly #button: HTMLButtonElement;
   readonly #input: HTMLInputElement;
+  readonly #saveHost: HTMLElement;
   readonly #menuHost: HTMLElement;
   readonly #options: ProjectBarOptions;
   #running = false;
@@ -97,16 +98,31 @@ export class ProjectBar {
       this.#options.onRename(this.#name);
     });
 
+    // 保存の置き場 (#87 の段階 4)。**名前のすぐ右** — 何という作品が、どこに
+    // 保存されているのかを一度に読ませる。
+    this.#saveHost = document.createElement("div");
+    this.#saveHost.className = "project-bar-save";
+
     // 作品メニューの置き場 (#87 の段階 3)。中身を入れるのは WorkMenu で、
     // ここは名前の右という**位置**だけを決める。
     this.#menuHost = document.createElement("div");
     this.#menuHost.className = "project-bar-menu";
 
-    host.replaceChildren(this.#button, this.#input, this.#menuHost);
+    host.replaceChildren(
+      this.#button,
+      this.#input,
+      this.#saveHost,
+      this.#menuHost
+    );
     this.#renderButton();
   }
 
-  /** 作品メニューの置き場 (名前の右)。 */
+  /** 保存の置き場 (名前の右)。 */
+  get saveHost(): HTMLElement {
+    return this.#saveHost;
+  }
+
+  /** 作品メニューの置き場 (保存の右)。 */
   get menuHost(): HTMLElement {
     return this.#menuHost;
   }

@@ -59,7 +59,6 @@ try {
           <div id="warning-controls" />
           {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
           <div id="draft-controls" />
-          <div id="save-controls" />
           <div id="settings" />
           {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
           <div id="fullscreen-controls" />
@@ -147,7 +146,6 @@ try {
   const settingsHost = document.getElementById("settings");
   const warningHost = document.getElementById("warning-controls");
   const draftHost = document.getElementById("draft-controls");
-  const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const tagsHost = document.getElementById("tags-controls");
   const assetsHost = document.getElementById("assets");
@@ -176,7 +174,6 @@ try {
       !settingsHost ||
       !warningHost ||
       !draftHost ||
-      !saveHost ||
       !adoptHost ||
       !tagsHost ||
       !assetsHost ||
@@ -399,7 +396,9 @@ try {
     });
     tagsPanel.setTags(opened?.tags ?? []);
 
-    const savePanel = new SavePanel(saveHost, {
+    // 保存は中央 (作品の名前の右)。何という作品が、どこに保存されているのかを
+    // 一度に読ませる (#87 の段階 4)。
+    const savePanel = new SavePanel(projectBar.saveHost, {
       // 名前は画面上部の入力欄が持つ。初回の保存はそれと公開範囲を束ねて送る。
       onSave: (visibility) =>
         void saver.saveNow(
@@ -771,8 +770,9 @@ try {
     /* エディタの左端と同じ縦線に揃える (#41 の 1-1)。 */
     left: max(0.5rem, var(--editor-padding));
     /* 右上の操作列に譲る幅。左の余白ぶんを差し引き、揃えた縦線を保ったまま
-       操作列と重ならないところで止める。 */
-    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
+       操作列と重ならないところで止める。**操作列は 3 つになった** (#87) ので、
+       条件付きの 2 つ (警告・下書きの印) が出ても 13rem に収まる。 */
+    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 13rem);
   }
 
   /* 中身が無いことがある器は、場所ごと消える。器そのものが箱を作らないようにして、
