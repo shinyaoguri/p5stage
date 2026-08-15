@@ -1,0 +1,31 @@
+/* 作品ページの、作者にだけ出る操作 (#43)。JS が組み立てる DOM に届かせるため、
+   ページの <style> ではなくここに置く (sketch-view.css と同じ理由)。 */
+
+.sketch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+/* セッションを引き終えるまで、そして他人が見ているときは中身が無い。
+   空の器が余白を作ると、出たときにページが跳ねる。 */
+.sketch-actions:empty {
+  display: none;
+}
+
+.sketch-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3125rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--fg) 15%, transparent);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.sketch-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

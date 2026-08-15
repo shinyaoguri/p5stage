@@ -221,6 +221,7 @@ const notice = (() => {
     data-assets-origin={assetsOrigin}
     data-active-file={activeFile}
     data-sketch-id={sketch.id}
+    data-owner-id={String(sketch.ownerId)}
     data-revision={shownRevision}
     data-live={live ? "1" : undefined}
   >
@@ -279,6 +280,11 @@ const notice = (() => {
           </p>
         )
       }
+      {
+        /* 作者にだけ出る操作 (#43)。**中身は JS が足す** — ここで出し分けると
+          作者向けの HTML がエッジキャッシュ越しに他人へ配られる */
+      }
+      <div class="sketch-actions" id="sketch-actions"></div>
     </header>
 
     {
@@ -363,10 +369,17 @@ const notice = (() => {
 </BaseLayout>
 
 <script>
+  import { OwnerActions } from "../../scripts/sketch/owner-actions";
   import { SketchView } from "../../scripts/sketch/sketch-view";
 
   const root = document.querySelector<HTMLElement>(".sketch-page");
-  if (root) new SketchView(root);
+  if (root) {
+    new SketchView(root);
+
+    // 実行と独立に走らせる。セッションの往復を待つ間、閲覧は止めない。
+    const actions = root.querySelector<HTMLElement>("#sketch-actions");
+    if (actions) void new OwnerActions(root, actions).refresh();
+  }
 </script>
 
 <style>
