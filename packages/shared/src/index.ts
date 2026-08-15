@@ -58,8 +58,10 @@ export { SKETCH_ALLOW, SKETCH_SANDBOX } from "./embedding";
 
 export {
   CHANNEL,
+  MIN_RUNNER_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   envelope,
+  isSupportedRunnerVersion,
   parseHostMessage,
   parseRunnerMessage,
 } from "./protocol";
