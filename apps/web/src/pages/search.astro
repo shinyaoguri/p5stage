@@ -60,9 +60,9 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
       {
         ignored.length > 0 && (
           <p class="note">
-            {ignored.join("・")} は検索語から除きました (
-            {SEARCH_TERM_MIN_LENGTH}
-            文字以上の語で探せます)。
+            {/* 1 つの式にまとめる。文字列と式を並べて書くと、整形で挟まる改行が
+                そのまま抜けて「(3文字以上」のように空白が落ちる。 */}
+            {`${ignored.join("・")} は検索語から除きました (${SEARCH_TERM_MIN_LENGTH} 文字以上の語で探せます)。`}
           </p>
         )
       }
