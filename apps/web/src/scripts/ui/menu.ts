@@ -192,6 +192,35 @@ export function makeMenuLink(options: MenuLinkOptions): HTMLAnchorElement {
   return link;
 }
 
+/**
+ * 項目の名前を差し替える。
+ *
+ * 開いている面を閉じる項目 (ドロワーの開閉) は、押すと何が起きるかが状態で
+ * 変わる。**文字が名前を持つ**ので、`title` / `aria-label` ではなくこちらを直す。
+ */
+export function setMenuItemLabel(item: HTMLElement, label: string): void {
+  const text = item.querySelector(".menu-item-label");
+  if (text !== null) text.textContent = label;
+}
+
+/**
+ * 項目から開いた面を閉じた後、フォーカスを戻す。
+ *
+ * 戻し先は**その項目**…だが、メニューが閉じていれば項目は見えず `focus()` が
+ * 効かない (フォーカスが body へ落ちて行き場を失う)。そのときは代わりに
+ * **メニューの開閉ボタン**へ戻す。押せる場所のうち、いちばん項目に近い。
+ */
+export function focusMenuOpener(item: HTMLElement): void {
+  if (item.offsetParent !== null) {
+    item.focus();
+    return;
+  }
+  const toggle = item
+    .closest(".menu-host")
+    ?.querySelector<HTMLElement>(":scope > button");
+  toggle?.focus();
+}
+
 /** 項目の区切り。意味の違う群の間にだけ入れる。 */
 export function makeMenuSeparator(): HTMLElement {
   const separator = document.createElement("div");

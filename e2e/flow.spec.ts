@@ -28,10 +28,12 @@ import {
   gistLink,
   hasSketchCanvas,
   login,
+  detachGist,
   logout,
   openAccountMenu,
   openAdopt,
   openEditor,
+  openWorkMenu,
   saveAgain,
   saveButton,
   saveNewSketch,
@@ -299,7 +301,9 @@ test.describe("正本の出入り (Phase 2-6)", () => {
       expect(dialog.message()).toContain("どちらも削除しません");
       void dialog.accept();
     });
-    await page.locator("#detach").click();
+    await detachGist(page);
+    // 外れたら操作そのものが無くなる (メニューを開き直して確かめる)。
+    await openWorkMenu(page);
     await expect(page.locator("#detach")).toBeHidden();
 
     const viewer = await browser.newContext({ baseURL: WEB_ORIGIN });
@@ -334,7 +338,9 @@ test.describe("正本の出入り (Phase 2-6)", () => {
 
     // 外しておかないと「既に取り込まれている Gist」として断られる (adopt.ts)。
     page.once("dialog", (dialog) => void dialog.accept());
-    await page.locator("#detach").click();
+    await detachGist(page);
+    // 外れたら操作そのものが無くなる (メニューを開き直して確かめる)。
+    await openWorkMenu(page);
     await expect(page.locator("#detach")).toBeHidden();
 
     await openAdopt(page);

@@ -19,7 +19,7 @@ import { ASSET_TYPES, assetUrl, type SketchFiles } from "@p5stage/shared";
 import { formatBytes } from "../../lib/assets/asset";
 import "../../styles/assets-panel.css";
 import type { ToastType } from "../ui/toast";
-import { makeToolbarButton, setToolbarButtonLabel } from "../ui/toolbar-button";
+import { focusMenuOpener, makeMenuItem, setMenuItemLabel } from "../ui/menu";
 import {
   fetchAssetLibrary,
   libraryRows,
@@ -100,13 +100,14 @@ export class AssetsPanel {
     this.#container = container;
     this.#options = options;
 
-    this.#toggle = makeToolbarButton({
+    // 開く口は作品メニューの中 (#87 の段階 3)。器 (`container`) に残るものは無い —
+    // ドロワーは画面の直下に置くので、この面はどこからも浮いている。
+    this.#toggle = makeMenuItem({
       id: "assets-toggle",
       icon: "image",
       label: "アセットを開く",
       onClick: () => this.toggle(),
     });
-    this.#toggle.classList.add("assets-panel-toggle");
 
     this.#body = document.createElement("div");
     this.#body.className = "assets-panel-body";
@@ -152,7 +153,6 @@ export class AssetsPanel {
     this.#container.addEventListener("keydown", closeOnEscape);
     this.#body.addEventListener("keydown", closeOnEscape);
 
-    this.#container.replaceChildren(this.#toggle);
     // ドロワーは画面に対して置く面なので、DOM も画面の直下に置く (設定パネルと
     // 同じ理由 — 操作列の中に残すと、その z-index の層に潜る)。
     document.body.appendChild(this.#body);
@@ -172,7 +172,11 @@ export class AssetsPanel {
 
   close(): void {
     // 閉じた面は `inert` になるので、中にフォーカスが残ると行き場を失う。
-    if (this.#body.contains(document.activeElement)) this.#toggle.focus();
+    // 開く口は作品メニューの中にあり、メニューが閉じていれば押せない
+    // (そのときは開閉ボタンへ戻る — #87 の段階 3)。
+    if (this.#body.contains(document.activeElement)) {
+      focusMenuOpener(this.#toggle);
+    }
     this.#open = false;
     this.#renderChrome();
   }
@@ -180,6 +184,11 @@ export class AssetsPanel {
   toggle(): void {
     if (this.#open) this.close();
     else this.open();
+  }
+
+  /** 作品メニューへ差す項目 (開く口)。 */
+  get menuItem(): HTMLButtonElement {
+    return this.#toggle;
   }
 
   /** 外から中身が変わったとき (作品の読み込み・取り込みの直後)。 */
@@ -200,7 +209,7 @@ export class AssetsPanel {
     this.#body.toggleAttribute("inert", !this.#open);
     this.#toggle.setAttribute("aria-expanded", String(this.#open));
     this.#toggle.classList.toggle("is-active", this.#open);
-    setToolbarButtonLabel(
+    setMenuItemLabel(
       this.#toggle,
       this.#open ? "アセットを閉じる" : "アセットを開く"
     );

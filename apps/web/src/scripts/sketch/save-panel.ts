@@ -20,7 +20,8 @@ import "../../styles/save-panel.css";
 
 import { sketchPermalink } from "../../lib/sketches/content";
 import { formatSavedAt } from "../ui/format-saved-at";
-import { makeToolbarButton, makeToolbarLink } from "../ui/toolbar-button";
+import { makeMenuItem, makeMenuLink } from "../ui/menu";
+import { makeToolbarButton } from "../ui/toolbar-button";
 
 import type { SaveState, SketchMeta } from "./sketch-saver";
 
@@ -119,7 +120,8 @@ export class SavePanel {
     this.#button.setAttribute("aria-describedby", this.#status.id);
 
     // 保存先を確かめる道。正本が自分の GitHub にあることが目に見えるようにする。
-    this.#link = makeToolbarLink({
+    // 行き先は作品メニュー (#87 の段階 3) — 押す頻度は低く、今の作品に属する。
+    this.#link = makeMenuLink({
       id: "gist-link",
       icon: "github",
       label: "Gist を開く",
@@ -128,7 +130,7 @@ export class SavePanel {
 
     // 人に見せる URL。login を含まない恒久リンクを出す (作者が GitHub で改名しても
     // 生きる。開くと正典 URL へ飛ぶ — ADR 0011)。
-    this.#pageLink = makeToolbarLink({
+    this.#pageLink = makeMenuLink({
       id: "page-link",
       icon: "externalLink",
       label: "作品ページを開く",
@@ -137,7 +139,7 @@ export class SavePanel {
 
     // 正本を差し替える口 (Phase 2-6)。GitHub 側で Gist を消してしまった作品を
     // 作り直す道でもあるので、Gist が付いている間はいつでも押せる場所に置く。
-    this.#detach = makeToolbarButton({
+    this.#detach = makeMenuItem({
       id: "detach",
       icon: "unlink",
       label: "Gist を外す",
@@ -152,16 +154,21 @@ export class SavePanel {
     this.#dialogTitle.id = "save-dialog-title";
     this.#dialog = this.#buildDialog();
 
-    for (const node of [
-      this.#status,
-      this.#pageLink,
-      this.#link,
-      this.#detach,
-      this.#button,
-      this.#dialog,
-    ]) {
+    // 器に残るのは保存そのものと、その状態を支援技術へ渡す文字だけ。
+    // 作品の置き場へ行く 3 つ (作品ページ・Gist・切り離し) は作品メニューへ移した。
+    for (const node of [this.#status, this.#button, this.#dialog]) {
       this.#host.appendChild(node);
     }
+  }
+
+  /**
+   * 作品メニューへ差す項目。
+   *
+   * 出し入れ (`hidden`) は `render()` が今までどおり握る — 押せない操作を
+   * 出したままにしない、という線引きは場所が変わっても同じ。
+   */
+  get menuItems(): HTMLElement[] {
+    return [this.#pageLink, this.#link, this.#detach];
   }
 
   /** 状態を描き直す。 */

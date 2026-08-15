@@ -10,7 +10,7 @@
 
 import { expect, test } from "@playwright/test";
 
-import { openAdopt, openEditor } from "./helpers";
+import { openAdopt, openEditor, openWorkMenu } from "./helpers";
 
 test.describe("Gist の取り込み", () => {
   test("ダイアログを開いて閉じられる", async ({ page }) => {
@@ -48,8 +48,10 @@ test.describe("Gist の取り込み", () => {
 test.describe("Gist の切り離し", () => {
   test("正本の無い作品では操作を出さない", async ({ page }) => {
     await openEditor(page);
+    await openWorkMenu(page);
 
-    // まだ一度も保存していない = 外す相手がいない。
+    // まだ一度も保存していない = 外す相手がいない。作品メニューを開いても、
+    // 押せない操作が並んでいることは無い。
     await expect(page.locator("#detach")).toBeHidden();
   });
 });
