@@ -224,16 +224,41 @@ jobs:
           grep -qF "${{ steps.guard.outputs.preview_url }}" upload.log \
             || echo "::warning::preview のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
         working-directory: apps/preview
+      # 未適用の Durable Object migration があるときだけは落とさない (下の判定)。
+      # この扱いを web 側にしか置かないのは、実行環境 (apps/preview) に状態を持たせない
+      # 設計だから — あちらに DO が増えることは想定していない (ADR 0007)。
       - name: web をバージョンアップロード
+        id: web_upload
         if: steps.guard.outputs.ready == 'true'
         run: |
           set -o pipefail
-          npx wrangler versions upload \
+          if npx wrangler versions upload \
             --preview-alias "${{ steps.guard.outputs.alias }}" \
             --var "PUBLIC_PREVIEW_ORIGIN:${{ steps.guard.outputs.preview_url }}" \
             2>&1 | tee upload.log
-          grep -qF "${{ steps.guard.outputs.web_url }}" upload.log \
-            || echo "::warning::web のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
+          then
+            grep -qF "${{ steps.guard.outputs.web_url }}" upload.log \
+              || echo "::warning::web のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
+            exit 0
+          fi
+
+          # Durable Object のライフサイクル変更 (クラスの作成・削除・改名) は
+          # **versions upload では適用できない** (Cloudflare API の code 10211)。
+          # 原子的な操作なので段階的ロールアウトに載らず、`wrangler deploy` でしか
+          # 適用できない、というプラットフォーム側の制約。
+          #
+          # したがって**新しい DO を入れる PR は必ずここで落ちる**。落とし続けると
+          # required check (ci-gate) が詰まって、その migration を適用する唯一の道
+          # (main への deploy) に永久に辿り着けない。
+          #
+          # 見逃すのはこの 1 コードだけ。他の失敗は今までどおり止める — 本番デプロイが
+          # 壊れる予兆をここで拾えるのが、preview deploy を required に含めている理由。
+          if grep -q "10211" upload.log; then
+            echo "pending_do_migration=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::未適用の Durable Object migration があるため web のプレビューは出せません (main への deploy で適用されます)"
+            exit 0
+          fi
+          exit 1
         working-directory: apps/web
 
       - name: プレビュー URL を PR にコメント
@@ -242,13 +267,19 @@ jobs:
         env:
           WEB_URL: ${{ steps.guard.outputs.web_url }}
           PREVIEW_URL: ${{ steps.guard.outputs.preview_url }}
+          PENDING_DO: ${{ steps.web_upload.outputs.pending_do_migration }}
         with:
           script: |
             const marker = "## 🚀 Preview Deployment";
+            // 未適用の DO migration があると本体のプレビューは出せない。理由を
+            // ここに書かないと、URL が消えたことが不具合に見える。
+            const pending = process.env.PENDING_DO === "true";
             const body = [
               marker,
               "",
-              `- web (本体): ${process.env.WEB_URL}`,
+              pending
+                ? "- web (本体): **今回は出せません** — 未適用の Durable Object migration があるため (`wrangler versions upload` では適用できない制約)。main へマージすると `wrangler deploy` が適用し、以降の PR では出るようになります"
+                : `- web (本体): ${process.env.WEB_URL}`,
               `- preview (実行環境): ${process.env.PREVIEW_URL}`,
               "",
               "URL は PR 単位で固定。新しい commit を push すると同じ URL の中身が入れ替わる。",
