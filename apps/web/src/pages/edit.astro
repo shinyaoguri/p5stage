@@ -68,6 +68,8 @@ try {
           {/* 作品が使うアセット (Phase 3-4)。 */}
           <div id="assets" />
           <div id="settings" />
+          {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
+          <div id="fullscreen-controls" />
           <div id="account" />
         </div>
 
@@ -121,6 +123,7 @@ try {
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
   import { SettingsPanel } from "../scripts/settings/settings-panel";
+  import { mountFullscreenButton } from "../scripts/ui/fullscreen-button";
   import { formatSavedAt } from "../scripts/ui/format-saved-at";
   import { showToast } from "../scripts/ui/toast";
   import { makeToolbarButton } from "../scripts/ui/toolbar-button";
@@ -620,8 +623,20 @@ try {
     await panel.refresh();
   };
 
+  /**
+   * 画面の最大化もエディタの初期化と独立に置く。
+   *
+   * `init()` は必要なホストが 1 つでも欠けると何もせず戻るが、そのときでも画面を
+   * 広げる操作は成り立つ (広げるのは文書そのもので、エディタの状態に依らない)。
+   */
+  const initFullscreen = () => {
+    const host = document.getElementById("fullscreen-controls");
+    if (host !== null) mountFullscreenButton(host);
+  };
+
   void init();
   void initAccount();
+  initFullscreen();
 </script>
 
 <style>
@@ -709,11 +724,15 @@ try {
     max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 21rem);
   }
 
-  /* 警告と下書きの印は、出ていないときは場所ごと消える (#41 の 6)。
-     器そのものが箱を作らないようにして、空のまま `gap` だけが残らないようにする
-     (他の器はいつでも中身のあるボタンが 1 つ入っている)。 */
+  /* 中身が無いことがある器は、場所ごと消える。器そのものが箱を作らないようにして、
+     空のまま `gap` だけが残らないようにする (他の器はいつでも中身のあるボタンが
+     1 つ入っている)。
+
+     - 警告と下書きの印 … 条件が無い間は出ない (#41 の 6)
+     - 全画面 … 対応していない環境ではボタンを作らない (#87) */
   #warning-controls,
-  #draft-controls {
+  #draft-controls,
+  #fullscreen-controls {
     display: contents;
   }
 

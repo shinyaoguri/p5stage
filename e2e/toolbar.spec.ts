@@ -32,8 +32,8 @@ test.describe("操作列", () => {
 
     const buttons = toolbarButtons(page);
     // 未ログインで出るのは
-    // 保存 / 新規 / Gist から開く / タグ / アセット / 設定 / ログイン。
-    await expect(buttons).toHaveCount(7);
+    // 保存 / 新規 / Gist から開く / タグ / アセット / 設定 / 全画面 / ログイン。
+    await expect(buttons).toHaveCount(8);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");
@@ -90,6 +90,36 @@ test.describe("操作列", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(toggle).toHaveAttribute("aria-label", "設定を閉じる");
     await expect(toggle).toHaveClass(/is-active/);
+  });
+
+  /**
+   * 全画面 (#87 の段階 1)。
+   *
+   * 押した先が「入る」と「出る」で入れ替わるボタンなので、**行きと帰りの両方**を
+   * 見る。片道だけ通しても、戻れないまま閉じ込める作りに気付けない。
+   */
+  test("全画面ボタンは押すと入り、もう一度押すと戻る", async ({ page }) => {
+    await openEditor(page);
+
+    const button = page.locator("#fullscreen");
+    await expect(button).toHaveAttribute("data-fullscreen", "false");
+    await expect(button).toHaveAttribute("aria-label", "全画面表示");
+
+    await button.click();
+    await expect(button).toHaveAttribute("data-fullscreen", "true");
+    // アイコンの向きが変わるだけでは「押すと戻る」ことが読み上げに伝わらない。
+    await expect(button).toHaveAttribute("aria-label", "全画面表示を終わる");
+    await expect(button).toHaveClass(/is-active/);
+    expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(
+      true
+    );
+
+    await button.click();
+    await expect(button).toHaveAttribute("data-fullscreen", "false");
+    await expect(button).toHaveAttribute("aria-label", "全画面表示");
+    expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(
+      false
+    );
   });
 
   test("ログインするとアバターに変わり、名前は押すと何が起きるかを言う", async ({
