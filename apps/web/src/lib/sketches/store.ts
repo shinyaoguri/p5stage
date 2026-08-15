@@ -10,6 +10,7 @@ import { generateSketchId } from "./id";
 import type {
   Sketch,
   SketchInput,
+  SketchLineage,
   SketchPatch,
   SketchWithOwner,
   Visibility,
@@ -28,6 +29,8 @@ interface SketchRow {
   readonly revision_etag: string | null;
   readonly revision_checked_at: number | null;
   readonly gist_deleted_at: number | null;
+  readonly forked_from_sketch_id: string | null;
+  readonly forked_from_revision: string | null;
 }
 
 interface SketchWithOwnerRow extends SketchRow {
@@ -48,6 +51,8 @@ const COLUMN_NAMES = [
   "revision_etag",
   "revision_checked_at",
   "gist_deleted_at",
+  "forked_from_sketch_id",
+  "forked_from_revision",
 ] as const;
 
 const COLUMNS = COLUMN_NAMES.join(", ");
@@ -70,6 +75,8 @@ function toSketch(row: SketchRow): Sketch {
     revisionEtag: row.revision_etag,
     revisionCheckedAt: row.revision_checked_at,
     gistDeletedAt: row.gist_deleted_at,
+    forkedFromSketchId: row.forked_from_sketch_id,
+    forkedFromRevision: row.forked_from_revision,
   };
 }
 
@@ -112,6 +119,8 @@ export async function createSketch(
     revisionEtag: null,
     revisionCheckedAt: null,
     gistDeletedAt: null,
+    forkedFromSketchId: null,
+    forkedFromRevision: null,
   };
 }
 
@@ -123,21 +132,29 @@ export async function createSketch(
  *
  * 同じ Gist が別の作品に付いていれば `gist_id` の UNIQUE 制約で落ちる。呼び出し側は
  * それを先に引いて (`getSketchByGistId`) 案内に変える。
+ *
+ * フォーク (Phase 4-3) も同じ形で収まる。あちらは GitHub 側に新しい Gist ができて
+ * いる点だけが違い、「既にある Gist を正本として作品を作る」ことに変わりはない。
+ * 系譜を持つのはそのときだけなので `lineage` は省略できる。
  */
 export async function createSketchFromGist(
   db: D1Database,
   ownerId: number,
   input: SketchInput,
   gistId: string,
-  now: number
+  now: number,
+  lineage: SketchLineage | null = null
 ): Promise<Sketch> {
   const id = generateSketchId();
+  const forkedFromSketchId = lineage?.sketchId ?? null;
+  const forkedFromRevision = lineage?.revision ?? null;
 
   await db
     .prepare(
       `INSERT INTO sketches
-         (id, owner_id, gist_id, title, description, visibility, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, owner_id, gist_id, title, description, visibility, created_at, updated_at,
+          forked_from_sketch_id, forked_from_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -147,7 +164,9 @@ export async function createSketchFromGist(
       input.description,
       input.visibility,
       now,
-      now
+      now,
+      forkedFromSketchId,
+      forkedFromRevision
     )
     .run();
 
@@ -164,6 +183,8 @@ export async function createSketchFromGist(
     revisionEtag: null,
     revisionCheckedAt: null,
     gistDeletedAt: null,
+    forkedFromSketchId,
+    forkedFromRevision,
   };
 }
 

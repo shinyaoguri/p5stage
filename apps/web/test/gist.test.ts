@@ -14,8 +14,10 @@ import {
   createGist,
   fetchGist,
   fetchGistForDelivery,
+  forkGist,
   GistError,
   parseGistContent,
+  parseGistId,
   parseGistRevision,
   updateGist,
   userAuth,
@@ -139,6 +141,37 @@ describe("createGist", () => {
     expect(String(url)).toBe("https://api.github.com/gists");
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toMatchObject({ public: false });
+  });
+});
+
+describe("forkGist", () => {
+  /**
+   * fork の応答は**読み出しと同じ形ではない** (Phase 4-3)。
+   *
+   * 本物が返すのは base-gist 相当で、`history` も `files[].content` も入らない。
+   * ID だけを読む形になっていないと、この経路は本番でだけ落ちる。
+   */
+  it("history も content も無い応答から ID を読む", async () => {
+    const fetchMock = stubFetch(
+      Response.json({
+        id: "forked123",
+        html_url: "https://gist.github.com/u/forked123",
+        public: true,
+        files: { "sketch.js": { filename: "sketch.js", size: 5 } },
+      })
+    );
+
+    const id = await forkGist(API, "t", "abc123");
+
+    expect(id).toBe("forked123");
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("https://api.github.com/gists/abc123/forks");
+    expect(init.method).toBe("POST");
+  });
+
+  it("ID が読めない応答は失敗にする", () => {
+    expect(() => parseGistId({ html_url: "https://x" })).toThrow(GistError);
+    expect(() => parseGistId(null)).toThrow(GistError);
   });
 });
 

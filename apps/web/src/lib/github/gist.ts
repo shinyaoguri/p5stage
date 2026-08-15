@@ -82,6 +82,11 @@ function gistUrl(apiOrigin: string, gistId: string): URL {
   return new URL(`/gists/${encodeURIComponent(gistId)}`, apiOrigin);
 }
 
+/** fork の口 (Phase 4-3)。 */
+function forkUrl(apiOrigin: string, gistId: string): URL {
+  return new URL(`/gists/${encodeURIComponent(gistId)}/forks`, apiOrigin);
+}
+
 /**
  * どの資格で GitHub を叩くか。
  *
@@ -234,6 +239,23 @@ export function parseGistRevision(value: unknown): GistRevision {
   return { id: gist.id, url: gist.html_url, revision: version };
 }
 
+/**
+ * fork の応答から、できた Gist の ID だけを取り出す (Phase 4-3)。
+ *
+ * `POST /gists/{id}/forks` が返すのは**読み出しと同じ形ではない**。GitHub の
+ * スキーマ上ここに `history` は無く、`files` にも `content` が入らないので、
+ * `parseGistRevision` を当てれば「応答が想定と違う形」で落ち、`parseGistContent` を
+ * 当てれば全ファイルが truncated に見える。**ID だけを受け取り、中身と版は
+ * 改めて `fetchGist` で読む**。
+ */
+export function parseGistId(value: unknown): string {
+  const gist = (value ?? {}) as RawGist;
+  if (typeof gist.id !== "string") {
+    throw new GistError("api", "GitHub の応答が想定と違う形でした");
+  }
+  return gist.id;
+}
+
 /** 読み出しの応答を、スケッチのファイル構成へ移す。 */
 export function parseGistContent(value: unknown): GistContent {
   const revision = parseGistRevision(value);
@@ -329,6 +351,27 @@ export async function updateGist(
     }
   );
   return parseGistRevision(body);
+}
+
+/**
+ * 他人の Gist を fork する (Phase 4-3 / #44)。
+ *
+ * **自分の Gist は fork できない** — GitHub が 422 (`You cannot fork your own
+ * gist.`) を返す。自分の作品から派生を作る道は新規 Gist の作成で、どちらの経路を
+ * 通るかは呼び出し側が **Gist の持ち主**を見て決める (D1 の所有ではなく、
+ * 制約を課している側の事実で分ける)。
+ *
+ * blob は GitHub 側で共有されるので、大きな Gist でも O(1) (要件 3.4)。
+ */
+export async function forkGist(
+  apiOrigin: string,
+  token: string,
+  gistId: string
+): Promise<string> {
+  const body = await callGistApi(forkUrl(apiOrigin, gistId), token, {
+    method: "POST",
+  });
+  return parseGistId(body);
 }
 
 /**

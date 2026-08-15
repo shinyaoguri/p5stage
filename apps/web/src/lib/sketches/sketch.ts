@@ -37,6 +37,21 @@ export interface Sketch {
   readonly revisionCheckedAt: number | null;
   /** 作者が GitHub 側で Gist を消した時刻 (要件 6 の tombstone)。 */
   readonly gistDeletedAt: number | null;
+  /**
+   * 派生元の作品 (Phase 4-3 / #44)。フォークで作られた作品だけが持つ。
+   *
+   * GitHub の `Forked from` は経路によって付かない (自分の Gist は fork できない)
+   * ので、**系譜はこちらが正典**。
+   */
+  readonly forkedFromSketchId: string | null;
+  /** 派生した時点で親が配っていたリビジョン。新しい Gist 自身の SHA ではない。 */
+  readonly forkedFromRevision: string | null;
+}
+
+/** 派生の出どころ。作品を作るときに一緒に刻む。 */
+export interface SketchLineage {
+  readonly sketchId: string;
+  readonly revision: string;
 }
 
 /** 作品と、その作者の見せる情報。作品ページが要るのはこの形。 */

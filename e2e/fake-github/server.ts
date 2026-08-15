@@ -19,12 +19,19 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 // Node が直接実行するファイルなので、相対 import には拡張子が要る
 // (spec 側は他の e2e ファイルと同じく拡張子なしで読む)。
-import { FAKE_VIEWER } from "./viewer.ts";
+import {
+  FAKE_AUTHOR,
+  FAKE_VIEWER,
+  FOREIGN_ASSET_GIST_ID,
+  FOREIGN_GIST_ID,
+  FOREIGN_UNLISTED_GIST_ID,
+} from "./viewer.ts";
 
 const port = Number(process.argv[2]);
 if (!Number.isInteger(port) || port <= 0) {
@@ -42,6 +49,9 @@ const VIEWER = {
 /** 交換後に配るトークン。実装が付け忘れたら分かるよう、素性の分かる値にする。 */
 const ACCESS_TOKEN = "gho_e2e_access_token";
 
+/** GitHub の応答の形に移した、種の作品の作者 (Phase 4-3)。 */
+const AUTHOR = { id: FAKE_AUTHOR.id, login: FAKE_AUTHOR.login };
+
 interface FakeGist {
   readonly id: string;
   description: string;
@@ -50,6 +60,14 @@ interface FakeGist {
   readonly files: Map<string, string>;
   /** 最新リビジョンの SHA。 */
   version: string;
+  /**
+   * 持ち主 (Phase 4-3)。
+   *
+   * ここまでは利用者 1 人しか出てこなかったので固定で足りていたが、フォークは
+   * **他人の Gist** を相手にする (自分のものは fork できない — #44)。持ち主を
+   * Gist 側に持たせないと、その状況を作れない。
+   */
+  readonly owner: { readonly id: number; readonly login: string };
 }
 
 const gists = new Map<string, FakeGist>();
@@ -126,12 +144,35 @@ function gistBody(gist: FakeGist): unknown {
   }
   return {
     id: gist.id,
-    html_url: `https://gist.github.com/${VIEWER.login}/${gist.id}`,
+    html_url: `https://gist.github.com/${gist.owner.login}/${gist.id}`,
     description: gist.description,
     public: gist.isPublic,
-    owner: { id: VIEWER.id, login: VIEWER.login },
+    owner: gist.owner,
     files,
     history: [{ version: gist.version }],
+  };
+}
+
+/**
+ * fork の応答 (Phase 4-3)。**読み出しと同じ形にしない**。
+ *
+ * 本物の `POST /gists/{id}/forks` が返すのは base-gist 相当で、`history` も
+ * `files[].content` も入らない。ここを GET と同じ本文にすると、**E2E は通るのに
+ * 本番だけが落ちる**経路ができる (実装はここから ID だけを読み、中身と版は
+ * 改めて GET で取り直す)。
+ */
+function forkBody(gist: FakeGist): unknown {
+  const files: Record<string, unknown> = {};
+  for (const [name, content] of gist.files) {
+    files[name] = { filename: name, truncated: false, size: content.length };
+  }
+  return {
+    id: gist.id,
+    html_url: `https://gist.github.com/${gist.owner.login}/${gist.id}`,
+    description: gist.description,
+    public: gist.isPublic,
+    owner: gist.owner,
+    files,
   };
 }
 
@@ -181,10 +222,44 @@ function handleGists(
       isPublic: body.public === true,
       files: new Map(),
       version: nextVersion(),
+      owner: VIEWER,
     };
     applyFiles(gist, body.files);
     gists.set(gist.id, gist);
     json(res, 201, gistBody(gist), { ETag: etagOf(gist) });
+    return true;
+  }
+
+  const forkMatch = /^\/gists\/([^/]+)\/forks$/.exec(path);
+  if (forkMatch !== null && req.method === "POST") {
+    const source = gists.get(decodeURIComponent(forkMatch[1] ?? ""));
+    if (source === undefined) {
+      json(res, 404, { message: "Not Found" });
+      return true;
+    }
+
+    /*
+     * 本物と同じ断り方 (#44 の出発点)。
+     *
+     * 実装が **Gist の持ち主**で経路を分けている限りここへは来ない。
+     * **来ないことを守る**ための口として置く。
+     */
+    if (source.owner.id === VIEWER.id) {
+      json(res, 422, { message: "You cannot fork your own gist." });
+      return true;
+    }
+
+    const fork: FakeGist = {
+      id: nextGistId(),
+      description: source.description,
+      // 元が secret なら fork も secret (公開範囲の意図しない昇格は起きない — #44)。
+      isPublic: source.isPublic,
+      files: new Map(source.files),
+      version: nextVersion(),
+      owner: VIEWER,
+    };
+    gists.set(fork.id, fork);
+    json(res, 201, forkBody(fork), { ETag: etagOf(fork) });
     return true;
   }
 
@@ -228,6 +303,53 @@ function handleGists(
 
   return false;
 }
+
+/**
+ * 他人の Gist を 1 つ置く (Phase 4-3)。
+ *
+ * D1 と R2 の種 (`e2e/seed.sql` / `seed-content.json`) が持つ作品と `gist_id` で
+ * 対応する。フォークは GitHub 側にも実物がないと fork API まで辿り着けない。
+ *
+ * **中身は R2 の種と同じファイルから読む。** 書き写すと、片方だけ直したときに
+ * 「作品ページで見たものと、フォークで複製されるもの」が静かにずれる。
+ *
+ * 既にある種の Gist (`e2e-gist-public` など) はここに登録しない。あれらが GitHub 側に
+ * **無い**ことを前提にしたテストがあり、版もこちらの連番とは合わない。
+ */
+function seedForeignGists(): void {
+  for (const [id, description, isPublic, content] of [
+    [FOREIGN_GIST_ID, "E2E 他人のスケッチ", true, "../seed-content.json"],
+    // fork は元が secret なら secret になる。系譜の見せ方が変わる側。
+    [
+      FOREIGN_UNLISTED_GIST_ID,
+      "E2E 他人の限定公開スケッチ",
+      false,
+      "../seed-content.json",
+    ],
+    // アセットを使う方。フォークで他人の blob が計上されるかを見る側。
+    [
+      FOREIGN_ASSET_GIST_ID,
+      "E2E 他人のアセット作品",
+      true,
+      "../seed-content-assets.json",
+    ],
+  ] as const) {
+    const files = JSON.parse(
+      readFileSync(new URL(content, import.meta.url), "utf8")
+    ) as Record<string, string>;
+
+    gists.set(id, {
+      id,
+      description,
+      isPublic,
+      files: new Map(Object.entries(files)),
+      version: nextVersion(),
+      owner: AUTHOR,
+    });
+  }
+}
+
+seedForeignGists();
 
 const server = createServer((req, res) => {
   void (async () => {

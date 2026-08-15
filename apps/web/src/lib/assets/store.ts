@@ -216,6 +216,38 @@ export async function unclaimedDigests(
 }
 
 /**
+ * 台帳にある blob のサイズを引く (Phase 4-3 のフォーク)。
+ *
+ * フォークは**他人の blob を自分に計上する**唯一の経路で、計上の前に 2 つを
+ * 確かめる必要がある — 指されている実体が台帳にあるか、そして合計がクォータに
+ * 収まるか。両方をこの 1 回で賄う。
+ *
+ * **返らなかった sha256 は台帳に無い**。元の作品のマニフェストが壊れている
+ * (手で書いた・実体が回収された) ということなので、呼び出し側はそこで断る。
+ */
+export async function blobSizes(
+  db: D1Database,
+  digests: readonly string[]
+): Promise<Map<string, number>> {
+  const sizes = new Map<string, number>();
+
+  for (let index = 0; index < digests.length; index += DIGEST_CHUNK) {
+    const chunk = digests.slice(index, index + DIGEST_CHUNK);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT sha256, size FROM blobs WHERE sha256 IN (${placeholders})`
+      )
+      .bind(...chunk)
+      .all<{ readonly sha256: string; readonly size: number }>();
+
+    for (const row of results) sizes.set(row.sha256, row.size);
+  }
+
+  return sizes;
+}
+
+/**
  * 1 回の `batch` に載せる文の数。
  *
  * Gist は 300 ファイルまで持てるので、マニフェストが指す blob も同じ桁になりうる。
@@ -223,6 +255,35 @@ export async function unclaimedDigests(
  * 際限なく積むのは避ける。
  */
 const REF_CHUNK = 50;
+
+/**
+ * 既にある blob をまとめて自分に計上する (Phase 4-3 のフォーク)。
+ *
+ * `claimBlob` を並べたのと同じことをするが、フォークは 1 回で数十件を持ち込む
+ * ので `batch` に寄せる。**作品の行を作るより先に呼ぶ** — 途中で落ちたときに
+ * 残るのが「余計に計上された blob」(3-4b の手放しで戻せる) か「所有していない
+ * アセットを参照する保存できない作品」(利用者には直せない) かの違いになる。
+ */
+export async function claimBlobs(
+  db: D1Database,
+  userId: number,
+  digests: readonly string[],
+  now: number
+): Promise<void> {
+  for (let index = 0; index < digests.length; index += REF_CHUNK) {
+    const chunk = digests.slice(index, index + REF_CHUNK);
+    await db.batch(
+      chunk.map((sha256) =>
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO user_blobs (user_id, sha256, created_at)
+             VALUES (?, ?, ?)`
+          )
+          .bind(userId, sha256, now)
+      )
+    );
+  }
+}
 
 /**
  * そのリビジョンが参照する blob を台帳に載せる (3-5a)。

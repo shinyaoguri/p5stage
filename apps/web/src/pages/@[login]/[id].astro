@@ -122,6 +122,19 @@ const revisions =
     ? []
     : await listRevisions(env.DB, historyGistId, REVISION_LIST_LIMIT);
 
+/**
+ * 派生元 (Phase 4-3 / #44)。系譜の正典は D1 にある。
+ *
+ * **リンクを出すのは親が公開のときだけ。** 限定公開の親の URL を公開の子に出すと、
+ * エッジキャッシュ越しに**その URL を知らない全員へ配られる**。`unlisted` は
+ * 「URL を知る人は見られる」= URL が防御そのものなので (要件 3.4)、ここで漏らすと
+ * 「fork しても公開範囲の意図しない昇格は起きない」(#44) の前提が崩れる。
+ */
+const parent =
+  sketch.forkedFromSketchId === null
+    ? null
+    : await getSketchWithOwner(env.DB, sketch.forkedFromSketchId);
+
 // 実行環境のオリジン (要件 5.1 / ADR 0007) とアセットの配信オリジン (ADR 0014)。
 let previewOrigin: string | null = null;
 let assetsOrigin: string | null = null;
@@ -222,7 +235,9 @@ const notice = (() => {
     data-active-file={activeFile}
     data-sketch-id={sketch.id}
     data-owner-id={String(sketch.ownerId)}
+    data-visibility={sketch.visibility}
     data-revision={shownRevision}
+    data-past={past !== null ? "1" : undefined}
     data-live={live ? "1" : undefined}
   >
     <header class="sketch-header">
@@ -281,8 +296,25 @@ const notice = (() => {
         )
       }
       {
-        /* 作者にだけ出る操作 (#43)。**中身は JS が足す** — ここで出し分けると
-          作者向けの HTML がエッジキャッシュ越しに他人へ配られる */
+        parent !== null && (
+          <p class="sketch-lineage">
+            {parent.visibility === "public" ? (
+              <Fragment>
+                <a href={sketchPath(parent.ownerLogin, parent.id)}>
+                  {parent.title}
+                </a>
+                {` (${parent.ownerLogin}) から派生`}
+              </Fragment>
+            ) : (
+              // 親の存在までは隠さない (子から辿れる事実なので) が、URL は出さない。
+              "限定公開の作品から派生"
+            )}
+          </p>
+        )
+      }
+      {
+        /* ログインしている人にだけ出る操作 (#43 / Phase 4-3)。**中身は JS が足す** —
+          ここで出し分けると、その人向けの HTML がエッジキャッシュ越しに他人へ配られる */
       }
       <div class="sketch-actions" id="sketch-actions"></div>
     </header>
@@ -369,7 +401,7 @@ const notice = (() => {
 </BaseLayout>
 
 <script>
-  import { OwnerActions } from "../../scripts/sketch/owner-actions";
+  import { SketchActions } from "../../scripts/sketch/sketch-actions";
   import { SketchView } from "../../scripts/sketch/sketch-view";
 
   const root = document.querySelector<HTMLElement>(".sketch-page");
@@ -378,7 +410,7 @@ const notice = (() => {
 
     // 実行と独立に走らせる。セッションの往復を待つ間、閲覧は止めない。
     const actions = root.querySelector<HTMLElement>("#sketch-actions");
-    if (actions) void new OwnerActions(root, actions).refresh();
+    if (actions) void new SketchActions(root, actions).refresh();
   }
 </script>
 
@@ -416,8 +448,15 @@ const notice = (() => {
   }
 
   .sketch-meta a,
-  .sketch-description a {
+  .sketch-description a,
+  .sketch-lineage a {
     color: var(--accent);
+  }
+
+  .sketch-lineage {
+    margin: 0.5rem 0 0;
+    color: var(--muted);
+    font-size: 0.875rem;
   }
 
   .sketch-description {
