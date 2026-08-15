@@ -34,6 +34,10 @@ jobs:
   e2e:
     name: e2e (playwright)
     runs-on: ubuntu-latest
+    # 画面の証跡を PR へ知らせるため (下の「証跡」ステップ)。
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -73,6 +77,116 @@ jobs:
           fi
           echo "::warning::wrangler dev が落ちたので E2E をやり直します (#38)"
           npm run test:e2e
+
+      # 画面の証跡 (e2e/screenshots.spec.ts)。
+      #
+      # **web (本体) には PR プレビュー URL が出せない** — `p5stage-web` はライブ同期の
+      # Durable Object (ADR 0017) を持ち、Cloudflare は DO を実装した Worker に
+      # プレビュー URL を発行しない。触って確かめる道が無いので、代わりに同じ画面を
+      # ここで撮って PR へ添える。
+      #
+      # **E2E が落ちても撮る** (`always`)。見た目が壊れているから落ちている、という
+      # ときにこそ要る。撮影自体が失敗しても E2E の判定は変えない (`continue-on-error`) —
+      # 証跡が無いことは、テストが通ったかどうかとは別の話。
+      - name: 画面の証跡を撮る
+        if: always()
+        continue-on-error: true
+        run: npm run shots
+
+      # **Gyazo へ上げる。** GitHub は外部 URL の画像しか本文に描かないので、
+      # artifact (zip) では「落として開く」手間が要る。**PR を開いたその場で見える**
+      # ことが要点なので、リポジトリに画像をコミットしない前提のまま貼れる置き場を使う。
+      #
+      # トークンが無い環境 (fork からの PR・未設定のリポジトリ) では黙って何もしない。
+      # 証跡は在れば助かるもので、無いことが CI を止める理由にはならない。
+      - name: 画面の証跡を Gyazo へ上げる
+        id: shots
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GYAZO_ACCESS_TOKEN: ${{ secrets.GYAZO_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$GYAZO_ACCESS_TOKEN" ]; then
+            echo "::notice::GYAZO_ACCESS_TOKEN が未設定のため画面の証跡は共有しません"
+            exit 0
+          fi
+          if [ ! -f e2e/shots/manifest.json ]; then
+            echo "::warning::画面の証跡が撮れていません"
+            exit 0
+          fi
+
+          # 何を撮ったかは spec 側が manifest.json に書く (対応表を二重に持たない)。
+          : > shots.tsv
+          while IFS=$'\t' read -r file caption; do
+            [ -f "e2e/shots/$file" ] || continue
+            url=$(curl -sS -X POST https://upload.gyazo.com/api/upload \
+              -F "access_token=$GYAZO_ACCESS_TOKEN" \
+              -F "imagedata=@e2e/shots/$file" \
+              -F "title=p5stage PR #$PR_NUMBER — $caption" \
+              | jq -r '.url // empty')
+            if [ -z "$url" ]; then
+              echo "::warning::$file を Gyazo へ上げられませんでした"
+              continue
+            fi
+            printf '%s\t%s\n' "$caption" "$url" >> shots.tsv
+          done < <(jq -r '.[] | [.file, .caption] | @tsv' e2e/shots/manifest.json)
+
+          if [ ! -s shots.tsv ]; then
+            echo "::warning::Gyazo へ上げられた証跡がありません"
+          fi
+
+      - name: 証跡を PR にコメント
+        if: always() && github.event_name == 'pull_request' && hashFiles('shots.tsv') != ''
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { readFileSync } = require("node:fs");
+            const shots = readFileSync("shots.tsv", "utf8")
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => {
+                const [caption, url] = line.split("\t");
+                return { caption, url };
+              });
+            if (shots.length === 0) return;
+
+            const marker = "## 📸 画面の証跡";
+            const body = [
+              marker,
+              "",
+              ...shots.flatMap(({ caption, url }) => [
+                `**${caption}**`,
+                "",
+                `![${caption}](${url})`,
+                "",
+              ]),
+              "**web (本体) には PR プレビュー URL が出せない** (Durable Object を持つ Worker は Cloudflare がプレビュー URL を発行しない — ADR 0017 の申し送り)。触って確かめたいときは手元で `npm run dev`。",
+              "",
+              `commit: ${context.sha.slice(0, 7)}`,
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.type === "Bot" && c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
       - name: 失敗したときだけレポートを残す
         if: failure()
@@ -224,10 +338,18 @@ jobs:
           grep -qF "${{ steps.guard.outputs.preview_url }}" upload.log \
             || echo "::warning::preview のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
         working-directory: apps/preview
+      # **web にプレビュー URL は出ない。** `p5stage-web` はライブ同期の Durable Object
+      # (ADR 0017) を持ち、Cloudflare は DO を実装した Worker にプレビュー URL を
+      # 発行しない (`preview_urls: true` を書いても出ない — プラットフォーム側の制約)。
+      #
+      # それでもアップロードは走らせる。**本番デプロイが壊れる予兆をここで拾う**のが
+      # preview deploy を required に入れている理由で、URL が出るかどうかとは別。
+      # 画面の確認は e2e ジョブが撮る証跡が受け持つ。
+      #
       # 未適用の Durable Object migration があるときだけは落とさない (下の判定)。
       # この扱いを web 側にしか置かないのは、実行環境 (apps/preview) に状態を持たせない
       # 設計だから — あちらに DO が増えることは想定していない (ADR 0007)。
-      - name: web をバージョンアップロード
+      - name: web をバージョンアップロード (プレビュー URL は出ない)
         id: web_upload
         if: steps.guard.outputs.ready == 'true'
         run: |
@@ -237,8 +359,6 @@ jobs:
             --var "PUBLIC_PREVIEW_ORIGIN:${{ steps.guard.outputs.preview_url }}" \
             2>&1 | tee upload.log
           then
-            grep -qF "${{ steps.guard.outputs.web_url }}" upload.log \
-              || echo "::warning::web のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
             exit 0
           fi
 
@@ -255,7 +375,7 @@ jobs:
           # 壊れる予兆をここで拾えるのが、preview deploy を required に含めている理由。
           if grep -q "10211" upload.log; then
             echo "pending_do_migration=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::未適用の Durable Object migration があるため web のプレビューは出せません (main への deploy で適用されます)"
+            echo "::notice::未適用の Durable Object migration があるため web のバージョンを上げられません (main への deploy で適用されます)"
             exit 0
           fi
           exit 1
@@ -265,22 +385,29 @@ jobs:
         if: steps.guard.outputs.ready == 'true'
         uses: actions/github-script@v9
         env:
-          WEB_URL: ${{ steps.guard.outputs.web_url }}
           PREVIEW_URL: ${{ steps.guard.outputs.preview_url }}
           PENDING_DO: ${{ steps.web_upload.outputs.pending_do_migration }}
         with:
           script: |
             const marker = "## 🚀 Preview Deployment";
-            // 未適用の DO migration があると本体のプレビューは出せない。理由を
-            // ここに書かないと、URL が消えたことが不具合に見える。
+            // **web の URL は出さない。** 出せないものを載せると、404 を踏んでから
+            // 「壊れている」と読まれる。理由と、代わりに何を見ればよいかを書く。
+            //
+            // 未適用の DO migration は別の話 (アップロード自体が通らない)。
+            // 触れずに黙ると、バージョンが上がっていないことに気付けない。
             const pending = process.env.PENDING_DO === "true";
             const body = [
               marker,
               "",
-              pending
-                ? "- web (本体): **今回は出せません** — 未適用の Durable Object migration があるため (`wrangler versions upload` では適用できない制約)。main へマージすると `wrangler deploy` が適用し、以降の PR では出るようになります"
-                : `- web (本体): ${process.env.WEB_URL}`,
-              `- preview (実行環境): ${process.env.PREVIEW_URL}`,
+              `- preview (実行環境): ${process.env.PREVIEW_URL} — **開いても何も動きません**。本体の iframe から読まれる前提の実行環境で、直接開くとプレースホルダが出るだけ (要件 5.1 / ADR 0007)。上がったことの確認用`,
+              "- web (本体): **プレビュー URL は出せません** — ライブ同期の Durable Object を持つ Worker には、Cloudflare がプレビュー URL を発行しないため ([制約](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/#limitations) / ADR 0017 の申し送り)。画面は「📸 画面の証跡」のコメントで、動きは手元の `npm run dev` で確かめてください",
+              ...(pending
+                ? [
+                    "",
+                    "> [!NOTE]",
+                    "> 未適用の Durable Object migration があるため、web のバージョンは上げられていません (`wrangler versions upload` では適用できない制約)。main へマージすると `wrangler deploy` が適用します。",
+                  ]
+                : []),
               "",
               "URL は PR 単位で固定。新しい commit を push すると同じ URL の中身が入れ替わる。",
               "",
