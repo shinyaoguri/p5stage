@@ -88,6 +88,11 @@ const SEED_OBJECTS = [
   // 台帳を持たない作品 (Phase 4-1)。写しだけを置き、履歴は Cron に埋めさせる。
   ["e2e-gist-backfill", SEED_REVISION, SEED_CONTENT],
   ["e2e-gist-backfill", SEED_REVISION_PREV, SEED_CONTENT_PREV],
+  // フォークの相手 (Phase 4-3)。偽 GitHub 側にも同じ中身を置いてあるので、
+  // 作品ページで見たものがそのまま複製される。
+  ["e2e-gist-foreign", SEED_REVISION, SEED_CONTENT],
+  ["e2e-gist-foreign-unlisted", SEED_REVISION, SEED_CONTENT],
+  ["e2e-gist-foreign-assets", SEED_REVISION, SEED_ASSET_CONTENT],
 ]
   .map(
     ([gistId, revision, content]) =>

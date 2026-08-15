@@ -130,3 +130,48 @@ VALUES
 -- (ローカルの D1 は実行をまたいで残る)。
 DELETE FROM gist_revisions WHERE gist_id = 'e2e-gist-backfill';
 DELETE FROM gc_state WHERE key = 'revisions_backfill_cursor';
+
+-- フォークの相手 (Phase 4-3)。
+--
+-- **偽 GitHub 側にも実体がある**唯一の種にしてある (`fake-github/server.ts` が
+-- 同じ `gist_id` で登録する)。他の種は GitHub 側に無いことを前提にしたテストが
+-- あるので、フォークのためだけの作品を分けて置く。
+--
+-- 作者は他の種と同じ 424242 で、**ログインする利用者とは別人**。それが
+-- 「自分の Gist は自分で fork できない」(#44) を踏まない条件になる。
+INSERT OR REPLACE INTO sketches
+  (id, owner_id, gist_id, title, description, visibility,
+   created_at, updated_at, current_revision, revision_etag,
+   revision_checked_at, gist_deleted_at,
+   forked_from_sketch_id, forked_from_revision)
+VALUES
+  ('E2EForeignSkt001', 424242, 'e2e-gist-foreign', 'E2E 他人のスケッチ',
+   'フォークされる側の作品です。', 'public',
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL, NULL, NULL),
+  -- 限定公開の親。**系譜の表示で URL を漏らさない**ことを確かめる側 (ADR 0018)。
+  ('E2EForeignUnl001', 424242, 'e2e-gist-foreign-unlisted',
+   'E2E 他人の限定公開スケッチ', '', 'unlisted',
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL, NULL, NULL),
+  -- アセットを使う親。**他人の blob が自分に計上されるか**を見る側 (ADR 0003)。
+  -- 参照する実体は上で置いた dot.png で、所有は誰も持っていない状態から始まる。
+  ('E2EForeignAst001', 424242, 'e2e-gist-foreign-assets',
+   'E2E 他人のアセット作品', '', 'public',
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   unixepoch() * 1000, NULL, NULL, NULL);
+
+INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
+VALUES
+  ('e2e-gist-foreign', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000),
+  ('e2e-gist-foreign-unlisted', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000),
+  ('e2e-gist-foreign-assets', 'e2e1111111111111111111111111111111111111',
+   (unixepoch() - 3600) * 1000);
+
+-- 前回の実行で作られたフォーク (と、その作者の計上) を落として、毎回同じ状態から
+-- 始める。**フォークは冪等ではない**ので、残しておくと実行のたびに積み上がる。
+DELETE FROM sketches
+ WHERE forked_from_sketch_id IN
+   ('E2EForeignSkt001', 'E2EForeignUnl001', 'E2EForeignAst001');

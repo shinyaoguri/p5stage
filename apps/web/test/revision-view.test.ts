@@ -33,6 +33,8 @@ function sketch(overrides: Partial<Sketch> = {}): Sketch {
     revisionEtag: '"etag"',
     revisionCheckedAt: NOW,
     gistDeletedAt: null,
+    forkedFromSketchId: null,
+    forkedFromRevision: null,
     ...overrides,
   };
 }

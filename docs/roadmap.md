@@ -70,7 +70,9 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
   WebSocket** で配信。流すのはリビジョン SHA だけで、中身は 4-1 が開いた解決経路に
   乗せる (`/api/sketches/:id/revisions/:rev`)。SSE を退けたのは、接続している間ずっと
   duration 課金が乗り**繋ぎっぱなしの閲覧者 1 人で無料枠が尽きる**ため → **ADR 0017**
-- フォーク (Gist fork API + メタデータ複製。系譜の正典は D1 — #44)
+- **フォーク** (4-3): 系譜の正典は D1 (`forked_from_*`)。他人の作品は Gist fork API、
+  自分の作品からの派生は新規 Gist の作成 (自分の Gist は fork できない — #44)。
+  他人の blob を自分に計上する唯一の経路でもある → **ADR 0018**
 - サムネイル自動取得の**新規実装** (canvastage に相当実装は無い。別オリジン iframe から postMessage で受け渡す) → R2、Cloudflare Images リサイズ
 - 完了条件: 作者がライブコーディングし、閲覧者が数秒遅れで追従できる
 

@@ -14,15 +14,20 @@
   display: none;
 }
 
+/* リンク (エディタで開く) とボタン (フォーク) が並ぶ。行き先があるものはリンクの
+   まま置く — 別のタブで開く・URL をコピーするといった操作が要る。 */
 .sketch-action {
   display: inline-flex;
   align-items: center;
   padding: 0.3125rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--fg) 15%, transparent);
   border-radius: 999px;
+  background: transparent;
   color: var(--fg);
+  font: inherit;
   font-size: 0.8125rem;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .sketch-action:hover {
