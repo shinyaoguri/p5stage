@@ -1,9 +1,13 @@
 /**
  * 作品をフォークする (Phase 4-3 / #44 / ADR 0018)。
  *
- * 他人の作品を持ち込む道。GitHub 側では fork API を叩き (`Forked from` が付き、
- * blob は共有される)、D1 には**系譜を刻んだ新しい作品**を作る。系譜の正典は
- * こちら側で、GitHub のリンクはボーナスとして扱う。
+ * 作品から作品を作る道。D1 には**系譜を刻んだ新しい作品**ができ、GitHub 側では
+ * 相手によって違うことをする — 他人の Gist なら fork API (`Forked from` が付き、
+ * blob も共有される)、自分の Gist なら新規作成 (**自分の Gist は自分で fork
+ * できない** — #44)。系譜の正典はこちら側で、GitHub のリンクはボーナス。
+ *
+ * 分岐は **Gist の持ち主**で取る。回避したい制約は GitHub 側のものであって、
+ * D1 の所有ではない。
  *
  * **GitHub に何かを作る前に、親の Gist を 1 回読む。** 検証もクォータの判定も
  * 手前で済ませ、断るときに利用者のアカウントへフォーク済みの Gist を残さない。
@@ -23,6 +27,8 @@ import {
   unclaimedDigests,
 } from "../../../../lib/assets/store";
 import {
+  createGist,
+  deleteGist,
   fetchGist,
   forkGist,
   GistError,
@@ -39,6 +45,10 @@ import {
   planSketchFork,
   type ForkRejectionReason,
 } from "../../../../lib/sketches/fork";
+import {
+  buildGistFiles,
+  gistDescription,
+} from "../../../../lib/sketches/gist-payload";
 import { isSketchId } from "../../../../lib/sketches/id";
 import { publishRevision } from "../../../../lib/sketches/publish";
 import type { Sketch } from "../../../../lib/sketches/sketch";
@@ -120,12 +130,6 @@ export const POST: APIRoute = async ({ params, request, url }) => {
     return fromRejection(decision.reason, decision.message);
   }
 
-  // 自分の Gist は自分で fork できない (#44)。新規 Gist を作る道は 4-3b の担当で、
-  // ここへ来るのは API を直に叩いたときだけ (画面には出していない)。
-  if (decision.route === "copy") {
-    return jsonError(409, "own_sketch", "自分の作品からの派生はまだ作れません");
-  }
-
   /*
    * アセットを引き受けられるかを、GitHub に何かを作る前に決める。
    *
@@ -159,21 +163,48 @@ export const POST: APIRoute = async ({ params, request, url }) => {
     if (over !== null) return jsonError(409, "quota_exceeded", over);
   }
 
-  let forkedGistId: string;
+  // 公開範囲は元に従う。fork では選べず (元が secret なら secret)、複製でも
+  // 揃える — 経路で挙動が変わると、利用者から見て同じ操作の結果が変わる。
+  const isPublic = parent.visibility === "public";
+
   let content: GistContent;
   try {
-    forkedGistId = await forkGist(
-      githubOrigins().api,
-      auth.session.token,
-      parent.gistId
-    );
-    // fork の応答は読み出しと同じ形ではない (中身も版も入らない) ので、
-    // できた Gist を改めて読む。
-    content = await fetchGist(
-      githubOrigins().api,
-      auth.session.token,
-      forkedGistId
-    );
+    if (decision.route === "copy") {
+      /*
+       * 自分の Gist は自分で fork できない (422) ので、新しい Gist を作る (#44)。
+       *
+       * 中身は**今読んだ親のもの**をそのまま送る。作成の応答は書き込みの形
+       * (`history` を持つ) なので、fork のように読み直す必要はない。
+       */
+      const created = await createGist({
+        apiOrigin: githubOrigins().api,
+        token: auth.session.token,
+        files: buildGistFiles(source.files),
+        description: gistDescription(parent.title),
+        isPublic,
+      });
+      content = {
+        ...created,
+        files: source.files,
+        truncated: [],
+        description: gistDescription(parent.title),
+        ownerId: auth.session.user.id,
+        isPublic,
+      };
+    } else {
+      const forkedGistId = await forkGist(
+        githubOrigins().api,
+        auth.session.token,
+        parent.gistId
+      );
+      // fork の応答は読み出しと同じ形ではない (中身も版も入らない) ので、
+      // できた Gist を改めて読む。
+      content = await fetchGist(
+        githubOrigins().api,
+        auth.session.token,
+        forkedGistId
+      );
+    }
   } catch (error) {
     if (error instanceof GistError) return fromGistError(error);
     throw error;
@@ -192,8 +223,8 @@ export const POST: APIRoute = async ({ params, request, url }) => {
       {
         title: parent.title,
         description: parent.description,
-        // 公開範囲は**できた Gist に従う**。fork は元が secret なら secret に
-        // なり、こちらから選べない (ADR 0010 / 0018)。
+        // **できた Gist に従う**。作成後は変えられない値なので (ADR 0010)、
+        // こちらの意図ではなくあちらの事実を写す。
         visibility: content.isPublic ? "public" : "unlisted",
       },
       content.id,
@@ -204,8 +235,18 @@ export const POST: APIRoute = async ({ params, request, url }) => {
     // GitHub が同じ Gist を返した (再 fork) 場合、`gist_id` の UNIQUE で落ちる。
     // 先にできている作品が自分のものなら、利用者の目的は果たされている。
     const raced = await getSketchByGistId(env.DB, content.id);
-    if (raced === null || raced.ownerId !== auth.session.user.id) throw error;
-    return await respond(raced, content, 200);
+    if (raced !== null && raced.ownerId === auth.session.user.id) {
+      return await respond(raced, content, 200);
+    }
+
+    // 誰からも辿れない Gist を利用者のアカウントに残さない (`createAndAttach` と
+    // 同じ後始末)。片付けに失敗しても、伝えるべきは元の失敗の方。
+    try {
+      await deleteGist(githubOrigins().api, auth.session.token, content.id);
+    } catch {
+      /* 元の失敗を投げ直す */
+    }
+    throw error;
   }
 
   return await respond(sketch, content, 201);

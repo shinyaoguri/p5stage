@@ -17,6 +17,7 @@ import {
   login,
   openEditor,
   saveAgain,
+  saveNewSketch,
   typeIntoEditor,
 } from "./helpers";
 
@@ -30,6 +31,13 @@ const FOREIGN_ASSET_ID = "E2EForeignAst001";
 /** 旧版を持つ作品 (過去の版ではフォークさせない)。 */
 const PAST_REVISION = "e2e0000000000000000000000000000000000000";
 const WITH_HISTORY_ID = "E2EPublicSketch0";
+
+/** 作品ページが指している Gist。別の Gist が立ったかを見るのに使う。 */
+function gistHref(page: Page): Promise<string | null> {
+  return page
+    .locator(".sketch-meta a", { hasText: "Gist" })
+    .getAttribute("href");
+}
 
 /** セッションを引き終えるまで待つ。「まだ」と「出ない」は見た目が同じ。 */
 async function settled(page: Page): Promise<void> {
@@ -74,10 +82,7 @@ test.describe("フォーク", () => {
     ).toContainText("E2E_SKETCH_MARKER");
 
     // **別の Gist が立っている** = fork API を通った (元の Gist を指していない)。
-    const gistHref = await page
-      .locator(".sketch-meta a", { hasText: "Gist" })
-      .getAttribute("href");
-    expect(gistHref).not.toContain("e2e-gist-foreign");
+    expect(await gistHref(page)).not.toContain("e2e-gist-foreign");
 
     // 系譜が出る。GitHub 側の `Forked from` ではなく D1 が正典 (#44)。
     await expect(page.locator(".sketch-lineage")).toContainText(
@@ -134,6 +139,37 @@ test.describe("フォーク", () => {
      */
     await typeIntoEditor(page, "// FORKED_ASSET_SKETCH");
     await saveAgain(page);
+  });
+
+  test("自分の作品は、フォークではなく複製として新しい作品にできる", async ({
+    page,
+  }) => {
+    await openEditor(page);
+    await login(page);
+    const id = await saveNewSketch(page, "複製のもと", "public");
+
+    await page.goto(`/s/${id}`);
+    await settled(page);
+    const sourceGist = await gistHref(page);
+
+    /*
+     * **自分の Gist は自分で fork できない** (#44)。GitHub 上のフォークにならない
+     * ので、「フォーク」とは名乗らない (名乗ると嘘になる)。
+     */
+    await expect(page.locator("#sketch-fork-button")).toHaveCount(0);
+    await page.locator("#sketch-copy-button").click();
+    await expect(page.locator("#fork-dialog")).toBeVisible();
+    await page.locator("#fork-confirm").click();
+
+    await page.waitForURL(/\/edit\?sketch=/);
+    const copiedId = new URL(page.url()).searchParams.get("sketch") ?? "";
+    expect(copiedId).not.toBe(id);
+
+    await page.goto(`/s/${copiedId}`);
+    // 新しい Gist ができている (元を PATCH したのではない = 履歴を伸ばしていない)。
+    expect(await gistHref(page)).not.toBe(sourceGist);
+    // 系譜は D1 が持つ。GitHub 側にリンクが無くても閲覧体験は同じ (#44)。
+    await expect(page.locator(".sketch-lineage")).toContainText("複製のもと");
   });
 
   test("過去の版を見ているときは出さない", async ({ page }) => {
