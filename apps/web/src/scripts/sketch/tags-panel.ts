@@ -13,7 +13,6 @@
  */
 
 import "../../styles/dialog.css";
-import "../../styles/tags-panel.css";
 
 import {
   formatTagInput,
@@ -22,7 +21,7 @@ import {
   TAG_MAX_LENGTH,
 } from "../../lib/sketches/tags";
 import { SketchInputError } from "../../lib/sketches/sketch";
-import { makeToolbarButton } from "../ui/toolbar-button";
+import { makeMenuItem } from "../ui/menu";
 
 /** 付けられるものの説明 (保存済みの作品を開いているとき)。 */
 const RULES_NOTE = `${TAGS_MAX_COUNT} 個まで、1 つ ${TAG_MAX_LENGTH} 文字まで。大文字は小文字に、語の間の空白は - になります。公開している作品はタグの一覧ページに並びます。`;
@@ -61,7 +60,6 @@ export class TagsPanel {
 
   constructor(host: HTMLElement, options: TagsPanelOptions) {
     this.#onSave = options.onSave;
-    host.classList.add("tags-panel");
 
     this.#input = document.createElement("input");
     this.#note = document.createElement("p");
@@ -69,15 +67,20 @@ export class TagsPanel {
     this.#proceed = document.createElement("button");
     this.#dialog = this.#buildDialog();
 
-    this.#button = makeToolbarButton({
+    this.#button = makeMenuItem({
       id: "tags",
       icon: "tag",
       label: "タグ",
       onClick: () => this.#open(),
     });
 
-    host.appendChild(this.#button);
+    // 開く口は作品メニューの中 (#87 の段階 3)。器に残るのは尋ねる面だけ。
     host.appendChild(this.#dialog);
+  }
+
+  /** 作品メニューへ差す項目 (開く口)。 */
+  get menuItem(): HTMLButtonElement {
+    return this.#button;
   }
 
   /**

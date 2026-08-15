@@ -60,10 +60,6 @@ try {
           {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
           <div id="draft-controls" />
           <div id="save-controls" />
-          {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
-          <div id="tags-controls" />
-          {/* 作品が使うアセット (Phase 3-4)。 */}
-          <div id="assets" />
           <div id="settings" />
           {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
           <div id="fullscreen-controls" />
@@ -72,9 +68,13 @@ try {
 
         <div id="console" />
 
-        {/* 尋ねる面 (ダイアログ) の置き場。開く口はアカウントメニューの中に
-            あるので、操作列には並ばない (#87 の段階 2)。 */}
+        {/* 尋ねる面 (ダイアログ・ドロワー) の置き場。開く口はメニューの中に
+            あるので、操作列には並ばない (#87 の段階 2-3)。 */}
         <div id="adopt-controls" />
+        {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
+        <div id="tags-controls" />
+        {/* 作品が使うアセット (Phase 3-4)。面そのものは画面の直下に置かれる。 */}
+        <div id="assets" />
       </div>
     )
   }
@@ -120,6 +120,7 @@ try {
   import { saveSketchTags } from "../scripts/sketch/save-tags";
   import { SketchSaver } from "../scripts/sketch/sketch-saver";
   import { TagsPanel } from "../scripts/sketch/tags-panel";
+  import { WorkMenu } from "../scripts/sketch/work-menu";
   import { ThumbnailUploader } from "../scripts/sketch/thumbnail-uploader";
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
@@ -321,6 +322,14 @@ try {
     });
     projectBar.setName(initialName);
 
+    /**
+     * 今開いている作品に対する操作の置き場 (#87 の段階 3)。
+     *
+     * 中身は各パネルが持つ項目。全部が揃ってから並べるので、追加はこの下の
+     * まとめて 1 か所で行う。
+     */
+    const workMenu = new WorkMenu(projectBar.menuHost);
+
     const draftSaver = new DraftSaver({
       onSaved: (saved) => {
         draftIndicator.setSavedAt(saved.savedAt);
@@ -459,6 +468,20 @@ try {
       onWrite: (content) => editor.writeFile(ASSET_MANIFEST_FILE, content),
       onNotice: showToast,
     });
+
+    /*
+     * 作品メニューへ項目を並べる (#87 の段階 3)。
+     *
+     * 上の 2 つは**この作品に何かを足す**操作、下の 3 つは**この作品の置き場**へ
+     * 行く / 外す操作。区切りはその境目に入れる。
+     *
+     * 押せる条件 (保存済みか・Gist が付いているか) はこれまでどおり各パネルが
+     * 握る — 場所が変わっても「押せない操作を出したままにしない」線引きは同じ。
+     */
+    workMenu.addItem(tagsPanel.menuItem);
+    workMenu.addItem(assetsPanel.menuItem);
+    workMenu.addSeparator();
+    for (const item of savePanel.menuItems) workMenu.addItem(item);
 
     /**
      * 既にある自分の Gist を取り込んで、その続きから始める (Phase 2-6)。

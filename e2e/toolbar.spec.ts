@@ -16,6 +16,7 @@ import {
   login,
   openEditor,
   openSettings,
+  openWorkMenu,
   toasts,
   typeIntoEditor,
   warningIndicator,
@@ -31,9 +32,9 @@ test.describe("操作列", () => {
     await openEditor(page);
 
     const buttons = toolbarButtons(page);
-    // 出るのは 保存 / タグ / アセット / 設定 / 全画面 / アカウント。
-    // 新規・取り込み・ログインはアカウントメニューの中へ移した (#87 の段階 2)。
-    await expect(buttons).toHaveCount(6);
+    // 出るのは 保存 / 設定 / 全画面 / アカウント。作品に属する操作 (タグ・
+    // アセット・Gist・作品ページ) は中央の作品メニューへ移した (#87 の段階 3)。
+    await expect(buttons).toHaveCount(4);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");
@@ -136,6 +137,63 @@ test.describe("操作列", () => {
       /^アカウントメニューを開く \(.+\)$/
     );
     await expect(toggle).toHaveText("");
+  });
+});
+
+/**
+ * 作品メニュー (#87 の段階 3)。
+ *
+ * 中央のバー (実行ボタンと名前の右) から下りる面。**押せない操作を出したまま
+ * にしない**という線引きは、操作列にあった頃と同じでなければならない —
+ * 場所を移したときに条件付きの出し入れごと落とすのがいちばん起きやすい壊れ方。
+ */
+test.describe("作品メニュー", () => {
+  test("開くと作品の操作が並ぶ (まだ保存していない作品では置き場への道が出ない)", async ({
+    page,
+  }) => {
+    await openEditor(page);
+
+    const toggle = page.locator("#work-menu-toggle");
+    const menu = page.locator("#work-menu");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(menu).toBeHidden();
+
+    await toggle.click();
+
+    await expect(menu).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(toggle).toHaveAttribute("aria-label", "作品メニューを閉じる");
+
+    // この作品に何かを足す操作は、保存前から押せる。
+    await expect(menu.locator("#tags")).toBeVisible();
+    await expect(menu.locator("#assets-toggle")).toBeVisible();
+    // 置き場 (作品ページ・Gist) はまだ無いので出ない。
+    await expect(menu.locator("#page-link")).toBeHidden();
+    await expect(menu.locator("#gist-link")).toBeHidden();
+    await expect(menu.locator("#detach")).toBeHidden();
+    // 出るものが後ろに無いので、その手前の区切りも出ない (線だけが残らない)。
+    await expect(menu.locator(".menu-separator")).toBeHidden();
+  });
+
+  test("項目を押すと閉じる (開いた面に重ならない)", async ({ page }) => {
+    await openEditor(page);
+    await openWorkMenu(page);
+
+    await page.locator("#tags").click();
+
+    await expect(page.locator("#tags-dialog")).toBeVisible();
+    await expect(page.locator("#work-menu")).toBeHidden();
+  });
+
+  test("Escape で閉じ、フォーカスが開閉ボタンへ戻る", async ({ page }) => {
+    await openEditor(page);
+    await openWorkMenu(page);
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.locator("#work-menu")).toBeHidden();
+    // 閉じた先で行き場を失わない (キーボードだけで使う人はここが頼り)。
+    await expect(page.locator("#work-menu-toggle")).toBeFocused();
   });
 });
 

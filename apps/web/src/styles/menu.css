@@ -136,3 +136,16 @@
   margin: 0.25rem 0.125rem;
   background: rgb(255 255 255 / 0.12);
 }
+
+/*
+ * 後ろに見えている項目が 1 つも無ければ、区切りも出さない。
+ *
+ * 条件付きで出し入れする項目 (保存していない作品では出ない Gist への道) の手前に
+ * 線だけが残るのを防ぐ。持ち主が線の出し入れまで面倒を見なくて済む。
+ *
+ * **`display: contents` の器に包まれた項目には届かない** (`~` は兄弟しか見ない)。
+ * そちらは持ち主が畳む (account-panel の `menu-group`)。
+ */
+.menu-separator:not(:has(~ .menu-item:not([hidden]))) {
+  display: none;
+}

@@ -204,8 +204,9 @@ export function draftIndicator(page: Page): Locator {
 /**
  * 保存先の Gist を開くリンク (Gist が付いている間だけ出る)。
  *
- * 操作列は文字を持たないので、**行き先も絵で示す** — 名前はホバーと読み上げが
- * 持つ。掴むのは名前ではなく id (意匠と言い回しから切り離す)。
+ * 行き先は作品メニューの中 (#87 の段階 3)。**閉じていても DOM には居る**ので、
+ * href を読むだけならメニューを開かなくてよい。掴むのは名前ではなく id
+ * (意匠と言い回しから切り離す)。
  */
 export function gistLink(page: Page): Locator {
   return page.locator("#gist-link");
@@ -436,10 +437,41 @@ export async function openSettings(page: Page): Promise<void> {
 export const assetsDrawer = (page: Page): Locator =>
   page.locator("#assets-panel-body");
 
-/** アセットパネルを開く。 */
+/**
+ * 作品メニューを開く (#87 の段階 3)。
+ *
+ * 中央のバー (実行ボタンと名前の右) から下りる面。開いている面を押し直すと
+ * 閉じてしまうので、**閉じているときだけ押す**。
+ */
+export async function openWorkMenu(page: Page): Promise<void> {
+  const toggle = page.locator("#work-menu-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) === "true") return;
+  await toggle.click();
+  await expect(page.locator("#work-menu")).toBeVisible();
+}
+
+/** アセットパネルを開く (開く口は作品メニューの中)。 */
 export async function openAssets(page: Page): Promise<void> {
+  await openWorkMenu(page);
   await page.locator("#assets-toggle").click();
   await expect(assetsDrawer(page)).toBeVisible();
+}
+
+/**
+ * Gist を外す (開く口は作品メニューの中)。
+ *
+ * 確認ダイアログの応答は呼ぶ側が張る (`page.once("dialog", ...)`)。
+ */
+export async function detachGist(page: Page): Promise<void> {
+  await openWorkMenu(page);
+  await page.locator("#detach").click();
+}
+
+/** タグのダイアログを開く (開く口は作品メニューの中)。 */
+export async function openTags(page: Page): Promise<void> {
+  await openWorkMenu(page);
+  await page.locator("#tags").click();
+  await expect(page.locator("#tags-dialog")).toBeVisible();
 }
 
 /**

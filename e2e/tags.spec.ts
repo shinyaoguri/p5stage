@@ -11,7 +11,7 @@
 
 import { expect, test } from "@playwright/test";
 
-import { login, openEditor, saveNewSketch } from "./helpers";
+import { login, openEditor, openTags, saveNewSketch } from "./helpers";
 
 const AUTHOR = "e2e-author";
 const PUBLIC_ID = "E2EPublicSketch0";
@@ -79,7 +79,7 @@ test.describe("タグを付ける", () => {
 
     // ボタン自体は押せる。押せないボタンにすると、マウスだけの人に理由を
     // 伝える場所が無くなる (操作列の `title` は名前と決めてある)。
-    await page.locator("#tags").click();
+    await openTags(page);
 
     await expect(page.locator("#tags-note")).toHaveText(
       /まだ保存されていません/
@@ -94,7 +94,7 @@ test.describe("タグを付ける", () => {
     await login(page);
     const id = await saveNewSketch(page, "E2E タグを付ける", "public");
 
-    await page.locator("#tags").click();
+    await openTags(page);
     // 大文字と語間の空白は正規化される (`normalizeTag`)。付けた形のままでは
     // 出ないことも一緒に見る。
     await page.locator("#tags-input").fill("E2E Fresh, E2E-実験");
@@ -117,14 +117,14 @@ test.describe("タグを付ける", () => {
     await login(page);
     const id = await saveNewSketch(page, "E2E タグを開き直す", "unlisted");
 
-    await page.locator("#tags").click();
+    await openTags(page);
     await page.locator("#tags-input").fill("e2e-keep");
     await page.locator("#tags-confirm").click();
     await expect(page.locator("#tags-dialog")).toBeHidden();
 
     // 作品を開き直す。付けたタグは D1 から戻ってくる (`/files` の応答)。
     await page.goto(`/edit?sketch=${id}`);
-    await page.locator("#tags").click();
+    await openTags(page);
     // 開いた作品は保存済みなので、開いた時点から書ける。
     await expect(page.locator("#tags-input")).toBeEnabled();
     await expect(page.locator("#tags-input")).toHaveValue("e2e-keep");
@@ -143,7 +143,7 @@ test.describe("タグを付ける", () => {
     await login(page);
     await saveNewSketch(page, "E2E タグの上限", "unlisted");
 
-    await page.locator("#tags").click();
+    await openTags(page);
     await page.locator("#tags-input").fill("a, b, c, d, e, f");
     await page.locator("#tags-confirm").click();
 
