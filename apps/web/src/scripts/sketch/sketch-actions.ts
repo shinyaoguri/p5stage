@@ -65,17 +65,16 @@ export class SketchActions {
   async refresh(): Promise<void> {
     const viewer = await currentViewer();
     if (viewer !== null && this.#sketchId !== "") {
-      if (this.#ownerId !== null && viewer.id === this.#ownerId) {
-        this.#host.appendChild(this.#editLink());
-      } else if (!this.#past) {
-        /*
-         * 過去の版を見ているときは出さない。
-         *
-         * fork API は版を選べず、**必ず最新から**分かれる (#44)。`?rev=` を指定して
-         * 見ている人にボタンを出すと、押した結果が見ているものと違うことになる。
-         */
-        this.#host.appendChild(this.#forkButton());
-      }
+      const own = this.#ownerId !== null && viewer.id === this.#ownerId;
+      if (own) this.#host.appendChild(this.#editLink());
+      /*
+       * 過去の版を見ているときは出さない。
+       *
+       * 派生は版を選べず、**必ず最新から**分かれる (fork API の制約に合わせて
+       * 複製の側も揃えてある — #44)。`?rev=` を指定して見ている人にボタンを
+       * 出すと、押した結果が見ているものと違うことになる。
+       */
+      if (!this.#past) this.#host.appendChild(this.#forkButton(own));
     }
     /*
      * 引き終えたことを DOM に出す (`AccountPanel` と同じ印)。
@@ -95,20 +94,28 @@ export class SketchActions {
     return link;
   }
 
-  /** フォークのボタン。押すと確認が出る (押した瞬間には何も作らない)。 */
-  #forkButton(): HTMLButtonElement {
+  /**
+   * 派生を作るボタン。押すと確認が出る (押した瞬間には何も作らない)。
+   *
+   * 自分の作品では**言葉を変える**。GitHub 上のフォークにはならない (自分の Gist は
+   * 自分で fork できない — #44) ので、「フォーク」と名乗ると嘘になる。
+   */
+  #forkButton(own: boolean): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "sketch-action";
-    button.id = "sketch-fork-button";
-    button.textContent = "フォーク";
-    button.addEventListener("click", () => this.#openForkDialog());
+    button.id = own ? "sketch-copy-button" : "sketch-fork-button";
+    button.textContent = own ? "複製して新しい作品にする" : "フォーク";
+    button.addEventListener("click", () => this.#openForkDialog(own));
     return button;
   }
 
-  #openForkDialog(): void {
+  #openForkDialog(own: boolean): void {
     // 作るのは最初に押されたときだけ。閲覧するだけの人に DOM を積まない。
-    this.#forkDialog ??= new ForkDialog(() => this.#fork(), this.#isPublic);
+    this.#forkDialog ??= new ForkDialog(() => this.#fork(), {
+      own,
+      isPublic: this.#isPublic,
+    });
     this.#forkDialog.open();
   }
 
