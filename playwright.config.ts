@@ -176,6 +176,15 @@ export default defineConfig({
   // E2E を支えるスクリプトの単体テスト (`e2e/test/**/*.test.ts` — vitest 側) まで
   // Playwright が実行してしまう。
   testMatch: "**/*.spec.ts",
+  /*
+   * 画面の証跡 (`@shots`) は普段の E2E から外す。
+   *
+   * あれは**見た目を人が見るため**に画像を吐くだけで、何も検証しない。毎回の
+   * E2E に混ぜると、通ったか落ちたかを見る場所に「必ず通るもの」が並ぶ。
+   * 撮るのは CI の PR (証跡として PR に載せる) と、手元で見た目を確かめたいとき
+   * (`npm run shots`) だけ。
+   */
+  grepInvert: process.env.SHOTS === "1" ? undefined : /@shots/,
   fullyParallel: true,
   // .only の消し忘れで CI が一部しか回らないのを防ぐ。
   forbidOnly: isCI,
