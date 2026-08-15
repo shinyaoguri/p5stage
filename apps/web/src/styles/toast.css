@@ -49,13 +49,14 @@
 }
 
 .toast {
-  padding: 0.5rem 0.75rem;
+  padding: 10px 16px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: rgb(0 0 0 / 0.6);
-  /* 操作系と同じ書体。設定の「書体」には追従させない (クロームの一員なので)。 */
-  font-family: var(--ui-font-family);
-  font-size: 0.75rem;
+  /* **エディタと同じ書体**に追従させる (canvastage と同じ)。知らせは押す場所では
+     なく読む場所なので、操作系ではなく本文の側に揃う。 */
+  font-family: var(--editor-font-family);
+  font-size: 12px;
   line-height: 1.5;
   backdrop-filter: blur(12px);
   /*

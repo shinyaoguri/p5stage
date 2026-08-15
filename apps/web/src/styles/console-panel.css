@@ -14,10 +14,12 @@
   gap: 0.125rem;
   align-items: flex-end;
   pointer-events: none;
-  color: rgb(255 255 255 / 0.55);
-  font-size: 0.75rem;
-  font-family: var(--ui-font-family);
-  text-shadow: 0 0 4px rgb(0 0 0 / 0.9);
+  color: rgb(255 255 255 / 0.5);
+  /* 出るのはスケッチが書いた文字なので、**エディタと同じ書体・同じ小ささ**で
+     並べる (canvastage の `#console-panel` と同じ 11px)。 */
+  font-size: 11px;
+  font-family: var(--editor-font-family);
+  text-shadow: 0 0 4px rgb(0 0 0 / 0.8);
 }
 
 .console-panel[hidden] {

@@ -4,34 +4,28 @@
  * 組み立ては scripts/editor/project-bar.ts、置き場所はページ側 (edit.astro)。
  * ここは中身の意匠だけを持つ (file-tabs.css と同じ分担)。
  *
- * 移植元は canvastage の `#project-bar`。実行ボタンだけは丸くして、四角い
- * 操作列のアイコンと役割が違うことを形で示す。
+ * 移植元は canvastage の `#project-bar`。**寸法も薄さもあちらに揃えてある** —
+ * 中央に置くものは押す場所であって、見せるものではない。丸くして目立たせていた
+ * 実行ボタンは、操作列と同じ角丸四角へ戻した (形で役割を分ける必要は無く、
+ * 位置と大きさで既に分かれている)。
  */
 
 .project-bar {
   display: flex;
-  gap: 0.5rem;
+  gap: 2px;
   align-items: center;
 }
 
-/* 実行・停止。操作列より一段小さく、丸い。 */
+/* 実行・停止。操作列より一段小さいだけで、色の語彙は同じ。 */
 .run-btn {
   position: relative;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  color: rgb(255 255 255 / 0.5);
 }
 
 .run-btn svg {
   width: 12px;
   height: 12px;
-}
-
-.run-btn:hover,
-.run-btn:focus-visible {
-  background: rgb(255 255 255 / 0.15);
-  color: rgb(255 255 255 / 0.85);
 }
 
 /*
@@ -43,12 +37,14 @@
 .run-btn.is-stale::after {
   content: "";
   position: absolute;
-  top: -1px;
-  right: -1px;
+  /* ボタンの角の内側に置く (canvastage と同じ)。外へはみ出させると、隣の名前と
+     の 2px の隙間に食い込む。 */
+  top: 1px;
+  right: 1px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6bb3ff;
+  background: rgb(120 180 255 / 0.9);
 }
 
 /* 保存と作品メニューの置き場 (#87 の段階 3-4)。中身の意匠はそれぞれの CSS
@@ -60,36 +56,43 @@
 }
 
 /*
- * 名前。下線だけの控えめな入力欄。
+ * 名前。**平常時は下線も出さない** (canvastage と同じ)。
+ *
+ * 打てる場所であることは、触れたときに現れる下線が言う。常時引いていた頃は、
+ * 押すものでも読むものでもない線が画面の中央に 1 本残り続けていた。
  *
  * 幅は文字数で伸ばさない。打つたびに実行ボタンが動くと狙いが定まらないので、
- * ボタンは左に固定して名前だけが右へ伸びる形にする。
+ * ボタンは左に固定して名前だけが右へ伸びる形にする。書体はタブと同じく
+ * エディタの設定に追従する側。
  */
 .project-name {
-  width: 10rem;
-  padding: 0 0.125rem;
+  width: 100px;
+  padding: 4px 8px;
   border: none;
-  border-bottom: 1px solid rgb(255 255 255 / 0.15);
+  border-bottom: 1px solid transparent;
   background: none;
-  color: rgb(255 255 255 / 0.6);
-  font-family: var(--ui-font-family);
-  font-size: 0.75rem;
-  text-shadow: 0 0 3px #000;
+  color: rgb(255 255 255 / 0.4);
+  font-family: var(--editor-font-family);
+  font-size: 11px;
+  text-align: center;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .project-name:hover {
-  border-bottom-color: rgb(255 255 255 / 0.3);
-  color: rgb(255 255 255 / 0.85);
+  border-bottom-color: rgb(255 255 255 / 0.15);
+  color: rgb(255 255 255 / 0.6);
 }
 
 .project-name:focus {
-  border-bottom-color: rgb(255 255 255 / 0.5);
-  color: #fff;
+  border-bottom-color: rgb(255 255 255 / 0.3);
+  color: rgb(255 255 255 / 0.8);
   outline: none;
 }
 
 @media (max-width: 600px) {
   .project-name {
-    width: 6rem;
+    width: 90px;
   }
 }

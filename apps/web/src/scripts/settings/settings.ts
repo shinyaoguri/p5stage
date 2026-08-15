@@ -8,6 +8,7 @@
  */
 
 import {
+  DEFAULT_FONT_FAMILY,
   SETTING_DEFS,
   type EditorSettings,
   type SettingDef,
@@ -18,6 +19,20 @@ import {
 const MAX_TEXT_LENGTH = 256;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * 過去の既定の書体。**そのまま保存されていたら今の既定へ引き継ぐ。**
+ *
+ * 設定は書いた時点の値をそのまま持つので、既定を変えても**一度でも開いた人には
+ * 古い書体が残り続ける**。「触っていないのに見た目が変わらない」形になって、
+ * 既定を変えた意味がその人にだけ届かない。
+ *
+ * 引き継ぐのは**完全に一致するときだけ**。1 文字でも手を入れてあれば、それは
+ * その人が選んだ書体なので動かさない。
+ */
+const LEGACY_FONT_FAMILIES = new Set([
+  "ui-monospace, SFMono-Regular, Menlo, monospace",
+]);
 
 /**
  * 値 1 つを扱える形に直す。判断できない値は定義の既定へ倒す。
@@ -71,6 +86,10 @@ export function sanitizeSettings(input: unknown): EditorSettings {
   const result: Record<string, number | boolean | string> = {};
   for (const [key, def] of Object.entries(SETTING_DEFS)) {
     result[key] = sanitizeValue(def, source[key]);
+  }
+  // 前の既定のまま置かれている書体は、今の既定へ引き継ぐ (上の表を参照)。
+  if (LEGACY_FONT_FAMILIES.has(String(result.fontFamily))) {
+    result.fontFamily = DEFAULT_FONT_FAMILY;
   }
   return result as EditorSettings;
 }

@@ -23,17 +23,24 @@
   --editor-padding: 32px;
 
   /*
-   * クロームの書体。
+   * 書体は 2 本立て (canvastage と同じ使い分け)。
    *
-   * 設定の「書体」(`--editor-font-family` 相当) はエディタの中身だけに効かせ、
-   * 操作系はここで固定する。書体を変えるたびにボタンの幅が動くと、見た目を
-   * 見ながら調整できない (canvastage が `--ui-font-family` を分けている理由)。
+   * - `--editor-font-family` … **設定の「書体」に追従する側**。エディタの中身と、
+   *   その周りに同じ調子で並ぶもの (ファイルタブ・作品の名前・コンソール・トースト)。
+   *   実際の値は設定パネルが書き換える (settings/css-variables.ts)
+   * - `--ui-font-family` … **固定する側**。設定パネル・メニュー・ボタン。書体を
+   *   変えるたびに操作系の幅が動くと、見た目を見ながらの調整ができない
    *
-   * canvastage は JetBrains Mono を Google Fonts から読むが、p5stage は
-   * 第三者ドメインへの読み込みを持ち込まない (判断は settings/definitions.ts の
-   * `DEFAULT_FONT_FAMILY` に記載)。端末にあるものだけで解決する。
+   * 既定はどちらも JetBrains Mono で、**自分のオリジンから配る** (edit.astro)。
+   * 第三者ドメインへ読みに行かない方針はそのまま (settings/definitions.ts の
+   * `DEFAULT_FONT_FAMILY` に記載)。読めなかったときの落とし先も並べてある。
    */
-  --ui-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* **同じ値を 2 度書く。** 片方 (`--editor-font-family`) は設定が上書きする
+     ものなので、もう片方をそこから引くと固定にならない。 */
+  --editor-font-family:
+    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ui-font-family:
+    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /*
    * 操作列のアイコンボタン (#41 の 2)。

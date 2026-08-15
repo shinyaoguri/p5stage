@@ -4,6 +4,19 @@ import { env } from "cloudflare:workers";
 
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { configuredAssetsOrigin } from "../lib/assets/delivery-origin";
+/*
+ * 既定の書体 (JetBrains Mono) を**自分のオリジンから配る**。
+ *
+ * canvastage と同じ書体で、あちらは端末に入っているものを使う指定 (Web フォントを
+ * 読まない) だが、それだと入れていない人の画面だけ別物になる。第三者ドメインから
+ * 読まない方針 (settings/definitions.ts) はそのままに、パッケージ同梱の woff2 を
+ * `/_astro/*` へ載せて配る。
+ *
+ * 可変フォント 1 本 (wght 100〜800) なので、設定の「太さ」もこれ 1 つで賄える。
+ * `wght.css` は subset ごとに `unicode-range` 付きの `@font-face` を並べるだけなので、
+ * ブラウザが実際に落とすのは使う文字の分 (latin なら 40KB) に留まる。
+ */
+import "@fontsource-variable/jetbrains-mono/wght.css";
 // クロームのトークン。下の scoped style が引くので、スクリプトの読み込みを
 // 待たずに当たるようページ側で読む (パネル群の CSS は各スクリプトが持つ)。
 import "../styles/editor-chrome.css";

@@ -93,6 +93,27 @@ describe("sanitizeSettings", () => {
     }
   });
 
+  /**
+   * 既定の書体を変えたときの引き継ぎ。
+   *
+   * 設定は書いた時点の値をそのまま持つので、これが無いと**一度でも開いた人には
+   * 古い書体が残り続ける**。既定を変えた意味がその人にだけ届かない。
+   */
+  it("前の既定のままの書体は今の既定へ引き継ぐ (触った値はそのまま)", () => {
+    expect(
+      sanitizeSettings({
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      }).fontFamily
+    ).toBe(DEFAULT_SETTINGS.fontFamily);
+
+    // 自分で選んだ書体は動かさない。前の既定を含んでいても、同じでなければ別物。
+    expect(sanitizeSettings({ fontFamily: "Menlo" }).fontFamily).toBe("Menlo");
+    expect(
+      sanitizeSettings({ fontFamily: "Iosevka, ui-monospace, monospace" })
+        .fontFamily
+    ).toBe("Iosevka, ui-monospace, monospace");
+  });
+
   it("フォント名は前後の空白を落とし、空や長すぎるものは既定へ倒す", () => {
     expect(sanitizeSettings({ fontFamily: "  Menlo  " }).fontFamily).toBe(
       "Menlo"

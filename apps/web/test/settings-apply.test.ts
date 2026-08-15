@@ -43,6 +43,8 @@ describe("cssVariablesFor", () => {
     expect(Object.keys(cssVariablesFor(DEFAULT_SETTINGS)).sort()).toEqual([
       "--editor-current-line-bg",
       "--editor-cursor-bg",
+      // 書体だけはエディタの外にも効く (タブ・作品の名前・コンソール・トースト)。
+      "--editor-font-family",
       "--editor-line-number-color",
       "--editor-selection-bg",
       "--editor-suggest-bg",

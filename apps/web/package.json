@@ -11,6 +11,7 @@
     "deploy": "astro build && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@p5stage/shared": "*",
     "idb": "^8.0.3",
     "monaco-editor": "^0.56.0"

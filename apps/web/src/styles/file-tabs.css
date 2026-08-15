@@ -5,22 +5,26 @@
  * (エディタ本体の editor-overlay.css と同じ事情)。位置はページ側が決め、
  * ここは中身の見た目だけを持つ。
  *
- * スケッチの上に重なるため、面は張らず文字と影で見せる。選択中だけ薄い面を敷き、
+ * スケッチの上に重なるため、面は張らず文字だけで見せる。選択中だけ薄い面を敷き、
  * どれを編集しているかが下のスケッチの明暗によらず分かるようにする。
+ *
+ * **値は canvastage の `#file-tabs` に揃えてある** — 11px・隙間 2px・枠なし。
+ * 枠線と黒い面と影を足していた頃は、タブだけが画面から浮いて見えた。書体も
+ * あちらと同じく**エディタの書体設定に追従する**側 (`--editor-font-family`) に置く。
+ * すぐ下に同じ書体のコードが流れるので、そこだけ別の書体だと段差になる。
  */
 
 .file-tabs {
   display: flex;
   /* 折り返すと段が増えてエディタに被るので、増えたら横に流す。 */
   flex-wrap: nowrap;
-  gap: 0.25rem;
+  gap: 2px;
   align-items: center;
   overflow-x: auto;
   scrollbar-width: none;
-  color: rgb(255 255 255 / 0.6);
-  font-size: 0.8125rem;
-  font-family: var(--ui-font-family);
-  text-shadow: 0 0 3px #000;
+  color: rgb(255 255 255 / 0.3);
+  font-size: 11px;
+  font-family: var(--editor-font-family);
 }
 
 .file-tabs::-webkit-scrollbar {
@@ -32,22 +36,26 @@
   flex: 0 0 auto;
   gap: 0.25rem;
   align-items: center;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid transparent;
-  border-radius: 0.25rem;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
   user-select: none;
 }
 
 .file-tab:hover {
-  color: rgb(255 255 255 / 0.85);
-  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.6);
 }
 
+/* 選択中。**面は白の 0.08 だけ** — 枠も黒い下地も要らない。 */
 .file-tab.is-active {
-  border-color: rgb(255 255 255 / 0.25);
-  background: rgb(0 0 0 / 0.4);
-  color: rgb(255 255 255 / 0.95);
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.7);
 }
 
 /* キーボードで移ってきたときだけ枠を出す (マウス操作では出さない)。 */
@@ -82,10 +90,11 @@
   opacity: 1;
 }
 
-/* 入力中のタブ。幅は文字数に合わせず固定にして、打つたびに並びが揺れないようにする。 */
+/* 入力中のタブ。幅は文字数に合わせず固定にして、打つたびに並びが揺れないようにする。
+   打てる場所であることは、選択中より一段濃い面で示す (枠は足さない)。 */
 .file-tab.is-editing {
-  border-color: rgb(255 255 255 / 0.4);
-  background: rgb(0 0 0 / 0.55);
+  background: rgb(255 255 255 / 0.14);
+  color: rgb(255 255 255 / 0.9);
 }
 
 .file-tab-input {
@@ -93,27 +102,30 @@
   padding: 0;
   border: none;
   background: none;
-  color: #fff;
+  color: inherit;
   font: inherit;
-  text-shadow: inherit;
 }
 
 .file-tab-input:focus {
   outline: none;
 }
 
+/* 追加 (+)。タブと同じ形・同じ薄さで並べる (枠を付けるとそこだけ主張する)。 */
 .file-tab-add {
-  padding: 0.125rem 0.5rem;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  border-radius: 0.25rem;
-  background: rgb(0 0 0 / 0.3);
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: inherit;
   font: inherit;
-  line-height: 1.2;
+  line-height: 1;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .file-tab-add:hover {
-  border-color: rgb(255 255 255 / 0.4);
-  color: rgb(255 255 255 / 0.95);
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.6);
 }

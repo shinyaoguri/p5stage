@@ -26,16 +26,17 @@
  * (緑 = うまくいった / 橙 = 気に留めるもの / 赤 = 失敗)。
  */
 
+/* 形は操作列と同じ角丸四角 (canvastage の `#share-btn` と同じ扱い)。丸くして
+   いた頃は、同じ帯に並ぶ実行ボタンと 2 つだけ形が違って浮いていた。 */
 .save-btn {
   position: relative;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
 }
 
 .save-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 /*
@@ -45,29 +46,30 @@
  * 目立たせない** — 保存していないことを咎める表示ではなく、これから押す場所。
  */
 #save {
-  color: rgb(255 255 255 / 0.35);
+  color: rgb(255 255 255 / 0.3);
 }
 
 #save:hover,
 #save:focus-visible {
-  background: rgb(255 255 255 / 0.15);
-  color: rgb(255 255 255 / 0.85);
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(255 255 255 / 0.7);
 }
 
 /*
  * Gist に載っている。
  *
- * 右上にあった頃より濃くする (不透明度 0.5 → 0.8)。中央は視線が集まる場所なので
- * 薄いと「灰なのか緑なのか」を確かめる操作が要った。
+ * 濃さは canvastage の `#share-btn.saved` と同じ 0.5 (触れると 0.8)。**周りが
+ * すべて 0.3 の薄さなので、0.5 でも緑は十分に見分けられる** — 濃くすると、
+ * 静かな帯の中でここだけが光る。
  */
 #save[data-gist="present"] {
-  color: rgb(80 250 123 / 0.8);
+  color: rgb(80 250 123 / 0.5);
 }
 
 #save[data-gist="present"]:hover,
 #save[data-gist="present"]:focus-visible {
-  background: rgb(80 250 123 / 0.15);
-  color: rgb(80 250 123 / 1);
+  background: rgb(80 250 123 / 0.1);
+  color: rgb(80 250 123 / 0.8);
 }
 
 /* 保存できなかった。**次の保存まで消えない**ので、Gist の有無より前に出す。 */
@@ -118,12 +120,13 @@
 #save[data-save-status="dirty"]::after {
   content: "";
   position: absolute;
-  top: -1px;
-  right: -1px;
+  /* 実行ボタンのドットと同じく、角の内側に置く。 */
+  top: 1px;
+  right: 1px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ffcc66;
+  background: rgb(255 179 71 / 0.8);
 }
 
 /*
