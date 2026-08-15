@@ -34,10 +34,9 @@ test.describe("操作列", () => {
     await openEditor(page);
 
     const buttons = toolbarButtons(page);
-    // 出るのは 全画面 / アカウント の 2 つだけ。作品に属する操作は中央の作品
-    // メニューへ (#87 の段階 3)、保存は中央の名前の右へ (段階 4)、設定は
-    // アカウントメニューの中へ移した (段階 5)。
-    await expect(buttons).toHaveCount(2);
+    // 出るのは 保存 / 全画面 / アカウント の 3 つだけ。作品に属する操作は中央の
+    // 作品メニューへ (#87 の段階 3)、設定はアカウントメニューの中へ移した (段階 5)。
+    await expect(buttons).toHaveCount(3);
 
     for (const button of await buttons.all()) {
       const label = await button.getAttribute("aria-label");

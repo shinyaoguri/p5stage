@@ -79,14 +79,21 @@ export type SettingDef =
   | TextSettingDef;
 
 /**
- * 既定のフォント。端末にあるものだけで解決する。
+ * 既定のフォント。**自分のオリジンから配る** JetBrains Mono (edit.astro が読む)。
  *
- * canvastage は Google Fonts を 21 種類まとめて読み込むが、p5stage では
- * 持ち込まない。第三者ドメインへの読み込みは規約・プライバシー (Phase 6) と
- * 初期表示の重さ (#18) の両方に関わる判断で、設定パネルのついでに決めることではない。
- * フォント名は自由入力にしてあるので、端末に入れてあるフォントは今でも指定できる。
+ * canvastage と同じ書体だが、入れ方は変えてある。あちらは端末に入っているものを
+ * 使う指定 (Web フォントを読まない) で、入れていない人の画面だけ別物になる。
+ * p5stage は npm パッケージ同梱の woff2 を自分で配る — **第三者ドメインへ読みに
+ * 行かない**という判断 (規約・プライバシー = Phase 6) はそのまま守れる。
+ *
+ * canvastage が Google Fonts から 21 種類まとめて読んでいるのは持ち込まない。
+ * フォント名は自由入力なので、端末に入れてあるフォントは今でも指定できる。
+ *
+ * **この値を変えるときは `settings.ts` の `LEGACY_FONT_FAMILIES` に前の値を積む。**
+ * 触っていない人の設定を新しい既定へ引き継ぐための表になっている。
  */
-const DEFAULT_FONT_FAMILY = "ui-monospace, SFMono-Regular, Menlo, monospace";
+export const DEFAULT_FONT_FAMILY =
+  '"JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace';
 
 /**
  * 保存するときの公開範囲 (#87 の段階 5)。

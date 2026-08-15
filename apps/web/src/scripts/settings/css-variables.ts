@@ -30,6 +30,15 @@ export function cssVariablesFor(
   settings: EditorSettings
 ): Record<string, string> {
   return {
+    /*
+     * 書体。Monaco へは editor-options.ts が直接渡すが、**エディタの周りにも
+     * 同じ書体で並ぶものがある** — ファイルタブ・作品の名前・コンソール・トースト。
+     * canvastage も同じ使い分けで、設定パネルやボタンだけは固定の
+     * `--ui-font-family` に留める (書体を変えるたびに操作系の幅が動くと、
+     * 見た目を見ながらの調整ができない)。
+     */
+    "--editor-font-family": settings.fontFamily,
+
     "--editor-text-opacity": `${settings.textOpacity}`,
     "--editor-text-shadow-blur": `${settings.textShadowBlur}px`,
     "--editor-text-shadow-color": settings.textShadowColor,
