@@ -24,7 +24,7 @@ playwright-report/
 test-results/
 blob-report/
 # 画面の証跡 (npm run shots)。**リポジトリに画像はコミットしない** — PR へは
-# CI が artifact として上げる (.github/workflows/ci.yml)。
+# CI が Gyazo へ上げて貼る (.github/workflows/ci.yml)。
 e2e/shots/
 
 # ログ

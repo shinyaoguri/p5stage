@@ -4,32 +4,50 @@
  * ここがある理由は、**web (本体) の PR プレビュー URL が出せない**こと。
  * `p5stage-web` はライブ同期の Durable Object (ADR 0017) を持ち、Cloudflare は
  * DO を実装した Worker にプレビュー URL を発行しない。つまり PR で「触って
- * 確かめる」道が無い。代わりに**同じ画面を CI で撮って PR に添える**。
+ * 確かめる」道が無い。代わりに**同じ画面を CI で撮って PR に貼る**
+ * (上げ先は Gyazo — .github/workflows/ci.yml)。
  *
- * 撮るのは「PR で見たいもの」だけに絞る。増やすほど遅くなり、読む側も追えない。
- * 検証は他の spec が受け持つので、ここでは待ち合わせ以上のことをしない
- * (`expect` は「撮る前に着いているか」を見るためだけに使う)。
+ * 撮るのは「PR で見たいもの」だけに絞る。PR コメントに縦に並ぶので、増やすほど
+ * 読み飛ばされる。検証は他の spec が受け持つので、ここでは待ち合わせ以上のことを
+ * しない (`expect` は「撮る前に着いているか」を見るためだけに使う)。
  *
  * 普段の E2E からは `grepInvert` で外してある (playwright.config.ts)。
  * 手元で見たいときは `npm run shots`。
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 import { expect, test, type Page } from "@playwright/test";
 
 import {
   addFile,
   fileTab,
-  login,
-  openAccountMenu,
   openEditor,
+  openAccountMenu,
   openSettings,
   setProjectName,
 } from "./helpers";
 
 /** 置き場。gitignore 済み (リポジトリに画像はコミットしない)。 */
 const OUT = "e2e/shots";
+
+/**
+ * 撮る画面と、その説明。
+ *
+ * **並び順と文言はここが正本**。PR へ貼るのは CI だが、何を撮ったかを知っているのは
+ * こちらなので、対応表を workflow 側に持たせない (二重管理になり、片方だけ直る)。
+ * 実際に撮れたかどうかは CI がファイルの有無で見る。
+ */
+const SHOTS = [
+  { file: "01-editor.png", caption: "エディタ (1280)" },
+  {
+    file: "02-editor-top.png",
+    caption: "上端の帯を拡大 (タブ・作品の名前・保存・操作列)",
+  },
+  { file: "03-account-menu.png", caption: "アカウントメニュー" },
+  { file: "04-settings.png", caption: "設定ドロワー" },
+  { file: "05-sketch-page.png", caption: "作品ページ" },
+] as const;
 
 /** 種として置いてある公開作品 (e2e/seed.sql)。 */
 const SEED_AUTHOR = "e2e-author";
@@ -46,9 +64,14 @@ async function settle(page: Page): Promise<void> {
 }
 
 test.describe("画面の証跡 @shots", () => {
-  test.beforeAll(() => mkdirSync(OUT, { recursive: true }));
+  test.beforeAll(() => {
+    mkdirSync(OUT, { recursive: true });
+    // 撮る前に書く。**撮れなかった画面があっても対応表は残す** — CI 側は
+    // ファイルの有無で拾うので、欠けた分は黙って落ちる。
+    writeFileSync(`${OUT}/manifest.json`, JSON.stringify(SHOTS, null, 2));
+  });
 
-  test("エディタ @shots", async ({ page }) => {
+  test("エディタまわり @shots", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openEditor(page);
     // 何もしない画面より、ファイルが増えて名前が付いた画面の方が実態に近い。
@@ -74,32 +97,12 @@ test.describe("画面の証跡 @shots", () => {
     await page.screenshot({ path: `${OUT}/04-settings.png` });
   });
 
-  test("狭い画面のエディタ @shots", async ({ page }) => {
-    await page.setViewportSize({ width: 560, height: 800 });
-    await openEditor(page);
-    await settle(page);
-    await page.screenshot({ path: `${OUT}/05-editor-narrow.png` });
-  });
-
-  test("ログイン後のエディタ @shots", async ({ page }) => {
+  test("作品ページ @shots", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await openEditor(page);
-    await login(page);
-    await settle(page);
-    await page.screenshot({ path: `${OUT}/06-editor-signed-in.png` });
-  });
-
-  test("作品ページとギャラリー @shots", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-
     await page.goto(`/@${SEED_AUTHOR}/${SEED_SKETCH}`);
     // 実行 iframe が着くまで待つ (空の枠を撮っても何も分からない)。
     await expect(page.locator("iframe")).toBeVisible();
     await settle(page);
-    await page.screenshot({ path: `${OUT}/07-sketch-page.png` });
-
-    await page.goto("/");
-    await settle(page);
-    await page.screenshot({ path: `${OUT}/08-gallery.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/05-sketch-page.png` });
   });
 });

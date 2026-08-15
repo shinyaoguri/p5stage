@@ -25,7 +25,8 @@ CI green を待って自動マージする。
 
 **web (本体) に PR プレビュー URL は出ない。** Durable Object を持つ Worker には
 Cloudflare がプレビュー URL を発行しないため (ADR 0017 の申し送り)。PR での見た目の確認は
-`e2e` ジョブが撮る証跡 (artifact `screenshots`)、動きの確認は手元の `npm run dev`。
+`e2e` ジョブが撮って PR に貼る証跡 (Gyazo)、動きの確認は手元の `npm run dev`。
+証跡の共有にはリポジトリシークレット `GYAZO_ACCESS_TOKEN` が要る (無ければ黙って省かれる)。
 
 ## リポ固有の注意
 
