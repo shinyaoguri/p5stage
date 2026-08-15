@@ -71,6 +71,51 @@ test.describe("ログインの導線", () => {
     await expect(consent).not.toBeVisible();
     await expect(page).toHaveURL(/\/edit$/);
   });
+
+  /*
+   * セッションの応答が遅いときに素早く押した人を守る (#51)。
+   *
+   * `AccountPanel` は生成時に一度描き、`/api/auth/session` が返ってから描き直す。
+   * 描き直しが DOM を捨てて作り直す形だと、**開いていた同意ダイアログごと消える** —
+   * 押したのに何も出ないように見える。#90 で器と項目を使い回す形にして直ったが、
+   * 既存のテストは `helpers.login()` 経由で `data-ready` を待ってから押すため、
+   * 描き直しが元の形に戻っても誰も気付かない。ここだけが**待たずに押す**経路を持つ。
+   */
+  test("セッションを引き終わる前に押した同意は、引き終わっても開いたまま", async ({
+    page,
+  }) => {
+    /*
+     * 「遅い」を待ち時間で作らない。CI の速さで揺れるうえ、押す前に着地してしまえば
+     * 競合そのものが起きずテストが意味を失う。こちらが解放するまで返さない口を挟み、
+     * **押した後に必ず着地する**順序を決める (E2E で `page.route` を使うのはここだけ)。
+     */
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/auth/session", async (route) => {
+      await held;
+      await route.continue();
+    });
+
+    // ここでは `data-ready` を待たない。待たずに押せることがこのテストの主眼。
+    await openEditor(page);
+    await openAccountMenu(page);
+    await page.locator("#login").click();
+
+    const consent = page.locator("#login-consent");
+    await expect(consent).toBeVisible();
+
+    // 押した後にセッションが着地する。描き直しが開いている面を巻き込まないこと。
+    release();
+    await expect(
+      page.locator(".account-panel[data-ready='true']")
+    ).toBeAttached();
+
+    await expect(consent).toBeVisible();
+    // 見えているだけでなく、認可へ進む口がそのまま押せること。
+    await expect(consent.locator("a.account-consent-proceed")).toBeVisible();
+  });
 });
 
 test.describe("認証エンドポイント", () => {
