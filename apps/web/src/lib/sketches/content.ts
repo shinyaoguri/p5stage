@@ -38,6 +38,17 @@ export function tagPath(tag: string): string {
 }
 
 /**
+ * 検索結果の URL (Phase 5)。
+ *
+ * 検索語はパスではなくクエリに載せる。**打った字はそのまま残す** — タグ
+ * (`tagPath`) は正規化した値が正典で、綴りが違えば 302 で寄せるが、検索語には
+ * 正典が無く、寄せると「自分が何を打ったか」が画面から消える。
+ */
+export function searchPath(query: string): string {
+  return `/search?q=${encodeURIComponent(query)}`;
+}
+
+/**
  * login に依存しない恒久リンク。常に正典 URL へ 302 する。
  *
  * 「持ち主が改名しても確実に生きている URL」が要る場面 (外部に貼る・引用する) 用。

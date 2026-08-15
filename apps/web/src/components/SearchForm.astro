@@ -1,0 +1,98 @@
+---
+/**
+ * 作品を言葉で探す入力欄 (Phase 5)。
+ *
+ * **JS を要らない形にする** (素の `<form method="get">`)。検索は発見の入口で、
+ * ログインも要らない道なので、スクリプトが落ちている環境で使えなくなるのは割に
+ * 合わない。送り先は `/search` の 1 か所で、押した結果が URL に残る。
+ *
+ * 置き場所を跨いで使い回せるよう、見出しも余白も持たない。今はトップページと
+ * 検索ページの 2 か所だが、サイト共通ヘッダー (Phase 5 の次の縦切り) がそのまま
+ * これを載せる。
+ */
+import { SEARCH_QUERY_MAX_LENGTH } from "../lib/sketches/search";
+
+interface Props {
+  /** 入力欄の初期値 (検索ページで打った語を残すため)。 */
+  query?: string;
+  /**
+   * ページを開いた直後に入力欄へ移るか。
+   *
+   * 検索ページでだけ立てる。トップページで奪うと、開いた瞬間に画面が入力欄まで
+   * 飛び、新着一覧を見に来た人の邪魔になる。
+   */
+  autofocus?: boolean;
+}
+
+const { query = "", autofocus = false } = Astro.props;
+---
+
+<form class="search-form" method="get" action="/search" role="search">
+  <label class="sr-only" for="search-q">作品を検索</label>
+  <input
+    id="search-q"
+    class="search-input"
+    type="search"
+    name="q"
+    value={query}
+    placeholder="作品を検索 (3 文字以上)"
+    maxlength={SEARCH_QUERY_MAX_LENGTH}
+    autocomplete="off"
+    autofocus={autofocus}
+  />
+  <button class="search-submit" type="submit">検索</button>
+</form>
+
+<style>
+  .search-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-radius: 0.375rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 1rem;
+  }
+
+  .search-input:focus-visible {
+    border-color: var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    outline-offset: 1px;
+  }
+
+  .search-submit {
+    padding: 0.5rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--muted) 40%, transparent);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .search-submit:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* 入力欄のプレースホルダが同じことを言うので、ラベルは目に出さない
+     (読み上げには要る)。 */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>

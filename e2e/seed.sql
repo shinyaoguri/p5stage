@@ -226,3 +226,9 @@ DELETE FROM sketches
 DELETE FROM sketch_tags
  WHERE sketch_id IN (SELECT id FROM sketches WHERE title LIKE 'E2E タグ%');
 DELETE FROM sketches WHERE title LIKE 'E2E タグ%';
+
+-- 検索のテスト (e2e/search.spec.ts) が保存した作品も落とす。あちらは実行ごとに
+-- 違う語を含む名前を付けるので取り違えは起きないが、**残すと検索の索引に
+-- 積み上がる**。索引側の行は `sketches` を消せばトリガーが落とす
+-- (migrations/0012) ので、ここで触るのは作品の表だけでよい。
+DELETE FROM sketches WHERE title LIKE 'E2E 検索%';

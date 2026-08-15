@@ -7,6 +7,7 @@
  */
 import { env } from "cloudflare:workers";
 
+import SearchForm from "../components/SearchForm.astro";
 import SketchGrid from "../components/SketchGrid.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { assetsOrigin } from "../lib/assets/delivery-origin";
@@ -38,6 +39,10 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
       <h1>p5stage</h1>
       <p class="lead">p5.js スケッチの開発・共有プラットフォーム</p>
       <a class="cta" href="/edit">スケッチを作る</a>
+      {/* 作るだけでなく探せることを、入口で見せる (Phase 5 の検索)。 */}
+      <div class="search">
+        <SearchForm />
+      </div>
     </header>
 
     <section class="latest" aria-labelledby="latest-heading">
@@ -83,6 +88,13 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
     color: #fff;
     text-decoration: none;
     font-weight: 600;
+  }
+
+  /* 検索欄は文章の幅で止める。ページ幅いっぱいに伸ばすと、入力欄というより
+     見出しの帯に見える。 */
+  .search {
+    max-width: 32rem;
+    margin-top: 1.5rem;
   }
 
   h2 {

@@ -563,6 +563,55 @@ export async function markGistDeleted(
     .run();
 }
 
+/**
+ * 言葉で公開作品を引く (Phase 5 の検索 / ADR 0020)。
+ *
+ * `match` は FTS5 の MATCH 式で、組み立ては `lib/sketches/search.ts` が持つ。
+ * **ここへ利用者の生の入力を渡してはいけない** — MATCH は `OR` や `*` を構文として
+ * 読むので、素通しすると打った字が演算子として効き、`"` 1 つで構文エラーになる。
+ *
+ * 選定は `listPublicSketches` と同条件 (公開・書き出し済み・tombstone でない)。
+ * **索引には限定公開も入っている**が、絞りは `sketches` 側でやるので一覧には出ない。
+ * 索引から公開範囲を外してあるのは、公開範囲を変えるたびに索引を書き直さずに
+ * 済ませるため (`visibility` は検索語ではない)。
+ *
+ * 並びは他の一覧と同じ更新順にする。FTS5 の `rank` (bm25) は語の珍しさで並べるが、
+ * trigram の索引が数えているのは 3 文字の窓の出現数なので、**利用者に説明できる
+ * 順序にならない**。関連度で並べるなら、まず何を関連とみなすかを決める必要がある。
+ *
+ * `sketch_search` に別名を付けない。**MATCH の左辺に取れるのは表の名前だけ**で、
+ * 別名を書くと `no such column` で落ちる (他の一覧が `s` を使っているのに合わせて
+ * `f` と書きたくなるが、ここだけは書けない)。
+ */
+export async function searchPublicSketches(
+  db: D1Database,
+  match: string,
+  limit: number
+): Promise<SketchWithOwner[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${SKETCH_COLUMNS},
+              u.login AS owner_login, u.avatar_url AS owner_avatar_url
+         FROM sketch_search
+         JOIN sketches s ON s.id = sketch_search.sketch_id
+         JOIN users u ON u.id = s.owner_id
+        WHERE sketch_search MATCH ?
+          AND s.visibility = 'public'
+          AND s.current_revision IS NOT NULL
+          AND s.gist_deleted_at IS NULL
+        ORDER BY s.updated_at DESC
+        LIMIT ?`
+    )
+    .bind(match, limit)
+    .all<SketchWithOwnerRow>();
+
+  return results.map((row) => ({
+    ...toSketch(row),
+    ownerLogin: row.owner_login,
+    ownerAvatarUrl: row.owner_avatar_url,
+  }));
+}
+
 /** 作品に付いているタグ (Phase 5)。作者が並べた順に返す。 */
 export async function listTagsForSketch(
   db: D1Database,
