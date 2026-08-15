@@ -1,0 +1,136 @@
+---
+/**
+ * 検索結果 (Phase 5 / ADR 0020)。
+ *
+ * 発見の 4 本目の線。トップページ (新着) が「今」、ユーザーページが「誰」、
+ * タグが「何について」で、ここが**言葉から引く**道を担う。閲覧にログインは要らない。
+ *
+ * 検索語は URL のクエリに載る。打った字はそのまま残し、タグのように正典へ寄せ
+ * (302) たりはしない — 検索語に正典は無く、寄せると自分が何を打ったのか画面から
+ * 消える。
+ */
+import { env } from "cloudflare:workers";
+
+import SearchForm from "../components/SearchForm.astro";
+import SketchGrid from "../components/SketchGrid.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { assetsOrigin } from "../lib/assets/delivery-origin";
+import { toSketchCards } from "../lib/sketches/card";
+import {
+  parseSearchQuery,
+  SEARCH_TERM_MIN_LENGTH,
+} from "../lib/sketches/search";
+import { searchPublicSketches } from "../lib/sketches/store";
+
+export const prerender = false;
+
+/** 1 度に並べる件数。ページングは Phase 5 の一覧 UI を広げるときに決める。 */
+const SEARCH_LIMIT = 24;
+
+const raw = Astro.url.searchParams.get("q") ?? "";
+const query = parseSearchQuery(raw);
+
+// 引けない形 (空・短すぎ) のときは D1 へ行かない。
+const sketches =
+  query.kind === "ok"
+    ? await searchPublicSketches(env.DB, query.match, SEARCH_LIMIT)
+    : [];
+const cards = toSketchCards(sketches, assetsOrigin());
+
+/** 短すぎる・多すぎるので引かなかった語。0 件だったときの理由になる。 */
+const ignored = query.kind === "empty" ? [] : query.ignored;
+
+// 公開作品しか出さないのでエッジに載せる (トップページ・タグ別一覧と同じ)。
+Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+---
+
+<BaseLayout
+  title={raw === "" ? "検索 | p5stage" : `${raw} の検索結果 | p5stage`}
+  description="p5.js スケッチを言葉で探す"
+  noindex={true}
+>
+  <main>
+    <header class="search-header">
+      <h1>検索</h1>
+      <SearchForm query={raw} autofocus={true} />
+    </header>
+
+    <section aria-labelledby="results-heading">
+      <h2 id="results-heading" class="sr-only">検索結果</h2>
+      {
+        ignored.length > 0 && (
+          <p class="note">
+            {/* 1 つの式にまとめる。文字列と式を並べて書くと、整形で挟まる改行が
+                そのまま抜けて「(3文字以上」のように空白が落ちる。 */}
+            {`${ignored.join("・")} は検索語から除きました (${SEARCH_TERM_MIN_LENGTH} 文字以上の語で探せます)。`}
+          </p>
+        )
+      }
+      {
+        query.kind === "empty" ? (
+          <p class="empty">
+            探したい言葉を入れてください。
+            <a href="/">新着の作品を見る</a>
+          </p>
+        ) : query.kind === "too-short" ? (
+          <p class="empty">
+            {SEARCH_TERM_MIN_LENGTH} 文字以上の語で探してください。
+            <a href="/">新着の作品を見る</a>
+          </p>
+        ) : cards.length === 0 ? (
+          <p class="empty">
+            {query.terms.join("・")}{" "}
+            に当てはまる公開作品は見つかりませんでした。
+            <a href="/">新着の作品を見る</a>
+          </p>
+        ) : (
+          <SketchGrid cards={cards} />
+        )
+      }
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  main {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  .search-header {
+    margin-bottom: 2.5rem;
+  }
+
+  h1 {
+    margin: 0 0 1rem;
+    font-size: 1.75rem;
+  }
+
+  .note {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  /* 見出しは構造のために置くが、上の入力欄が同じことを言うので目には出さない。 */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .empty {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  .empty a {
+    color: var(--accent);
+  }
+</style>
