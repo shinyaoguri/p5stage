@@ -20,6 +20,44 @@
  */
 const DRAIN_LIMIT_BYTES = 8 * 1024 * 1024;
 
+/**
+ * 上限までしか読まない。超えたら null。
+ *
+ * `arrayBuffer()` で丸ごと読んでから長さを見る形にしないのは、`Content-Length` が
+ * 嘘でも上限までしかメモリに載せないため。バイト列を受け取る口 (アセットの実体 —
+ * 3-1 / サムネイル — 4-4) が共通で使う。
+ */
+export async function readBodyLimited(
+  request: Request,
+  limit: number
+): Promise<Uint8Array<ArrayBuffer> | null> {
+  const body = request.body;
+  if (body === null) return new Uint8Array(0);
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /** 本文を読み切る。既に読まれている・本文が無いなら何もしない。 */
 export async function drainRequestBody(request: Request): Promise<void> {
   if (request.bodyUsed || request.body === null) return;

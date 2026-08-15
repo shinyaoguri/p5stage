@@ -18,6 +18,7 @@ import {
 } from "@p5stage/shared";
 
 import { buildSketchHtml, MissingEntryFileError } from "./build-html";
+import { captureSketch } from "./capture";
 import { consoleBridgeScript, fileLoaderBridgeScript } from "./bridge-scripts";
 import { mimeForFileName } from "./mime";
 import { SketchStage } from "./sketch-stage";
@@ -204,10 +205,30 @@ function main(): void {
     const message = parseHostMessage(event.data);
     if (message === null) return;
 
-    if (message.type === "run") {
-      void run(message.gen, message.files, message.assets, message.transition);
-    } else {
-      stage.stop();
+    switch (message.type) {
+      case "run":
+        void run(
+          message.gen,
+          message.files,
+          message.assets,
+          message.transition
+        );
+        return;
+      case "stop":
+        stage.stop();
+        return;
+      case "capture":
+        // 撮れなくても答える。返事をしないと、本体はサムネイルを知らない
+        // 古いランナーと区別が付かず、タイムアウトまで待つことになる。
+        void captureSketch(stage.activeDocument()).then((result) => {
+          toHost({
+            type: "thumbnail",
+            gen: message.gen,
+            image: result.image,
+            reason: result.reason,
+          });
+        });
+        return;
     }
   });
 

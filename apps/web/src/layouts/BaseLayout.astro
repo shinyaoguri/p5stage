@@ -11,6 +11,13 @@ interface Props {
   noindex?: boolean;
   /** 同じ内容に複数の URL があるページで、正とみなす URL。 */
   canonical?: string;
+  /**
+   * 共有したときにカードへ出す絵の絶対 URL (Phase 4-4)。
+   *
+   * 無ければ `og:image` ごと出さない。**存在しない画像を指すより、絵の無いカードの
+   * 方がまし**で、SNS 側は画像が引けないと本文まで出さないことがある。
+   */
+  image?: string;
 }
 
 const {
@@ -18,6 +25,7 @@ const {
   description = "p5.js スケッチの開発・共有プラットフォーム",
   noindex = false,
   canonical,
+  image,
 } = Astro.props;
 ---
 
@@ -33,6 +41,16 @@ const {
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    {
+      image !== undefined && (
+        <Fragment>
+          <meta property="og:image" content={image} />
+          {/* 絵があるときだけ大きいカードにする。無いのに宣言すると、
+              画像の入る場所が空いたままのカードになる */}
+          <meta name="twitter:card" content="summary_large_image" />
+        </Fragment>
+      )
+    }
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>

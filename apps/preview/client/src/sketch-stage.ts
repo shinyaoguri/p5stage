@@ -136,6 +136,19 @@ export class SketchStage {
   }
 
   /**
+   * 今表示しているスケッチの文書。まだ何も出していなければ null (Phase 4-4)。
+   *
+   * 読めるのはランナーとスケッチが同一オリジンだから (ADR 0007)。
+   * 表示中のフレームに限るのは、**画面に出ていない絵を作品の姿として配らない**ため
+   * (もう 1 枚は次の実行を読み込み中か、既に空にした後)。
+   */
+  activeDocument(): Document | null {
+    if (this.#frameGenerations[this.#activeIndex] === NO_GENERATION)
+      return null;
+    return this.#frames[this.#activeIndex].contentDocument;
+  }
+
+  /**
    * HTML を読み込んで表示を差し替える。
    * より新しい実行に追い越された場合は差し替えずに false を返す。
    *

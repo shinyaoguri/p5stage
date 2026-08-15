@@ -9,7 +9,11 @@
  * 中身は D1 のポインタ → R2 の不変オブジェクトで解決する。閲覧が GitHub を
  * 叩かないので、レート制限が閲覧数に比例しない。
  */
-import { OriginConfigError, resolveOrigins } from "@p5stage/shared";
+import {
+  OriginConfigError,
+  resolveOrigins,
+  thumbnailPath,
+} from "@p5stage/shared";
 import { env } from "cloudflare:workers";
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -200,6 +204,27 @@ const shownRevision =
  */
 const live = past === null && files !== null;
 
+/**
+ * 共有したときのカードに出す絵 (Phase 4-4 / ADR 0019)。
+ *
+ * 出すのは**最新の版を見ているとき**だけ。過去の版のページは `noindex` で
+ * 近似重複を並べない方針 (ADR 0016) なので、カードも作らない。
+ *
+ * 限定公開でも出す。「URL を知る人は見られる」ものを共有した先でカードが出るのは
+ * 本来の用途で、画像の鍵は gist の ID とリビジョン SHA なので推測もできない
+ * (ページ自体は今までどおり `noindex` / `private, no-store`)。
+ */
+const thumbnailUrl =
+  past === null &&
+  sketch.gistId !== null &&
+  sketch.thumbnailRevision !== null &&
+  assetsOrigin !== null
+    ? new URL(
+        thumbnailPath(sketch.gistId, sketch.thumbnailRevision),
+        assetsOrigin
+      ).href
+    : undefined;
+
 /** 中身が出せないときに、閲覧者へ見せる説明。 */
 const notice = (() => {
   if (past !== null) {
@@ -227,6 +252,7 @@ const notice = (() => {
   description={sketch.description || `${sketch.ownerLogin} の p5.js スケッチ`}
   noindex={sketch.visibility === "unlisted" || past !== null}
   canonical={canonicalUrl}
+  image={thumbnailUrl}
 >
   <main
     class="sketch-page"

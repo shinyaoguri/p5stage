@@ -15,6 +15,16 @@
 const GIST_ID = /^[0-9a-f]{16,64}$/i;
 
 /**
+ * Gist の ID の形か。
+ *
+ * 外から来た値を GitHub や R2 のキーに使う前の足切り。取り込みの入口
+ * (`parseGistRef`) と、サムネイルの配信 (`/t/<gistId>/...` — Phase 4-4) が同じ規則を見る。
+ */
+export function isGistId(value: string): boolean {
+  return GIST_ID.test(value);
+}
+
+/**
  * Gist の URL として受け付けるホスト。
  *
  * ここを見ずに「16 進らしき部分」を拾うと、無関係な URL でも取り込みが始まって
@@ -53,7 +63,7 @@ function githubPathSegments(input: string): string[] | null {
 export function parseGistRef(input: string): string | null {
   const text = input.trim();
   if (text === "") return null;
-  if (GIST_ID.test(text)) return text;
+  if (isGistId(text)) return text;
 
   const segments = githubPathSegments(text);
   if (segments === null) return null;

@@ -37,7 +37,7 @@ import {
   rejectForeignOrigin,
   requireSession,
 } from "../../../lib/http/api";
-import { drainRequestBody } from "../../../lib/http/body";
+import { drainRequestBody, readBodyLimited } from "../../../lib/http/body";
 
 export const prerender = false;
 
@@ -53,43 +53,6 @@ function declaredLength(header: string | null): number | null {
   if (header === null) return null;
   const value = Number(header);
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
-}
-
-/**
- * 上限までしか読まない。超えたら null。
- *
- * `arrayBuffer()` で丸ごと読んでから長さを見る形にしないのは、`Content-Length` が
- * 嘘でも上限までしかメモリに載せないため。
- */
-async function readLimited(
-  request: Request,
-  limit: number
-): Promise<Uint8Array<ArrayBuffer> | null> {
-  const body = request.body;
-  if (body === null) return new Uint8Array(0);
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
 }
 
 async function upload(
@@ -127,7 +90,7 @@ async function upload(
     if (tooLarge !== null) return jsonError(413, "too_large", tooLarge);
   }
 
-  const bytes = await readLimited(request, usage.maxAssetBytes);
+  const bytes = await readBodyLimited(request, usage.maxAssetBytes);
   if (bytes === null) {
     return jsonError(
       413,

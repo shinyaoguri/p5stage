@@ -35,6 +35,7 @@ function sketch(overrides: Partial<Sketch> = {}): Sketch {
     gistDeletedAt: null,
     forkedFromSketchId: null,
     forkedFromRevision: null,
+    thumbnailRevision: null,
     ...overrides,
   };
 }
