@@ -1,5 +1,18 @@
-/* 作品ページのファイルタブ。JS が組み立てる DOM に届かせるため、
-   ページの <style> ではなくここに置く (file-tabs.css と同じ理由)。 */
+/* 作品ページのファイルタブとコード塊。JS が組み立てる DOM に届かせるため、
+   ページの <style> ではなくここに置く (file-tabs.css と同じ理由)。
+   Astro の scoped style は SSR が出した要素にしか印を付けないので、
+   **同期で差し替えたコードだけ素の <pre> に戻る** (Phase 4-2)。 */
+
+.sketch-file {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  tab-size: 2;
+}
 
 .sketch-tabs {
   display: flex;

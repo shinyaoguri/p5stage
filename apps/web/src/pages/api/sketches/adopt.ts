@@ -171,7 +171,9 @@ async function respond(
     sketch.id,
     content.id,
     content.revision,
-    content.files
+    content.files,
+    // ETag は取り込みの応答には無い形で来る。次の再検証で埋まる。
+    null
   );
 
   return noStore(

@@ -66,7 +66,10 @@ canvastage 移植の中核。保存機能なしで「書いて実行できる」
 
 - **リビジョン履歴の閲覧** (4-1): D1 の台帳 (`gist_revisions`) + `?rev=<sha>` +
   履歴 UI。過去の版は台帳と R2 だけで解決し、GitHub へは行かない → **ADR 0016**
-- 準リアルタイム同期閲覧: エディタ → Workers 通知 → Durable Objects → SSE/WebSocket 配信 (許容遅延 数秒〜10 秒)
+- **準リアルタイム同期閲覧** (4-2): 保存 → Durable Objects → **hibernate する
+  WebSocket** で配信。流すのはリビジョン SHA だけで、中身は 4-1 が開いた解決経路に
+  乗せる (`/api/sketches/:id/revisions/:rev`)。SSE を退けたのは、接続している間ずっと
+  duration 課金が乗り**繋ぎっぱなしの閲覧者 1 人で無料枠が尽きる**ため → **ADR 0017**
 - フォーク (Gist fork API + メタデータ複製。系譜の正典は D1 — #44)
 - サムネイル自動取得の**新規実装** (canvastage に相当実装は無い。別オリジン iframe から postMessage で受け渡す) → R2、Cloudflare Images リサイズ
 - 完了条件: 作者がライブコーディングし、閲覧者が数秒遅れで追従できる

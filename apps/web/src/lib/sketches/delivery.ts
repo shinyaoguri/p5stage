@@ -25,15 +25,11 @@ import {
 } from "../session/context";
 
 import { planDelivery } from "./delivery-plan";
-import { storeRevision } from "./publish";
+import { publishRevision } from "./publish";
 import { findRevision } from "./revision-log";
 import { getRevision } from "./revision-store";
 import type { Sketch } from "./sketch";
-import {
-  markGistDeleted,
-  markRevisionChecked,
-  setCurrentRevision,
-} from "./store";
+import { markGistDeleted, markRevisionChecked } from "./store";
 
 /** 閲覧画面に渡す中身。 */
 export type SketchContent =
@@ -53,12 +49,15 @@ function deliveryAuth(): GistAuth {
   return appAuth(config.clientId, config.clientSecret);
 }
 
-/** GitHub から取って R2 とポインタを埋める。 */
-async function fill(
-  sketchId: string,
-  gistId: string,
-  now: number
-): Promise<SketchContent> {
+/**
+ * GitHub から取って R2 とポインタを埋める。
+ *
+ * 書けたかどうかは見ない。**中身は手元にあるので閲覧者には配れる** — 写しを
+ * 残せなかっただけなら、この閲覧を失敗にする理由が無い (次の閲覧がもう一度
+ * 埋めにくる)。4-1 までは `storeRevision` の失敗が例外として上がり、配れるのに
+ * `unavailable` へ化けていた。
+ */
+async function fill(sketchId: string, gistId: string): Promise<SketchContent> {
   // 手元に中身が無いので条件付きにしない (304 は「手元のものを使え」の意味で、
   // ここでは使えるものが無い)。
   const result = await fetchGistForDelivery(
@@ -75,13 +74,12 @@ async function fill(
   }
 
   const { content } = result;
-  await storeRevision(gistId, content.revision, content.files, now);
-  await setCurrentRevision(
-    env.DB,
+  await publishRevision(
     sketchId,
+    gistId,
     content.revision,
-    result.etag,
-    now
+    content.files,
+    result.etag
   );
 
   return { kind: "ready", files: content.files, revision: content.revision };
@@ -109,14 +107,15 @@ async function revalidate(sketch: Sketch, now: number): Promise<void> {
       return;
     }
 
+    // 作者が GitHub 側で直接編集した分。**ここも版が進む経路**なので、保存と
+    // 同じ道を通して知らせまで出す (進行点は `publishRevision` の 1 つ)。
     const { content } = result;
-    await storeRevision(sketch.gistId, content.revision, content.files, now);
-    await setCurrentRevision(
-      env.DB,
+    await publishRevision(
       sketch.id,
+      sketch.gistId,
       content.revision,
-      result.etag,
-      now
+      content.files,
+      result.etag
     );
   } catch (error) {
     if (error instanceof GistError && error.kind === "not_found") {
@@ -168,7 +167,7 @@ export async function resolveSketchContent(
       // ポインタはあるのに写しが無い。埋め直して自分で治る。
     }
 
-    return await fill(sketch.id, gistId, now);
+    return await fill(sketch.id, gistId);
   } catch (error) {
     if (error instanceof GistError && error.kind === "not_found") {
       await markGistDeleted(env.DB, sketch.id, now);
