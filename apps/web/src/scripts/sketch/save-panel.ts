@@ -9,9 +9,19 @@
  * 保存の状態は文字ではなく**保存アイコンそのもの**が持つ (#41 の 6)。移植元は
  * canvastage の `#share-btn.saved` / `.dirty`。
  *
- * - 保存済みで、その後の変更が無い … 緑
- * - 未保存の変更がある … 橙のドット
- * - 保存できなかった … 赤。**次の保存まで消えない** (段階 5 でトーストに載せ
+ * **絵は GitHub のマーク**、置き場は画面上部中央の作品の名前の右 (#87 の段階 4)。
+ * フロッピーのアイコンを右上に置いていた頃は、「保存した」ことは分かっても
+ * **どこに保存されたのか**が絵から読めず、Gist に載っているかどうかは
+ * 「GitHub リンクのアイコンが増えたこと」で示していた (増減は気付きにくい)。
+ * 保存先そのものを絵にすれば、色を見るだけで載っているかどうかが分かる。
+ *
+ * 読み方は 2 軸。**色 = Gist に載っているか / ドット = 手元に送っていない変更があるか**。
+ *
+ * - 灰 … まだ Gist に載っていない
+ * - 緑 … 載っている
+ * - 橙のドット … 未保存の変更がある (色は載っているかどうかのまま)
+ * - 明滅 … 送っている最中
+ * - 赤 … 保存できなかった。**次の保存まで消えない** (段階 5 でトーストに載せ
  *   なかったのはこのため — 打鍵で消えると、保存できていないまま書き続ける)
  */
 
@@ -100,10 +110,11 @@ export class SavePanel {
 
     this.#button = makeToolbarButton({
       id: "save",
-      icon: "save",
+      icon: "github",
       label: "保存",
       onClick: () => this.#handleClick(),
     });
+    this.#button.classList.add("save-btn");
 
     // 状態は保存アイコンの色とドットが持つが、**色もドットも読み上げられない**。
     // 支援技術へは文字で伝える (画面から消すのは見た目の話で、これごと畳むと
@@ -176,6 +187,9 @@ export class SavePanel {
     this.#state = state;
     // 見た目 (色とドット) は CSS が属性から決める。E2E も意匠ではなくこちらを見る。
     this.#button.dataset.saveStatus = state.status;
+    // **Gist に載っているかどうかは status とは別の軸** (#87 の段階 4)。保存済みでも
+    // 切り離せば載っていない状態になるし、未保存の変更があっても前の版は載っている。
+    this.#button.dataset.gist = state.gist === null ? "none" : "present";
     // 名前は「保存」のまま動かさない。状態は `aria-describedby` の先が持つ。
     this.#status.textContent = describe(state);
     this.#button.disabled = state.status === "saving";

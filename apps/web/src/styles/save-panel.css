@@ -4,35 +4,73 @@
  * パネルは save-panel.ts が組み立てるので、Astro のスコープ付き CSS は届かない
  * (account-panel.css と同じ事情)。置き場所はページ側が決め、ここは中身だけを持つ。
  *
- * 平常時はスケッチの上に重なる操作列の一員として控えめに。読ませる面である
- * ダイアログの意匠は dialog.css (取り込みと共通)。
+ * 置き場は画面上部中央、作品の名前の右 (#87 の段階 4)。**何という作品が、どこに
+ * 保存されているのか**を一度に読ませる。読ませる面であるダイアログの意匠は
+ * dialog.css (取り込みと共通)。
  */
 
 .save-panel {
   display: flex;
-  gap: var(--toolbar-gap);
   align-items: center;
 }
 
 /*
- * 保存の状態 (#41 の 6)。
+ * 保存の状態 (#41 の 6 / #87 の段階 4)。
  *
- * 見た目は保存アイコンそのものが持つ。色の語彙は console-panel.css / toast.css と
- * 揃える (緑 = うまくいった / 橙 = 気に留めるもの / 赤 = 失敗)。
+ * 絵は GitHub のマーク = 保存先そのもの。読み方は 2 軸で、
+ * **色が「Gist に載っているか」、ドットが「手元に送っていない変更があるか」**。
+ *
+ * 色の語彙は console-panel.css / toast.css と揃える
+ * (緑 = うまくいった / 橙 = 気に留めるもの / 赤 = 失敗)。
  */
 
-/* 保存済みで、その後の変更が無い。 */
-#save[data-save-status="saved"] {
-  color: rgb(80 250 123 / 0.5);
+.save-btn {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
 }
 
-#save[data-save-status="saved"]:hover,
-#save[data-save-status="saved"]:focus-visible {
-  color: rgb(80 250 123 / 0.85);
+.save-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
-/* 保存できなかった。**次の保存まで消えない**ので、平常時から読める濃さで出す。 */
-#save[data-save-status="error"] {
+/*
+ * まだ Gist に載っていない (既定)。
+ *
+ * 押せることは分かるが、載っている状態とは明らかに違う濃さにする。**灰のままで
+ * 目立たせない** — 保存していないことを咎める表示ではなく、これから押す場所。
+ */
+#save {
+  color: rgb(255 255 255 / 0.35);
+}
+
+#save:hover,
+#save:focus-visible {
+  background: rgb(255 255 255 / 0.15);
+  color: rgb(255 255 255 / 0.85);
+}
+
+/*
+ * Gist に載っている。
+ *
+ * 右上にあった頃より濃くする (不透明度 0.5 → 0.8)。中央は視線が集まる場所なので
+ * 薄いと「灰なのか緑なのか」を確かめる操作が要った。
+ */
+#save[data-gist="present"] {
+  color: rgb(80 250 123 / 0.8);
+}
+
+#save[data-gist="present"]:hover,
+#save[data-gist="present"]:focus-visible {
+  background: rgb(80 250 123 / 0.15);
+  color: rgb(80 250 123 / 1);
+}
+
+/* 保存できなかった。**次の保存まで消えない**ので、Gist の有無より前に出す。 */
+#save[data-save-status="error"],
+#save[data-save-status="error"][data-gist="present"] {
   color: #ff8095;
 }
 
@@ -43,21 +81,43 @@
 }
 
 /*
+ * 送っている最中。
+ *
+ * 押せない間 (`disabled`) に何も起きていないように見えると、もう一度押そうとする。
+ * 明滅は canvastage の `pulse` と同じ (モーション低減は editor-chrome.css が
+ * 一括で止める)。
+ */
+#save[data-save-status="saving"] {
+  animation: save-pulse 1s ease-in-out infinite;
+}
+
+@keyframes save-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/*
  * 未保存の変更があることを示すドット。
  *
  * 文字で「未保存の変更があります」と出すと、書いている間ずっと出たままになって
  * 読み流される。押せば消えるものなので、押す先のボタンに小さく付ける
  * (実行ボタンの青いドットと同じ考え方 — #41 の 3)。
+ *
+ * **色は変えない。** 色は「Gist に載っているか」を言う軸で、ドットは「手元に
+ * 送っていない変更があるか」を言う軸。載っている作品を書き換えた状態は
+ * 緑 + 橙のドットになる。
  */
-#save[data-save-status="dirty"] {
-  position: relative;
-}
-
 #save[data-save-status="dirty"]::after {
   content: "";
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -1px;
+  right: -1px;
   width: 6px;
   height: 6px;
   border-radius: 50%;

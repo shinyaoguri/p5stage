@@ -136,21 +136,26 @@ test.describe("保存から閲覧まで", () => {
   test("保存の状態は保存アイコン自身が持つ", async ({ page }) => {
     await signedInEditor(page);
 
-    // まだ一度も保存していない。
+    // まだ一度も保存していない = Gist にも載っていない (灰)。
     await expect(saveButton(page)).toHaveAttribute(
       "data-save-status",
       "unsaved"
     );
+    await expect(saveButton(page)).toHaveAttribute("data-gist", "none");
 
     await saveNewSketch(page, "状態の見え方", "unlisted");
-    // 保存できた = 緑 (#41 の 6)。
+    // 保存できた = 緑 (#41 の 6)。載った先は自分の Gist (#87 の段階 4)。
     await expect(saveButton(page)).toHaveAttribute("data-save-status", "saved");
+    await expect(saveButton(page)).toHaveAttribute("data-gist", "present");
 
     await typeIntoEditor(page, sketchCode("E2E_DIRTY"));
 
     // 書き換えたら未保存の変更 = 橙のドット。文字で出していた頃と違い、書いて
     // いる間ずっと同じ場所に出続けるものではない。
     await expect(saveButton(page)).toHaveAttribute("data-save-status", "dirty");
+    // **色とドットは別の軸**。手元に送っていない変更があっても、前の版は
+    // Gist に載ったまま (緑 + 橙のドット)。
+    await expect(saveButton(page)).toHaveAttribute("data-gist", "present");
     // **色もドットも読み上げられない**ので、文字は支援技術向けに残してある。
     await expect(saveStatus(page)).toHaveText("未保存の変更があります");
     // ただし**名前は「保存」のまま**動かさない。名前は押すと何が起きるかで、

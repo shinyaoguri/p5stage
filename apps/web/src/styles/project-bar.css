@@ -51,6 +51,14 @@
   background: #6bb3ff;
 }
 
+/* 保存と作品メニューの置き場 (#87 の段階 3-4)。中身の意匠はそれぞれの CSS
+   (save-panel.css / menu.css) が持ち、ここは並びだけを受け持つ。 */
+.project-bar-save,
+.project-bar-menu {
+  display: flex;
+  align-items: center;
+}
+
 /*
  * 名前。下線だけの控えめな入力欄。
  *
