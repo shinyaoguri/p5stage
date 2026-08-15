@@ -68,14 +68,18 @@ try {
             残る文字は 2 種類だけで、どちらも常時は出ない — ホバーの文面と、
             支援技術にだけ渡す状態 (色とドットは読み上げられないため)。
 
-            **常時出るのは全画面とアカウントの 2 つだけ** (#87 の段階 5)。設定は
-            アカウントメニューへ畳んだ。ここは投影されている画面の隅なので、
+            **常時出るのは保存・全画面・アカウントの 3 つ**。設定はアカウント
+            メニューへ畳んだ (#87 の段階 5)。ここは投影されている画面の隅なので、
             残すのは「今すぐ押す口」に限る。 */}
         <div class="chrome">
           {/* 直すまで続く条件。無い間は何も出ない (#41 の 6)。 */}
           <div id="warning-controls" />
           {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
           <div id="draft-controls" />
+          {/* 保存 (GitHub マーク)。**押す口は右上に揃える** — 中央は作品そのもの
+              (実行・名前・作品メニュー) の場所で、保存はそこに置くと名前の一部の
+              ように読める。 */}
+          <div id="save-controls" />
           {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
           <div id="fullscreen-controls" />
           <div id="account" />
@@ -161,6 +165,7 @@ try {
   const consoleHost = document.getElementById("console");
   const warningHost = document.getElementById("warning-controls");
   const draftHost = document.getElementById("draft-controls");
+  const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const tagsHost = document.getElementById("tags-controls");
   const assetsHost = document.getElementById("assets");
@@ -188,6 +193,7 @@ try {
       !consoleHost ||
       !warningHost ||
       !draftHost ||
+      !saveHost ||
       !adoptHost ||
       !tagsHost ||
       !assetsHost ||
@@ -410,9 +416,10 @@ try {
     });
     tagsPanel.setTags(opened?.tags ?? []);
 
-    // 保存は中央 (作品の名前の右)。何という作品が、どこに保存されているのかを
-    // 一度に読ませる (#87 の段階 4)。
-    const savePanel = new SavePanel(projectBar.saveHost, {
+    // 保存は右上の操作列。**押す口はそちらへ揃える** — 中央は作品そのもの
+    // (実行・名前・作品メニュー) の場所で、そこに混ぜると名前の一部のように読める。
+    // 何という作品を保存したかは、押す前から名前が見えていれば足りる。
+    const savePanel = new SavePanel(saveHost, {
       // 名前は画面上部の入力欄が持つ。初回の保存はそれと公開範囲を束ねて送る。
       onSave: (visibility) =>
         void saver.saveNow(
@@ -812,10 +819,9 @@ try {
     /* エディタの左端と同じ縦線に揃える (#41 の 1-1)。 */
     left: max(0.5rem, var(--editor-padding));
     /* 右上の操作列に譲る幅。左の余白ぶんを差し引き、揃えた縦線を保ったまま
-       操作列と重ならないところで止める。**操作列は 2 つになった** (#87 の段階 5 で
-       設定をメニューへ畳んだ) ので、条件付きの 2 つ (警告・下書きの印) が出ても
-       11rem に収まる。 */
-    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 11rem);
+       操作列と重ならないところで止める。常時出るのは 3 つ (保存・全画面・
+       アカウント) で、条件付きの 2 つ (警告・下書きの印) が出ても 13rem に収まる。 */
+    max-width: calc(100% - max(0.5rem, var(--editor-padding)) - 13rem);
   }
 
   /* 中身が無いことがある器は、場所ごと消える。器そのものが箱を作らないようにして、

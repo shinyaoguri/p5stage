@@ -192,7 +192,7 @@ export function saveStatus(page: Page): Locator {
 }
 
 /**
- * 保存ボタン。画面上部中央、作品の名前の右にある (#87 の段階 4)。
+ * 保存ボタン。**右上の操作列**にある (押す口はそちらへ揃えてある)。
  *
  * 状態は 2 つの属性から読む — `data-gist` が「Gist に載っているか」、
  * `data-save-status` が「手元に送っていない変更があるか / 送っている最中か」。
@@ -505,9 +505,8 @@ export async function openTags(page: Page): Promise<void> {
 /**
  * アセットパネルを閉じる。
  *
- * 面は右端から出るので、**開いたままでも中央の保存は押せる** (#87 の段階 4 で
- * 保存が中央へ移り、操作列との重なりは無くなった)。それでも閉じる口が要るのは、
- * 開く口 (`#assets-toggle`) が面の下に隠れるため — 閉じるのは面が持つ × から。
+ * 面は右端から出るので、**開いている間は右上の操作列が隠れる**。開く口
+ * (`#assets-toggle`) も面の下になるので、閉じるのは面が持つ × から。
  */
 export async function closeAssets(page: Page): Promise<void> {
   await assetsDrawer(page).locator(".assets-panel-close").click();
