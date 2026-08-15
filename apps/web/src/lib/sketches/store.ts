@@ -562,3 +562,124 @@ export async function markGistDeleted(
     .bind(now, now, id)
     .run();
 }
+
+/** 作品に付いているタグ (Phase 5)。作者が並べた順に返す。 */
+export async function listTagsForSketch(
+  db: D1Database,
+  sketchId: string
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT tag FROM sketch_tags WHERE sketch_id = ? ORDER BY position"
+    )
+    .bind(sketchId)
+    .all<{ tag: string }>();
+
+  return results.map((row) => row.tag);
+}
+
+/**
+ * タグを付け替える (Phase 5)。持ち主でなければ何も起きず false。
+ *
+ * **差分ではなく全置換。** タグは 5 個までの短い並びで、順番も持ち物のうちなので、
+ * 「どれを消してどれを足すか」を送らせるより送り直す方が食い違いが起きない。
+ *
+ * 1 度の `batch()` にまとめる (D1 の batch はトランザクション)。**途中で落ちると
+ * タグが消えただけの状態が残る**のを避けるため、消す側と足す側を分けない。
+ * 所有の確認も SQL の中でやる — 引いてから比べる形にすると、比べ忘れた口が 1 つでも
+ * あれば他人の作品を書き換えられる (この表は `owner_id` を持たないので、
+ * 毎回 `sketches` を経由して絞る)。
+ *
+ * `updated_at` は進める。タグ付けは作者が作品に手を入れた出来事で、一覧の並びが
+ * それで動くのは筋が通っている (絵を撮り直しただけの `setThumbnailRevision` とは違う)。
+ */
+export async function replaceTags(
+  db: D1Database,
+  sketchId: string,
+  ownerId: number,
+  tags: readonly string[],
+  now: number
+): Promise<boolean> {
+  const results = await db.batch([
+    // 1 文目の changes が「持ち主だったか」を兼ねる。タグが 0 個のときも
+    // 答えが出るよう、数を数えるのは DELETE ではなくこちら。
+    db
+      .prepare(
+        "UPDATE sketches SET updated_at = ? WHERE id = ? AND owner_id = ?"
+      )
+      .bind(now, sketchId, ownerId),
+    db
+      .prepare(
+        `DELETE FROM sketch_tags
+          WHERE sketch_id IN (SELECT id FROM sketches WHERE id = ? AND owner_id = ?)`
+      )
+      .bind(sketchId, ownerId),
+    ...tags.map((tag, index) =>
+      db
+        .prepare(
+          `INSERT INTO sketch_tags (sketch_id, tag, position)
+             SELECT id, ?, ? FROM sketches WHERE id = ? AND owner_id = ?`
+        )
+        .bind(tag, index, sketchId, ownerId)
+    ),
+  ]);
+
+  return (results[0]?.meta.changes ?? 0) > 0;
+}
+
+/**
+ * 親のタグを派生へ引き継ぐ (Phase 4-3 のフォーク)。
+ *
+ * 派生は親の主題を引き継いでいるのが普通で、付け直しから始めさせる理由が無い。
+ * 要らなければ作者が外せる。呼び出すのは作品を作った直後なので、所有の確認は
+ * 呼び出し側が済ませている。
+ */
+export async function copyTags(
+  db: D1Database,
+  fromSketchId: string,
+  toSketchId: string
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO sketch_tags (sketch_id, tag, position)
+         SELECT ?, tag, position FROM sketch_tags WHERE sketch_id = ?`
+    )
+    .bind(toSketchId, fromSketchId)
+    .run();
+}
+
+/**
+ * そのタグが付いた公開作品を新しい順に (Phase 5 のタグ別一覧)。
+ *
+ * 選定は `listPublicSketches` と同条件 (公開・書き出し済み・tombstone でない) に
+ * タグの結合が加わるだけ。**限定公開はタグを持てるが一覧には出ない** — 出せば
+ * 「URL を知る人だけ」の前提が崩れる。
+ */
+export async function listPublicSketchesByTag(
+  db: D1Database,
+  tag: string,
+  limit: number
+): Promise<SketchWithOwner[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${SKETCH_COLUMNS},
+              u.login AS owner_login, u.avatar_url AS owner_avatar_url
+         FROM sketch_tags t
+         JOIN sketches s ON s.id = t.sketch_id
+         JOIN users u ON u.id = s.owner_id
+        WHERE t.tag = ?
+          AND s.visibility = 'public'
+          AND s.current_revision IS NOT NULL
+          AND s.gist_deleted_at IS NULL
+        ORDER BY s.updated_at DESC
+        LIMIT ?`
+    )
+    .bind(tag, limit)
+    .all<SketchWithOwnerRow>();
+
+  return results.map((row) => ({
+    ...toSketch(row),
+    ownerLogin: row.owner_login,
+    ownerAvatarUrl: row.owner_avatar_url,
+  }));
+}

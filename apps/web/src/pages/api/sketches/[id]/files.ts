@@ -50,6 +50,7 @@ import type { Sketch } from "../../../../lib/sketches/sketch";
 import {
   attachGist,
   getSketch,
+  listTagsForSketch,
   touchSketch,
 } from "../../../../lib/sketches/store";
 
@@ -282,9 +283,13 @@ export const GET: APIRoute = async ({ request, params }) => {
   const sketch = await ownedSketch(id, auth.session.user.id);
   if (sketch === null) return notFound();
 
+  // タグは別の表なので作品と一緒には出てこない (Phase 5)。エディタは開いた時点の
+  // タグを入力欄の初期値にするので、中身と一緒に渡して往復を増やさない。
+  const tags = await listTagsForSketch(env.DB, id);
+
   // 器だけ作って一度も保存していない状態。エラーではない。
   if (sketch.gistId === null) {
-    return noStore({ sketch, gist: null, files: null, truncated: [] });
+    return noStore({ sketch, tags, gist: null, files: null, truncated: [] });
   }
 
   try {
@@ -295,6 +300,7 @@ export const GET: APIRoute = async ({ request, params }) => {
     );
     return noStore({
       sketch,
+      tags,
       gist: { id: content.id, url: content.url, revision: content.revision },
       files: content.files,
       // 大きすぎて取れなかったファイルは名前だけ返す。黙って欠けた状態で

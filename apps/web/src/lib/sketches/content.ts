@@ -28,6 +28,16 @@ export function sketchPath(ownerLogin: string, sketchId: string): string {
 }
 
 /**
+ * タグ別一覧の URL (Phase 5)。
+ *
+ * `/t/` はサムネイル配信が使っているので `/tags/` にする。値は正規化済みの
+ * タグ (`normalizeTag`) を渡す前提で、日本語のタグは percent-encoded になる。
+ */
+export function tagPath(tag: string): string {
+  return `/tags/${encodeURIComponent(tag)}`;
+}
+
+/**
  * login に依存しない恒久リンク。常に正典 URL へ 302 する。
  *
  * 「持ち主が改名しても確実に生きている URL」が要る場面 (外部に貼る・引用する) 用。

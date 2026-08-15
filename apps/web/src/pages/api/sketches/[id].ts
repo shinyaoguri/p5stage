@@ -20,13 +20,26 @@ import {
   parseSketchPatch,
   SketchInputError,
 } from "../../../lib/sketches/sketch";
-import { getSketch, updateSketch } from "../../../lib/sketches/store";
+import {
+  getSketch,
+  listTagsForSketch,
+  replaceTags,
+  updateSketch,
+} from "../../../lib/sketches/store";
+import { parseTags } from "../../../lib/sketches/tags";
 
 export const prerender = false;
 
 /** 見つからない。**他人のものだった場合もこれを返す** (存在を漏らさない)。 */
 function notFound(): Response {
   return jsonError(404, "not_found", "作品が見つかりません");
+}
+
+/** `sketches` の列にあたる項目。タグはここに入らない (別の表 — Phase 5)。 */
+const COLUMN_FIELDS = ["title", "description", "visibility"] as const;
+
+function hasKey(body: unknown, key: string): boolean {
+  return typeof body === "object" && body !== null && key in body;
 }
 
 export const GET: APIRoute = async ({ params }) => {
@@ -37,8 +50,12 @@ export const GET: APIRoute = async ({ params }) => {
   const sketch = await getSketch(env.DB, id);
   if (sketch === null) return notFound();
 
+  // タグは別の表なので作品と一緒には出てこない (Phase 5)。エディタが開いた作品に
+  // 今どのタグが付いているかを知る口はここ。
+  const tags = await listTagsForSketch(env.DB, id);
+
   return Response.json(
-    { sketch },
+    { sketch, tags },
     {
       // 限定公開の URL が共有キャッシュに載ると、ID を知らない相手にも届きうる。
       // この口は公開範囲を見ずに答えるので、まとめて載せない。エッジに載せるのは
@@ -62,13 +79,23 @@ export const PATCH: APIRoute = async ({ request, url, params }) => {
   if ("response" in parsed) return parsed.response;
 
   try {
-    const patch = parseSketchPatch(parsed.body);
+    // タグは別の表なので `SketchPatch` には混ぜず、ここで分けて読む (Phase 5)。
+    // **タグだけを送る PATCH も通す** — エディタのタグ編集はそれしか送らない。
+    const tags = hasKey(parsed.body, "tags")
+      ? parseTags((parsed.body as Record<string, unknown>).tags)
+      : null;
+    const patch = COLUMN_FIELDS.some((field) => hasKey(parsed.body, field))
+      ? parseSketchPatch(parsed.body)
+      : null;
+    if (patch === null && tags === null) {
+      throw new SketchInputError("変更する項目がありません");
+    }
 
     // 公開範囲は Gist を作った時点で固定される。GitHub は後から public / secret を
     // 変えられないので、D1 だけ書き換えると「限定公開にしたのに Gist は公開のまま」
     // という嘘になる (ADR 0010)。所有の確認は下の UPDATE が SQL でやるので、
     // ここで引くのは**この制約を説明するため**だけ。
-    if (patch.visibility !== undefined) {
+    if (patch?.visibility !== undefined) {
       const current = await getSketch(env.DB, id);
       if (
         current !== null &&
@@ -84,18 +111,37 @@ export const PATCH: APIRoute = async ({ request, url, params }) => {
       }
     }
 
-    const sketch = await updateSketch(
-      env.DB,
-      id,
-      auth.session.user.id,
-      patch,
-      Date.now()
-    );
-    // 持ち主でなければ null。「無い」と同じ応答にして、存在を確かめる手掛かりを与えない。
+    // 持ち主でなければどちらも空振りする。「無い」と同じ応答にして、存在を
+    // 確かめる手掛かりを与えない。
+    const now = Date.now();
+    if (patch !== null) {
+      const updated = await updateSketch(
+        env.DB,
+        id,
+        auth.session.user.id,
+        patch,
+        now
+      );
+      if (updated === null) return notFound();
+    }
+    if (tags !== null) {
+      const owned = await replaceTags(
+        env.DB,
+        id,
+        auth.session.user.id,
+        tags,
+        now
+      );
+      if (!owned) return notFound();
+    }
+
+    // 書いた後の姿を引き直す。タグの付け替えも `updated_at` を進めるので、
+    // 更新の戻り値をそのまま返すと 1 手前の作品を返してしまう。
+    const sketch = await getSketch(env.DB, id);
     if (sketch === null) return notFound();
 
     return Response.json(
-      { sketch },
+      { sketch, tags: tags ?? (await listTagsForSketch(env.DB, id)) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

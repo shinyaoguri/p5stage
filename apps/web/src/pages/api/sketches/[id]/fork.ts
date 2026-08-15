@@ -53,6 +53,7 @@ import { isSketchId } from "../../../../lib/sketches/id";
 import { publishRevision } from "../../../../lib/sketches/publish";
 import type { Sketch } from "../../../../lib/sketches/sketch";
 import {
+  copyTags,
   createSketchFromGist,
   getSketch,
   getSketchByGistId,
@@ -248,6 +249,10 @@ export const POST: APIRoute = async ({ params, request, url }) => {
     }
     throw error;
   }
+
+  // 主題は派生にも引き継ぐ (Phase 5)。要らなければ作者が外せる。失敗しても
+  // フォーク自体は成立しているので、ここで作品を巻き戻さない。
+  await copyTags(env.DB, parent.id, sketch.id);
 
   return await respond(sketch, content, 201);
 };

@@ -63,6 +63,8 @@ try {
           <div id="new-controls" />
           {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
           <div id="adopt-controls" />
+          {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
+          <div id="tags-controls" />
           {/* 作品が使うアセット (Phase 3-4)。 */}
           <div id="assets" />
           <div id="settings" />
@@ -112,7 +114,9 @@ try {
   import { ProjectBar } from "../scripts/editor/project-bar";
   import { generateProjectName } from "../scripts/sketch/project-name";
   import { SavePanel } from "../scripts/sketch/save-panel";
+  import { saveSketchTags } from "../scripts/sketch/save-tags";
   import { SketchSaver } from "../scripts/sketch/sketch-saver";
+  import { TagsPanel } from "../scripts/sketch/tags-panel";
   import { ThumbnailUploader } from "../scripts/sketch/thumbnail-uploader";
   import { TitleSaver } from "../scripts/sketch/title-saver";
   import { applyCssVariables } from "../scripts/settings/css-variables";
@@ -140,6 +144,7 @@ try {
   const draftHost = document.getElementById("draft-controls");
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
+  const tagsHost = document.getElementById("tags-controls");
   const newHost = document.getElementById("new-controls");
   const assetsHost = document.getElementById("assets");
   const projectBarHost = document.getElementById("project-bar");
@@ -157,6 +162,7 @@ try {
       !draftHost ||
       !saveHost ||
       !adoptHost ||
+      !tagsHost ||
       !assetsHost ||
       !projectBarHost
     ) {
@@ -354,6 +360,21 @@ try {
       onError: (message) => showToast(message, "error"),
     });
 
+    /**
+     * 作品の主題 (Phase 5)。付けたタグは `/tags/<tag>` に並ぶ。
+     *
+     * 送り先は D1 だけで、Gist には持たせない (発見のための情報は p5stage のもの —
+     * ADR 0002)。書き先は器なので、**保存するまでは押せない**。
+     */
+    const tagsPanel = new TagsPanel(tagsHost, {
+      onSave: async (tags) => {
+        const current = saver.state.sketchId;
+        if (current === null) return "タグは保存した作品に付けられます";
+        return await saveSketchTags(current, tags);
+      },
+    });
+    tagsPanel.setTags(opened?.tags ?? []);
+
     const savePanel = new SavePanel(saveHost, {
       // 名前は画面上部の入力欄が持つ。初回の保存はそれと公開範囲を束ねて送る。
       onSave: (visibility) =>
@@ -368,6 +389,9 @@ try {
       getFiles: () => editor.getFiles(),
       onState: (state) => {
         savePanel.render(state);
+        // タグの書き先は器 (D1 の作品) で、Gist の有無とは別。器ができた時点で
+        // 付けられる。
+        tagsPanel.setSaved(state.sketchId !== null);
         // 器ができた時点で、その名前は正本に載っている。開き直しの往復を省く。
         if (state.sketchId !== null && state.status === "saved") {
           titleSaver.markSent(state.sketchId, projectBar.name);
@@ -448,6 +472,8 @@ try {
         // もう無い。
         draftIndicator.setSavedAt(null);
         saver.adopt(adopted.sketchId, adopted.gist);
+        // 取り込みでできるのは新しい作品なので、前の作品のタグを引きずらせない。
+        tagsPanel.setTags([]);
         // 名前は Gist の description に入っていたもの。取り込んだ側で作り直すと、
         // 同じ作品が別の名前で並ぶ。読めなかったときだけ新しく振る。
         const adoptedName = adopted.title ?? generateProjectName();
@@ -553,6 +579,8 @@ try {
           // 開いていた作品から切り離す。ここを忘れると、新しく書き始めた内容が
           // 前の作品の Gist を上書きする。
           saver.detach();
+          // タグも前の作品のもの。次に保存してできる作品には引き継がない。
+          tagsPanel.setTags([]);
           clearSketchIdInUrl();
           showToast("下書きを破棄しました", "info");
           run();
