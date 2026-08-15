@@ -41,6 +41,20 @@ export function sketchRevisionPath(
   return `${sketchPath(ownerLogin, sketchId)}?rev=${encodeURIComponent(revision)}`;
 }
 
+/** エディタの URL に作品 ID を載せるときのキー。 */
+export const SKETCH_PARAM = "sketch";
+
+/**
+ * その作品をエディタで開く URL (#43)。
+ *
+ * 作品ページから編集へ戻る道はここまで無く、`/edit?sketch=<id>` を手で組み立てる
+ * しかなかった。綴りを 2 か所に持たせないよう、エディタ側の読み書き
+ * (`scripts/sketch/open-sketch.ts`) も同じキーを使う。
+ */
+export function editorPath(sketchId: string): string {
+  return `/edit?${SKETCH_PARAM}=${encodeURIComponent(sketchId)}`;
+}
+
 /**
  * URL の login が正典どおりか。
  *

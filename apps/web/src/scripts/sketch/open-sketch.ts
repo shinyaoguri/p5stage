@@ -8,11 +8,9 @@
 
 import { DEFAULT_SKETCH_FILES, type SketchFiles } from "@p5stage/shared";
 
+import { SKETCH_PARAM } from "../../lib/sketches/content";
 import type { SketchDraft } from "../draft/draft";
 import type { SavedGist } from "./sketch-saver";
-
-/** URL に作品 ID を載せるときのキー。 */
-const SKETCH_PARAM = "sketch";
 
 /** 開き直すときに最初に見せるファイル。 */
 const PREFERRED_ACTIVE_FILE = "sketch.js";
