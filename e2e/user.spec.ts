@@ -36,6 +36,14 @@ test.describe("ユーザーページ", () => {
     await expect(page.locator("h1")).toHaveText(PUBLIC_TITLE);
   });
 
+  test("カードに作者名を繰り返さない", async ({ page }) => {
+    await page.goto(`/@${AUTHOR}`);
+
+    // 誰の作品かは見出しが言っている。全行に同じ名前を並べない。
+    await expect(page.locator("h1")).toHaveText(AUTHOR);
+    await expect(page.locator(".card-author")).toHaveCount(0);
+  });
+
   test("作品ページの作者リンクから辿り着ける", async ({ page }) => {
     await page.goto(`/@${AUTHOR}/${PUBLIC_ID}`);
 

@@ -8,9 +8,16 @@ import type { SketchCard } from "../lib/sketches/card";
 
 interface Props {
   cards: readonly SketchCard[];
+  /**
+   * カードに作者を出すか。
+   *
+   * 作者のページでは全行が同じ名前になるので出さない。誰の作品かはページの
+   * 見出しが言っている。
+   */
+  showAuthor?: boolean;
 }
 
-const { cards } = Astro.props;
+const { cards, showAuthor = true } = Astro.props;
 
 const formatTime = (value: number): string =>
   new Date(value).toLocaleString("ja-JP", {
@@ -34,19 +41,21 @@ const formatTime = (value: number): string =>
           )}
           <h3 class="card-title">{card.title}</h3>
           <p class="card-meta">
-            <span class="card-author">
-              {card.ownerAvatarUrl !== null && (
-                <img
-                  class="card-avatar"
-                  src={card.ownerAvatarUrl}
-                  alt=""
-                  width="20"
-                  height="20"
-                  loading="lazy"
-                />
-              )}
-              {card.ownerLogin}
-            </span>
+            {showAuthor && (
+              <span class="card-author">
+                {card.ownerAvatarUrl !== null && (
+                  <img
+                    class="card-avatar"
+                    src={card.ownerAvatarUrl}
+                    alt=""
+                    width="20"
+                    height="20"
+                    loading="lazy"
+                  />
+                )}
+                {card.ownerLogin}
+              </span>
+            )}
             <time datetime={new Date(card.updatedAt).toISOString()}>
               {formatTime(card.updatedAt)}
             </time>
