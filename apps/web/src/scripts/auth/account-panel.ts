@@ -1,20 +1,27 @@
 /**
- * ログインの導線 (要件 3.6)。
+ * ログインの導線とアカウントメニュー (要件 3.6 / #56 / #87 の段階 2)。
  *
  * `gist` scope は**ユーザーの全 Gist への書き込み権限**になる。認可画面へ送り出す前に
  * その意味と、本サービスが何を触るかを必ず見せる義務があるので、ボタンを押すと
  * まず説明が出て、そこから改めて GitHub へ進む形にする (押した瞬間に飛ばさない)。
  *
  * トークンはブラウザに来ない (ADR 0009)。ここが知るのは「誰としてログインしているか」だけ。
+ *
+ * **メニューはログイン前から開く** (#87)。以前は未ログインだとボタン 1 つ
+ * (「GitHub でログイン」) しか無く、そこに何かを畳む余地が無かった。ログインの
+ * 有無で操作列のアイコンが増減すると、押す場所も覚え直しになる。**器は常に同じ**に
+ * して、中身だけが入れ替わる形にする。
+ *
+ * メニューには**アカウント以外の項目も入る** (新しいスケッチ・Gist から開く)。
+ * どちらも「これから何を書き始めるか」の操作で、今開いている作品には属さない
+ * (作品に属するものは中央の作品メニューが持つ)。足すのは持ち主 (edit.astro) の
+ * 仕事で、ここは置き場と並び順だけを決める。
  */
 
 import "../../styles/account-panel.css";
 
-import {
-  makeToolbarButton,
-  setToolbarButtonIcon,
-  setToolbarButtonLabel,
-} from "../ui/toolbar-button";
+import { DropdownMenu, makeMenuItem, makeMenuSeparator } from "../ui/menu";
+import { makeToolbarButton, setToolbarButtonIcon } from "../ui/toolbar-button";
 
 /** 認可の結果を伝えるクエリ (`callback.ts` が付ける)。 */
 const AUTH_RESULT_PARAM = "auth";
@@ -31,30 +38,91 @@ interface Viewer {
   readonly avatarUrl: string | null;
 }
 
-/** ログイン済みのときに出るアカウントメニューと、その開閉ボタン。 */
-interface AccountMenu {
-  readonly toggle: HTMLButtonElement;
-  readonly body: HTMLElement;
-  /** 開閉ボタンの名前に添える login 名 (誰のメニューかを名前で言うため)。 */
-  readonly login: string;
-}
-
 export class AccountPanel {
   readonly #host: HTMLElement;
+  readonly #toggle: HTMLButtonElement;
+  readonly #menu: DropdownMenu;
+  readonly #consent: HTMLDialogElement;
+  /** 誰としてログインしているか。アイコンでは言えないので文字で持つ。 */
+  readonly #who: HTMLParagraphElement;
+  readonly #whoSeparator: HTMLElement;
+  /** 持ち主が足す項目の置き場 (作品を始める操作)。 */
+  readonly #extras: HTMLElement;
+  readonly #extrasSeparator: HTMLElement;
+  readonly #loginItem: HTMLButtonElement;
+  readonly #logoutItem: HTMLButtonElement;
   #viewer: Viewer | null = null;
-  /** アカウントメニューを開いているか。 */
-  #menuOpen = false;
-  /** いま出ているメニュー (未ログインでは null)。描き直すたびに持ち直す。 */
-  #menu: AccountMenu | null = null;
 
   constructor(host: HTMLElement) {
     this.#host = host;
     this.#host.classList.add("account-panel");
 
-    // 閉じ方は**ここで 1 度だけ**張る。`#render()` は中身を作り直すので、
-    // 描画のたびに張ると同じ処理が積み上がる。
-    this.#bindDismissals();
+    // アバターが読めないとき・未ログインのときの姿。ログインすれば画像に替わる。
+    this.#toggle = makeToolbarButton({
+      id: "account-menu-toggle",
+      icon: "person",
+      label: "アカウントメニューを開く",
+    });
+    this.#toggle.classList.add("account-menu-toggle");
 
+    this.#consent = this.#buildConsentDialog();
+
+    this.#who = document.createElement("p");
+    this.#who.className = "menu-note";
+    this.#who.id = "account-login-name";
+    this.#whoSeparator = makeMenuSeparator();
+
+    this.#extras = document.createElement("div");
+    this.#extras.className = "menu-group";
+    this.#extrasSeparator = makeMenuSeparator();
+
+    this.#loginItem = makeMenuItem({
+      id: "login",
+      icon: "github",
+      label: "GitHub でログイン",
+      // 押した瞬間には飛ばさない。何を許すことになるかを先に読ませる (要件 3.6)。
+      onClick: () => this.#consent.showModal(),
+    });
+
+    this.#logoutItem = makeMenuItem({
+      id: "logout",
+      icon: "logout",
+      label: "ログアウト",
+      onClick: () => void this.#logout(),
+    });
+
+    this.#menu = new DropdownMenu(this.#host, this.#toggle, {
+      id: "account-menu",
+      label: "アカウント",
+      labelFor: (open) => this.#toggleLabel(open),
+    });
+
+    // 並びは「誰か → これから何を書き始めるか → セッション」。上から下へ、
+    // 見るだけのものから戻せない操作へ向かう。
+    for (const node of [
+      this.#who,
+      this.#whoSeparator,
+      this.#extras,
+      this.#extrasSeparator,
+      this.#loginItem,
+      this.#logoutItem,
+    ]) {
+      this.#menu.body.appendChild(node);
+    }
+    // ダイアログは面の外へ置く。メニューを閉じても開いたままでいる必要がある。
+    this.#host.appendChild(this.#consent);
+
+    this.#render();
+  }
+
+  /**
+   * メニューへ項目を足す (アカウントに属さないもの)。
+   *
+   * 足された項目は**ログイン状態が変わっても消えない**。ログインの有無で入れ替わる
+   * のは「誰か」の行とログイン / ログアウトだけで、作品を始める操作はどちらでも要る。
+   */
+  addItem(item: HTMLElement): void {
+    this.#extras.appendChild(item);
     this.#render();
   }
 
@@ -75,9 +143,9 @@ export class AccountPanel {
     /*
      * ログイン状態を引き終えたことを DOM に出す。
      *
-     * ここまでの間に描いてあるのは「まだ分からない」状態の姿で、引き終えると
-     * 描き直して**前の DOM は捨てられる**。押した先が入れ替わると操作が空振りする
-     * (#51 がまさにそれ)。押してよくなった時点が外から分かるようにしておく。
+     * 器と項目は使い回すようになったので、以前のように押した先が入れ替わって
+     * 空振りすることは無い (#51 の原因はそこだった)。それでも「ログインの導線が
+     * 出てよい状態か」は外から分からないので、印は残す。
      */
     this.#host.dataset.ready = "true";
   }
@@ -101,33 +169,51 @@ export class AccountPanel {
     return FAILURE_MESSAGES[result] ?? null;
   }
 
-  #render(): void {
-    // 中身ごと作り直すので、開いていたメニューはここで無くなる。状態も閉じた側へ戻す。
-    this.#menu = null;
-    this.#menuOpen = false;
-
-    this.#host.textContent = "";
-    this.#host.appendChild(
-      this.#viewer === null ? this.#renderSignedOut() : this.#renderSignedIn()
-    );
+  /** 開閉ボタンの名前。誰のメニューかは分かるときだけ添える。 */
+  #toggleLabel(open: boolean): string {
+    const who = this.#viewer === null ? "" : ` (${this.#viewer.login})`;
+    return open
+      ? `アカウントメニューを閉じる${who}`
+      : `アカウントメニューを開く${who}`;
   }
 
-  #renderSignedOut(): HTMLElement {
-    const wrapper = document.createElement("div");
+  #render(): void {
+    const viewer = this.#viewer;
 
-    const dialog = this.#buildConsentDialog();
+    // 絵はログインしていればアバター、していなければ人。
+    if (viewer?.avatarUrl != null) {
+      const avatar = document.createElement("img");
+      avatar.className = "account-avatar";
+      avatar.src = viewer.avatarUrl;
+      // 名前はボタンの `aria-label` が持つ。画像は装飾として外す。
+      avatar.alt = "";
+      avatar.width = 20;
+      avatar.height = 20;
+      // 読めなかったときに空のボタンにならないよう、人のアイコンへ戻す。
+      avatar.addEventListener("error", () => {
+        setToolbarButtonIcon(this.#toggle, "person");
+      });
+      this.#toggle.replaceChildren(avatar);
+    } else {
+      setToolbarButtonIcon(this.#toggle, "person");
+    }
 
-    const button = makeToolbarButton({
-      id: "login",
-      icon: "github",
-      label: "GitHub でログイン",
-      onClick: () => dialog.showModal(),
-    });
-    button.classList.add("account-login");
+    const label = this.#toggleLabel(this.#menu.isOpen);
+    this.#toggle.title = label;
+    this.#toggle.setAttribute("aria-label", label);
 
-    wrapper.appendChild(button);
-    wrapper.appendChild(dialog);
-    return wrapper;
+    // アイコンだけでは分からない「誰としてログインしているか」を文字で出す。
+    this.#who.textContent = viewer === null ? "" : `@${viewer.login}`;
+    this.#who.hidden = viewer === null;
+    this.#whoSeparator.hidden = viewer === null;
+
+    this.#loginItem.hidden = viewer !== null;
+    this.#logoutItem.hidden = viewer === null;
+
+    // 区切りは**間に何かがあるときだけ**。足された項目が 1 つも無ければ線だけが
+    // 残る。
+    this.#extras.hidden = this.#extras.childElementCount === 0;
+    this.#extrasSeparator.hidden = this.#extras.hidden;
   }
 
   /**
@@ -176,152 +262,6 @@ export class AccountPanel {
       dialog.appendChild(node);
     }
     return dialog;
-  }
-
-  /**
-   * ログイン済みの姿。
-   *
-   * **アバター 1 つに畳む** (#41)。login 名を文字で出していたが、操作列は他がすべて
-   * アイコンなので、そこだけ可変長の文字が入ると並びが崩れる。
-   *
-   * **アバターを押すのはメニューを開くだけ**にする (#56)。以前はこのボタン自身が
-   * ログアウトを兼ねていたが、アバターは押しても壊れない場所という期待があり、
-   * 確認も無くセッションが切れるのは事故になる。ログアウトはメニューの中の項目にし、
-   * 誰としてログインしているかもそこで文字として読めるようにする。
-   */
-  #renderSignedIn(): HTMLElement {
-    const viewer = this.#viewer;
-    const wrapper = document.createElement("div");
-    wrapper.className = "account-signed-in";
-    if (viewer === null) return wrapper;
-
-    const toggle = makeToolbarButton({
-      id: "account-menu-toggle",
-      // アバターが無いときの代わり。下で画像に差し替える。
-      icon: "person",
-      // 実際の名前は #applyMenuState() が開閉に合わせて入れ直す。
-      label: `アカウントメニューを開く (${viewer.login})`,
-      onClick: () => this.#toggleMenu(),
-    });
-    toggle.classList.add("account-menu-toggle");
-
-    if (viewer.avatarUrl !== null) {
-      const avatar = document.createElement("img");
-      avatar.className = "account-avatar";
-      avatar.src = viewer.avatarUrl;
-      // 名前はボタンの `aria-label` が持つ。画像は装飾として外す。
-      avatar.alt = "";
-      avatar.width = 20;
-      avatar.height = 20;
-      // 読めなかったときに空のボタンにならないよう、人のアイコンへ戻す。
-      avatar.addEventListener("error", () => {
-        setToolbarButtonIcon(toggle, "person");
-      });
-      toggle.replaceChildren(avatar);
-    }
-
-    const body = this.#buildMenu(viewer);
-    toggle.setAttribute("aria-controls", body.id);
-
-    this.#menu = { toggle, body, login: viewer.login };
-    this.#applyMenuState();
-
-    // メニューは開閉ボタンの直後に置く。Tab で開いた次に中身へ入れる並びになる。
-    for (const node of [toggle, body]) wrapper.appendChild(node);
-    return wrapper;
-  }
-
-  /**
-   * アカウントメニューの中身。
-   *
-   * 矢印キーで辿る `menu` ではなく、**開閉するだけの面**として作る (設定パネルと同じ)。
-   * 項目は Tab で辿れる普通のボタンで、`role="menu"` を名乗って矢印キーの期待だけ
-   * 生む、ということをしない。
-   */
-  #buildMenu(viewer: Viewer): HTMLElement {
-    const body = document.createElement("div");
-    body.className = "account-menu";
-    body.id = "account-menu";
-    body.setAttribute("role", "group");
-    body.setAttribute("aria-label", "アカウント");
-
-    // アイコンだけでは分からない「誰としてログインしているか」を、ここで文字にする。
-    const login = document.createElement("p");
-    login.className = "account-menu-login";
-    login.textContent = `@${viewer.login}`;
-
-    const logout = document.createElement("button");
-    logout.type = "button";
-    logout.id = "logout";
-    logout.className = "account-menu-item";
-    logout.textContent = "ログアウト";
-    logout.addEventListener("click", () => {
-      void this.#logout();
-    });
-
-    for (const node of [login, logout]) body.appendChild(node);
-    return body;
-  }
-
-  /**
-   * メニューの閉じ方。
-   *
-   * 開閉ボタンの押し直し以外に 2 つ用意する。ドロップダウンは「外を触れば消える」面
-   * として期待されるし、キーボードだけで使う人には**触る外側が無い**ので Escape と
-   * フォーカス外れの両方が要る。
-   */
-  #bindDismissals(): void {
-    document.addEventListener("pointerdown", (event) => {
-      if (!this.#menuOpen) return;
-      const target = event.target;
-      if (target instanceof Node && this.#host.contains(target)) return;
-      this.#closeMenu();
-    });
-
-    // パネルの中で Escape を押したら閉じてボタンへ戻る (settings-panel と同じ流儀)。
-    this.#host.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || !this.#menuOpen) return;
-      event.stopPropagation();
-      const toggle = this.#menu?.toggle;
-      this.#closeMenu();
-      toggle?.focus();
-    });
-
-    // Tab でメニューの外へ出たら閉じる (開いたまま置き去りにしない)。
-    this.#host.addEventListener("focusout", (event) => {
-      if (!this.#menuOpen) return;
-      const next = event.relatedTarget;
-      if (next instanceof Node && this.#host.contains(next)) return;
-      this.#closeMenu();
-    });
-  }
-
-  #toggleMenu(): void {
-    this.#menuOpen = !this.#menuOpen;
-    this.#applyMenuState();
-  }
-
-  #closeMenu(): void {
-    if (!this.#menuOpen) return;
-    this.#menuOpen = false;
-    this.#applyMenuState();
-  }
-
-  /** 開閉の状態を DOM へ映す。 */
-  #applyMenuState(): void {
-    const menu = this.#menu;
-    if (menu === null) return;
-
-    menu.body.hidden = !this.#menuOpen;
-    menu.toggle.setAttribute("aria-expanded", String(this.#menuOpen));
-    // 開いている間は押されたままに見せる (アイコンなので文字で示せない)。
-    menu.toggle.classList.toggle("is-active", this.#menuOpen);
-    setToolbarButtonLabel(
-      menu.toggle,
-      this.#menuOpen
-        ? `アカウントメニューを閉じる (${menu.login})`
-        : `アカウントメニューを開く (${menu.login})`
-    );
   }
 
   async #logout(): Promise<void> {

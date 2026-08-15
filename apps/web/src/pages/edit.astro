@@ -60,9 +60,6 @@ try {
           {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
           <div id="draft-controls" />
           <div id="save-controls" />
-          <div id="new-controls" />
-          {/* 既にある自分の Gist から始める道 (Phase 2-6)。 */}
-          <div id="adopt-controls" />
           {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
           <div id="tags-controls" />
           {/* 作品が使うアセット (Phase 3-4)。 */}
@@ -74,6 +71,10 @@ try {
         </div>
 
         <div id="console" />
+
+        {/* 尋ねる面 (ダイアログ) の置き場。開く口はアカウントメニューの中に
+            あるので、操作列には並ばない (#87 の段階 2)。 */}
+        <div id="adopt-controls" />
       </div>
     )
   }
@@ -126,7 +127,7 @@ try {
   import { mountFullscreenButton } from "../scripts/ui/fullscreen-button";
   import { formatSavedAt } from "../scripts/ui/format-saved-at";
   import { showToast } from "../scripts/ui/toast";
-  import { makeToolbarButton } from "../scripts/ui/toolbar-button";
+  import { makeMenuItem } from "../scripts/ui/menu";
   import { WarningIndicator } from "../scripts/ui/warning-indicator";
   import {
     SettingsSaver,
@@ -148,9 +149,20 @@ try {
   const saveHost = document.getElementById("save-controls");
   const adoptHost = document.getElementById("adopt-controls");
   const tagsHost = document.getElementById("tags-controls");
-  const newHost = document.getElementById("new-controls");
   const assetsHost = document.getElementById("assets");
   const projectBarHost = document.getElementById("project-bar");
+  const accountHost = document.getElementById("account");
+
+  /*
+   * アカウントメニュー (#87 の段階 2)。
+   *
+   * ここだけ `init()` の外で先に作る。**中身を足すのは init 側** (新しいスケッチ・
+   * Gist から開く) で、ログイン状態を引く initAccount 側とは別に走るため、
+   * どちらからも参照できる場所に置く必要がある。器は同期に組み上がるので、
+   * どちらが先に着いても取りこぼさない。
+   */
+  const accountPanel =
+    accountHost === null ? null : new AccountPanel(accountHost);
 
   const init = async () => {
     if (
@@ -455,7 +467,7 @@ try {
      * 中身の差し替えで自動保存が予約されるので、下書きを捨てるのは**入れ替えた後**
      * (「新規」と同じ順序)。
      */
-    new AdoptPanel(adoptHost, {
+    const adoptPanel = new AdoptPanel(adoptHost, {
       onAdopt: async (ref) => {
         let adopted;
         try {
@@ -556,10 +568,17 @@ try {
     });
     tabs.render(editor.fileNames, editor.activeFile);
 
-    // 下書きは黙って復元される。戻る道が無いと前回の続きから抜けられないので、
-    // 破棄して最初から始める口をここに置く。
-    newHost?.appendChild(
-      makeToolbarButton({
+    /*
+     * これから何を書き始めるか、の操作 (#87 の段階 2)。
+     *
+     * 行き先は**アカウントメニュー**。今開いている作品には属さない操作なので、
+     * 中央の作品メニューではなくこちらに入る。操作列から 2 つ減る。
+     *
+     * 下書きは黙って復元されるので、戻る道が無いと前回の続きから抜けられない。
+     * 「新しいスケッチ」はその口でもある。
+     */
+    accountPanel?.addItem(
+      makeMenuItem({
         id: "new",
         icon: "newSketch",
         label: "新しいスケッチ",
@@ -592,6 +611,17 @@ try {
       })
     );
 
+    // 既にある自分の Gist から始める道 (Phase 2-6)。尋ねる面は AdoptPanel が
+    // 持ち、開く口だけがここに出る。
+    accountPanel?.addItem(
+      makeMenuItem({
+        id: "adopt",
+        icon: "import",
+        label: "Gist から開く",
+        onClick: () => adoptPanel.open(),
+      })
+    );
+
     // エディタの外 (ボタンやファイル選択) にフォーカスがあるときの ⌘/Ctrl+Enter。
     // エディタ内の keydown は CodeEditor 側が拾って伝播を止めるので二重に走らない。
     window.addEventListener("keydown", (event) => {
@@ -612,15 +642,13 @@ try {
    * 逆にログイン状態の取得に失敗してもエディタは動くべきなので、互いに待たない。
    */
   const initAccount = async () => {
-    const accountHost = document.getElementById("account");
-    if (!accountHost) return;
+    if (accountPanel === null) return;
 
-    const panel = new AccountPanel(accountHost);
     // 認可から戻った直後の失敗はここで拾う (成功時は何も出さない)。もう一度
     // ログインすれば済む出来事なので、パネルに残さずトーストで言う (#41 の 5)。
     const failure = AccountPanel.takeFailureMessage();
     if (failure !== null) showToast(failure, "error");
-    await panel.refresh();
+    await accountPanel.refresh();
   };
 
   /**

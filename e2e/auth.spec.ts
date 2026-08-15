@@ -19,25 +19,31 @@
 
 import { expect, test } from "@playwright/test";
 
-import { openEditor } from "./helpers";
+import { openAccountMenu, openEditor } from "./helpers";
 import { FAKE_GITHUB_ORIGIN, PREVIEW_ORIGIN, WEB_ORIGIN } from "./origins";
 
 /** `__Host-` プレフィックスが成立する条件。1 つでも欠けるとブラウザが受け取らない。 */
 const HOST_COOKIE_ATTRIBUTES = ["Path=/", "Secure", "HttpOnly", "SameSite=Lax"];
 
 test.describe("ログインの導線", () => {
-  test("未ログインではログインボタンが出る", async ({ page }) => {
+  test("未ログインでもメニューは開き、中にログインの口がある", async ({
+    page,
+  }) => {
     await openEditor(page);
 
+    // 開閉ボタンはログインの有無で出入りしない (#87 の段階 2)。押す場所が
+    // ログインの前後で動くと、覚え直しになる。
+    await openAccountMenu(page);
+
     await expect(page.locator("#login")).toBeVisible();
-    // アカウントの口 (メニューとその中のログアウト) は出ていない
-    // — 状態が取り違えられていない。
-    await expect(page.locator("#account-menu-toggle")).toHaveCount(0);
-    await expect(page.locator("#logout")).toHaveCount(0);
+    // 誰かとしてログインしている印は出ていない — 状態が取り違えられていない。
+    await expect(page.locator("#logout")).toBeHidden();
+    await expect(page.locator("#account-login-name")).toBeHidden();
   });
 
   test("認可へ送り出す前に gist 権限の意味を見せる", async ({ page }) => {
     await openEditor(page);
+    await openAccountMenu(page);
     await page.locator("#login").click();
 
     // 要件 3.6: 「全 Gist への書き込み権限になること」と
@@ -56,6 +62,7 @@ test.describe("ログインの導線", () => {
 
   test("やめると認可へ進まずに閉じる", async ({ page }) => {
     await openEditor(page);
+    await openAccountMenu(page);
     await page.locator("#login").click();
 
     const consent = page.locator("#login-consent");

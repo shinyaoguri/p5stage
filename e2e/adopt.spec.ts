@@ -10,13 +10,13 @@
 
 import { expect, test } from "@playwright/test";
 
-import { openEditor } from "./helpers";
+import { openAdopt, openEditor } from "./helpers";
 
 test.describe("Gist の取り込み", () => {
   test("ダイアログを開いて閉じられる", async ({ page }) => {
     await openEditor(page);
 
-    await page.locator("#adopt").click();
+    await openAdopt(page);
     await expect(page.locator("#adopt-dialog")).toBeVisible();
 
     await page.locator("#adopt-dialog button", { hasText: "やめる" }).click();
@@ -25,7 +25,7 @@ test.describe("Gist の取り込み", () => {
 
   test("空のまま取り込もうとするとその場で断る", async ({ page }) => {
     await openEditor(page);
-    await page.locator("#adopt").click();
+    await openAdopt(page);
 
     await page.locator("#adopt-confirm").click();
 
@@ -36,7 +36,7 @@ test.describe("Gist の取り込み", () => {
 
   test("ログインしていなければ取り込みはログインを促す", async ({ page }) => {
     await openEditor(page);
-    await page.locator("#adopt").click();
+    await openAdopt(page);
 
     await page.locator("#adopt-ref").fill("0123456789abcdef0123456789abcdef");
     await page.locator("#adopt-confirm").click();
