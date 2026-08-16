@@ -6,6 +6,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # 型は実行する Node に合わせる (.nvmrc = 24)。先行させると Node 26 にしか
+      # 無い API を書いても typecheck が通り、CI の実行時に初めて落ちる。
+      # .nvmrc を上げるときは、この ignore もあわせて外す。
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       minor-and-patch:
         update-types:
