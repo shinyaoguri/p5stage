@@ -190,7 +190,7 @@ jobs:
 
       - name: 失敗したときだけレポートを残す
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -200,7 +200,7 @@ jobs:
       # 落ちた理由は wrangler のログにしか出ないので、失敗時だけ持ち帰る。
       - name: 失敗したときだけ wrangler のログを残す
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wrangler-logs
           path: ~/.config/.wrangler/logs/
