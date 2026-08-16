@@ -14,7 +14,7 @@
     "@p5stage/shared": "*"
   },
   "devDependencies": {
-    "vite": "^7.3.6",
+    "vite": "^8.2.1",
     "wrangler": "4.120.1"
   }
 }
