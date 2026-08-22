@@ -33,6 +33,8 @@ function sketch(overrides: Partial<Sketch> = {}): Sketch {
     revisionEtag: null,
     revisionCheckedAt: null,
     gistDeletedAt: null,
+    deliveryBlockedAt: null,
+    deliveryBlockedRevision: null,
     forkedFromSketchId: null,
     forkedFromRevision: null,
     thumbnailRevision: null,

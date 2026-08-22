@@ -38,6 +38,16 @@ export interface Sketch {
   /** 作者が GitHub 側で Gist を消した時刻 (要件 6 の tombstone)。 */
   readonly gistDeletedAt: number | null;
   /**
+   * 配信が断った版を拾った時刻 (#70)。断りが解けていなければ非 null。
+   *
+   * 断るのは「所有していない blob を参照する `assets.json`」で、断り方は
+   * **版を進めない**こと。閲覧者は直前の版を見続けるので、この印が立っている間は
+   * `currentRevision` が GitHub 側の最新より古い。
+   */
+  readonly deliveryBlockedAt: number | null;
+  /** 断った版の SHA。作者に「どの編集が反映されていないか」を示すために持つ。 */
+  readonly deliveryBlockedRevision: string | null;
+  /**
    * 派生元の作品 (Phase 4-3 / #44)。フォークで作られた作品だけが持つ。
    *
    * GitHub の `Forked from` は経路によって付かない (自分の Gist は fork できない)

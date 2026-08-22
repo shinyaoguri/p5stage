@@ -30,6 +30,8 @@ function sketch(overrides: Partial<Sketch> = {}): Sketch {
     revisionEtag: '"etag"',
     revisionCheckedAt: NOW,
     gistDeletedAt: null,
+    deliveryBlockedAt: null,
+    deliveryBlockedRevision: null,
     forkedFromSketchId: null,
     forkedFromRevision: null,
     thumbnailRevision: null,

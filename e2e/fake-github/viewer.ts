@@ -52,3 +52,15 @@ export const FOREIGN_UNLISTED_GIST_ID = "e2e-gist-foreign-unlisted";
  * 参照するマニフェストを断る)。
  */
 export const FOREIGN_ASSET_GIST_ID = "e2e-gist-foreign-assets";
+
+/**
+ * 作者が gist.github.com で直接壊した Gist (#70)。
+ *
+ * 中身は `seed-content-assets.json` — **所有者が誰もいない実体** (dot.png の
+ * sha256) を `assets.json` が指している。p5stage 側の作品は `e2e-user` のもの
+ * なので、配信の再検証がこれを拾うと所有の検査に引っかかる。
+ *
+ * 偽 GitHub 側の持ち主も `e2e-user` にする。**自分の Gist を自分で書き換えた**
+ * のがこの Issue の状況で、他人の Gist の話ではない。
+ */
+export const BLOCKED_GIST_ID = "e2e-gist-blocked";

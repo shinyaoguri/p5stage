@@ -259,6 +259,15 @@ try {
     if (manifest !== null && !manifest.ok) {
       warnings.set("manifest", `${manifest.message} (直すまで保存できません)`);
     }
+    // GitHub 側で直接編集した版が配信に載らなかった (#70)。**直すまで続く条件**で、
+    // かつ作者がこれを知れる場所はここだけ (作品ページはキャッシュを閲覧者全員と
+    // 共有するので、所有者にだけ出せない)。
+    if (opened !== null && opened.blockedRevision !== null) {
+      warnings.set(
+        "delivery",
+        `GitHub 側の編集 (${opened.blockedRevision.slice(0, 7)}) は配信に載っていません。所有していないアセットを assets.json が参照しています`
+      );
+    }
 
     // 復元は**もう終わった出来事**なので、上の条件とは別にトーストで言う。
     // 「読み込めなかったので下書きから始めた」は同時に成り立つ状況で、片方が

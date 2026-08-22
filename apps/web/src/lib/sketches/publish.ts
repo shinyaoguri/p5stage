@@ -14,7 +14,7 @@ import { notifyRevision } from "../live/notify";
 
 import { recordRevision } from "./revision-log";
 import { putRevision } from "./revision-store";
-import { setCurrentRevision } from "./store";
+import { clearDeliveryBlock, setCurrentRevision } from "./store";
 
 /**
  * リビジョンの写しを R2 へ置き、それが使うアセットを参照台帳へ記し (3-5a)、
@@ -55,6 +55,9 @@ export async function storeRevision(
  * ので、ここで失敗を返すと利用者が同じ操作を繰り返すことになる。配信側は次の閲覧で
  * 自分で埋め直す (`resolveSketchContent` の fill 経路)。
  *
+ * 断りの印 (#70) を消すのもここ 1 か所。**版が進んだ**という同じ事実で解けるので、
+ * 作者が保存で直したか GitHub 側を直したかを区別する必要が無い。
+ *
  * ポインタを進めるのは参照を記した後。順を逆にすると、記録に失敗した瞬間から
  * 「配っているのに守られていない」リビジョンが残る。この順なら、失敗しても
  * 配信が進まないだけで済む。知らせを最後に置くのも同じ理由で、**配れる状態に
@@ -71,6 +74,7 @@ export async function publishRevision(
     const now = Date.now();
     await storeRevision(gistId, revision, files, now);
     await setCurrentRevision(env.DB, sketchId, revision, etag, now);
+    await clearDeliveryBlock(env.DB, sketchId);
     notifyRevision(sketchId, revision);
     return true;
   } catch {

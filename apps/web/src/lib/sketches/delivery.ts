@@ -12,6 +12,8 @@
 import { env, waitUntil } from "cloudflare:workers";
 import type { SketchFiles } from "@p5stage/shared";
 
+import { unclaimedDigests } from "../assets/store";
+import { checkManifest } from "../assets/manifest-check";
 import {
   appAuth,
   fetchGistForDelivery,
@@ -24,12 +26,17 @@ import {
   readOAuthConfig,
 } from "../session/context";
 
+import { gateManifest, type DeliveryGate } from "./delivery-gate";
 import { planDelivery } from "./delivery-plan";
 import { publishRevision } from "./publish";
 import { findRevision } from "./revision-log";
 import { getRevision } from "./revision-store";
 import type { Sketch } from "./sketch";
-import { markGistDeleted, markRevisionChecked } from "./store";
+import {
+  markDeliveryBlocked,
+  markGistDeleted,
+  markRevisionChecked,
+} from "./store";
 
 /** 閲覧画面に渡す中身。 */
 export type SketchContent =
@@ -50,6 +57,33 @@ function deliveryAuth(): GistAuth {
 }
 
 /**
+ * GitHub から拾った中身を配信に載せてよいか確かめる (#70)。
+ *
+ * **保存を経ずに配信へ入る口には、保存と同じ所有の検査が要る。** 作者が
+ * gist.github.com で `assets.json` に他人の sha256 を書けば、この 2 経路が閲覧の
+ * たびにそれを R2 と参照台帳へ運び、配信 `/a/<sha256>/<name>` は D1 を引かないので
+ * 実際に配られる (#65 と同じ結果に別経路から到達する)。ADR 0003 の「補足 (#65)」が
+ * **まだ残っている口**と書いた経路がここ。
+ *
+ * 照会する所有者は**作品の持ち主**で迷いが無い。この中身は作者自身の Gist から
+ * 来ていて、その Gist を正本にしているのはこの作品だけ (`gist_id` は UNIQUE)。
+ */
+async function gateContent(
+  sketch: Sketch,
+  files: SketchFiles
+): Promise<DeliveryGate> {
+  const check = checkManifest(files);
+  if (check.kind !== "ok") return gateManifest(check, []);
+
+  const unclaimed = await unclaimedDigests(
+    env.DB,
+    sketch.ownerId,
+    check.digests
+  );
+  return gateManifest(check, unclaimed);
+}
+
+/**
  * GitHub から取って R2 とポインタを埋める。
  *
  * 書けたかどうかは見ない。**中身は手元にあるので閲覧者には配れる** — 写しを
@@ -57,7 +91,7 @@ function deliveryAuth(): GistAuth {
  * 埋めにくる)。4-1 までは `storeRevision` の失敗が例外として上がり、配れるのに
  * `unavailable` へ化けていた。
  */
-async function fill(sketchId: string, gistId: string): Promise<SketchContent> {
+async function fill(sketch: Sketch, gistId: string): Promise<SketchContent> {
   // 手元に中身が無いので条件付きにしない (304 は「手元のものを使え」の意味で、
   // ここでは使えるものが無い)。
   const result = await fetchGistForDelivery(
@@ -74,8 +108,20 @@ async function fill(sketchId: string, gistId: string): Promise<SketchContent> {
   }
 
   const { content } = result;
+
+  // 断るしかない中身しか無い。**配れる正しい版が手元に無い**ので、再検証と違って
+  // 前の版へ退がることもできない (`revalidate` は退がる先がある)。
+  const gate = await gateContent(sketch, content.files);
+  if (gate.kind === "reject") {
+    await markDeliveryBlocked(env.DB, sketch.id, content.revision, Date.now());
+    return {
+      kind: "unavailable",
+      reason: "所有していないアセットを参照しています",
+    };
+  }
+
   await publishRevision(
-    sketchId,
+    sketch.id,
     gistId,
     content.revision,
     content.files,
@@ -110,6 +156,16 @@ async function revalidate(sketch: Sketch, now: number): Promise<void> {
     // 作者が GitHub 側で直接編集した分。**ここも版が進む経路**なので、保存と
     // 同じ道を通して知らせまで出す (進行点は `publishRevision` の 1 つ)。
     const { content } = result;
+
+    // 所有していない blob を参照していれば**版を進めない** (#70)。閲覧者は直前の
+    // 正しい版を見続けるので作品は止まらず、配らない以上その版を参照台帳で守る
+    // 理由も無い。作者にはエディタで知らせる (この印がその置き場)。
+    const gate = await gateContent(sketch, content.files);
+    if (gate.kind === "reject") {
+      await markDeliveryBlocked(env.DB, sketch.id, content.revision, now);
+      return;
+    }
+
     await publishRevision(
       sketch.id,
       sketch.gistId,
@@ -167,7 +223,7 @@ export async function resolveSketchContent(
       // ポインタはあるのに写しが無い。埋め直して自分で治る。
     }
 
-    return await fill(sketch.id, gistId);
+    return await fill(sketch, gistId);
   } catch (error) {
     if (error instanceof GistError && error.kind === "not_found") {
       await markGistDeleted(env.DB, sketch.id, now);

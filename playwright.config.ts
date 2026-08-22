@@ -93,6 +93,9 @@ const SEED_OBJECTS = [
   ["e2e-gist-foreign", SEED_REVISION, SEED_CONTENT],
   ["e2e-gist-foreign-unlisted", SEED_REVISION, SEED_CONTENT],
   ["e2e-gist-foreign-assets", SEED_REVISION, SEED_ASSET_CONTENT],
+  // 作者が GitHub 側で壊した作品 (#70)。**配信中の版はアセットを使わない方**で、
+  // 偽 GitHub 側にだけ壊れたマニフェストの版がある。
+  ["e2e-gist-blocked", SEED_REVISION, SEED_CONTENT],
 ]
   .map(
     ([gistId, revision, content]) =>

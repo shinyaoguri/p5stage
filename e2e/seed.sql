@@ -83,6 +83,37 @@ VALUES
   ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
    '7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91', 0);
 
+-- 作者が GitHub 側で `assets.json` を壊した作品 (#70)。
+--
+-- 他の種と違って **`revision_checked_at` を 0 にしてある** — 再検証の間隔 (10 分) を
+-- 最初から超えているので、作品ページを 1 度開けば裏で再検証が走る。偽 GitHub 側の
+-- 同じ `gist_id` には所有者のいない実体を指すマニフェストが置いてあり (`viewer.ts` の
+-- `BLOCKED_GIST_ID`)、`revision_etag` も合わないので必ず「変わった」として返る。
+--
+-- **持ち主はログインする人 (20250812)**。他の種は 424242 の持ち物だが、この作品は
+-- エディタで開いて警告を読むところまで踏むので、ログインする人のものである必要がある。
+-- 所有の照会先も作品の持ち主なので、ここがずれると検査そのものが別の話になる。
+INSERT OR REPLACE INTO users (id, login, avatar_url, created_at, updated_at)
+VALUES (20250812, 'e2e-user', NULL, 0, 0);
+
+INSERT OR REPLACE INTO sketches
+  (id, owner_id, gist_id, title, description, visibility,
+   created_at, updated_at, current_revision, revision_etag,
+   revision_checked_at, gist_deleted_at,
+   delivery_blocked_at, delivery_blocked_revision)
+VALUES
+  ('E2EBlockedAst001', 20250812, 'e2e-gist-blocked', 'E2E 壊れたマニフェストの作品',
+   '', 'public',
+   0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
+   0, NULL, NULL, NULL);
+
+-- 配信中の版は**アセットを使わない**中身 (playwright.config.ts が
+-- seed-content.json を置く)。断られた版が載ってしまえば、ここが
+-- seed-content-assets.json の中身に変わる。
+INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
+VALUES
+  ('e2e-gist-blocked', 'e2e1111111111111111111111111111111111111', 0);
+
 -- 限定公開。共有キャッシュに載らないこと・注意書き・noindex を見る。
 -- 新着一覧には**出ない**ことも見る。時刻を今にするのは公開の種と同じ理由で、
 -- こちらは「LIMIT の外に落ちたから出なかった」という偽陰性を防ぐため。
