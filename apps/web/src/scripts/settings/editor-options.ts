@@ -49,9 +49,30 @@ export function editorOptionsFor(
   };
 }
 
-/** モデル側のオプション (タブ幅はエディタではなくモデルが持つ)。 */
+/**
+ * モデル側のオプション。
+ *
+ * Monaco の中はさらに**エディタが持つ層**と**モデルが持つ層**に分かれていて、
+ * ここは後者。タブ幅がそうで、括弧の色分けもそうだった (#22)。
+ *
+ * 括弧の色分けを見ているのは `TextModel` の `bracketPairColorizationOptions` で、
+ * 既定は有効。`monaco.editor.create()` に `bracketPairColorization` を渡しても、
+ * その値をモデルへ配るのは configuration service を読む `ModelService` だけなので、
+ * 自前で作ったモデル (code-editor.ts) には届かない — **エディタのオプションとしては
+ * 無効になるのに括弧は色付いたまま**、という食い違いになる。
+ *
+ * 色分け自体を出さないのは、スケッチの上に文字を浮かせる構成 (要件 3.1) で
+ * 文字以外の装飾を描かない方針に揃えるため。
+ */
 export function modelOptionsFor(
   settings: EditorSettings
 ): editor.ITextModelUpdateOptions {
-  return { tabSize: settings.tabSize, insertSpaces: true };
+  return {
+    tabSize: settings.tabSize,
+    insertSpaces: true,
+    bracketColorizationOptions: {
+      enabled: false,
+      independentColorPoolPerBracketType: false,
+    },
+  };
 }
