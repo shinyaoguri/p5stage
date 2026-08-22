@@ -73,6 +73,29 @@ test.describe("エディタ設定", () => {
       .toBe("0.5");
   });
 
+  test("括弧の色分けはモデル側で無効になっている", async ({ page }) => {
+    await openEditor(page);
+
+    // 括弧の色分けは**エディタではなくモデルのオプション**で決まる (#22)。
+    // `monaco.editor.create()` に `bracketPairColorization` を渡しても
+    // `getOption` が false を返すだけで装飾は出続けるので、層を取り違えていないか
+    // ここで見る。
+    const editor = page.locator("#editor");
+
+    // 画面に括弧が出ていることを先に確かめる。出ていなければ下の 0 件は
+    // 「色分けされていない」ではなく「見るものが無い」になる。
+    await expect(editor.locator(".view-line").first()).toBeVisible();
+    expect(await editor.locator(".view-lines").innerText()).toContain("(");
+
+    // 色ではなく装飾の有無で見る (テーマごとに色が変わるため)。クラス名の
+    // 出どころは Monaco の colorizedBracketPairsDecorationProvider
+    // (`bracket-highlighting-${level % 30}`)。Monaco を上げるときは名前が
+    // 変わっていないか確かめる。
+    await expect(
+      editor.locator('[class*="bracket-highlighting-"]')
+    ).toHaveCount(0);
+  });
+
   test("「既定に戻す」で見た目が戻る", async ({ page }) => {
     await openEditor(page);
     await openSettings(page);

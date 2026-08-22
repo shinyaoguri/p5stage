@@ -101,10 +101,17 @@ describe("editorOptionsFor", () => {
 });
 
 describe("modelOptionsFor", () => {
-  it("タブ幅はモデル側のオプションになる", () => {
+  it("タブ幅と括弧の色分けはモデル側のオプションになる", () => {
+    // 括弧の色分けはエディタのオプション (`bracketPairColorization`) では切れない。
+    // 渡しても `ModelService` を通らない自前のモデルには届かず、括弧だけが既定色で
+    // 光り続ける (#22)。モデルへ渡すものが増えたらここに出る。
     expect(modelOptionsFor(sanitizeSettings({ tabSize: 4 }))).toEqual({
       tabSize: 4,
       insertSpaces: true,
+      bracketColorizationOptions: {
+        enabled: false,
+        independentColorPoolPerBracketType: false,
+      },
     });
   });
 });

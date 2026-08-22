@@ -129,7 +129,8 @@ export class CodeEditor {
       folding: false,
       glyphMargin: false,
       lineDecorationsWidth: 10,
-      bracketPairColorization: { enabled: false },
+      // 括弧の色分けはここでは切れない (エディタではなくモデルのオプション)。
+      // 切っているのは settings/editor-options.ts の modelOptionsFor。
       overviewRulerLanes: 0,
       hideCursorInOverviewRuler: true,
       overviewRulerBorder: false,
