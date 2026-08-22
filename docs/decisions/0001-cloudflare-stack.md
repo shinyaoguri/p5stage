@@ -19,6 +19,7 @@ R2 は egress 無料で、UGC 公開配信の「人気作品で転送課金が�
 - アセット blob・キャッシュ (レプリカ): R2 (+ 軽量キャッシュに KV)
 - 準リアルタイム同期の配信 (SSE/WebSocket): Durable Objects
 - サムネイル等の画像リサイズ: Cloudflare Images (R2 origin のオンザフライ変換)
+  (→ **ADR 0019 の決定 6 で不採用。撮る側が長辺 1200px の PNG を 1 枚だけ作る**)
 - 言語・ビルド: TypeScript (strict) + Vite
 
 フロントエンドのフレームワーク選定 (canvastage 同様の素の DOM 継続か、ギャラリー等の

@@ -6,8 +6,9 @@ import { defineConfig } from "astro/config";
 // 静的で足りるページ側に `export const prerender = true` を置く。
 export default defineConfig({
   adapter: cloudflare({
-    // 画像変換 (Cloudflare Images) はサムネイルを実装する Phase 4 で有効にする。
-    // それまで IMAGES バインディングを要求させない。
+    // 画像変換 (Cloudflare Images) は使わない (ADR 0019 の決定 6)。
+    // サムネイルはランナーが長辺 1200px の PNG を 1 枚だけ作るので、
+    // IMAGES バインディングを要求させない。
     imageService: "passthrough",
   }),
   output: "server",
