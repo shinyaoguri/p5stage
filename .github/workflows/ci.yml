@@ -14,6 +14,25 @@ permissions:
   contents: read
 
 jobs:
+  # squash merge では PR タイトルがそのまま main のコミットメッセージになるため、
+  # 形式の崩れが履歴全体に残る。個別に required にはせず ci-gate の needs へ畳む
+  # (required check を ci-gate 1 本に保つため。下の ci-gate のコメントを参照)。
+  #
+  # 走るのは pull_request のときだけ。既定の types (opened / synchronize / reopened) に
+  # edited は含めない — edited を拾うと、コード変更なしに同じ SHA へ ci-gate の結果を
+  # 上書きしてしまう。タイトルだけ直したときは CI を再実行する。
+  pr-title:
+    name: pr-title (conventional commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: PR タイトルが Conventional Commits 形式か確かめる
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: ./scripts/check-pr-title.sh
+
   verify:
     name: lint / typecheck / test / build
     runs-on: ubuntu-latest
@@ -441,7 +460,7 @@ jobs:
   # 永久 pending になり auto-merge が詰まる。
   ci-gate:
     name: ci-gate
-    needs: [verify, e2e, deploy, preview-deploy]
+    needs: [pr-title, verify, e2e, deploy, preview-deploy]
     # 既定では前段が失敗するとこのジョブごと skip され、required check が報告されない
     # まま pending で止まる。always() で必ず走らせ、結果は自前で判定する。
     if: always()

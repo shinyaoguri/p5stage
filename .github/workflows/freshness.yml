@@ -1,0 +1,80 @@
+# 週次の陳腐化検知: ドキュメントが挙げる参照の実在チェック + 全 Markdown のリンク切れ。
+# ドリフトを検知したら label:freshness の Issue へ自動起票 (open が既にあればコメント追記)。
+#
+# PR の CI とは別建てにする。ここが見るのは「時間が経つと壊れる」種類のずれ (外部リンクの
+# 死活・番号を振り直した ADR 参照) で、PR 単体の diff には現れない。required check は
+# ci-gate 1 本に保つ方針 (README「マージ運用」) なので、この workflow は required にしない。
+name: Freshness
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # 毎週月曜 09:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: ドキュメント参照の実在チェック
+        id: refs
+        continue-on-error: true
+        run: |
+          ./scripts/check-doc-refs.sh 2>&1 | tee refs-report.txt
+          exit "${PIPESTATUS[0]}"
+
+      - name: リンク切れチェック (lychee)
+        id: lychee
+        uses: lycheeverse/lychee-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          args: --no-progress './**/*.md'
+          output: lychee-report.md
+          fail: false
+
+      - name: ドリフトを Issue へ知らせる
+        if: steps.refs.outcome == 'failure' || steps.lychee.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "週次 freshness チェックがドリフトを検知した。"
+            echo
+            echo "## ドキュメント参照 (scripts/check-doc-refs.sh)"
+            echo '```'
+            cat refs-report.txt 2>/dev/null || echo "(green)"
+            echo '```'
+            echo
+            echo "## リンクチェック (lychee)"
+            cat lychee-report.md 2>/dev/null || echo "(green)"
+            echo
+            echo "workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "---"
+            echo "<sub>🤖 Freshness workflow (.github/workflows/freshness.yml) が自動起票 / Assisted by [Claude Code](https://claude.com/claude-code)</sub>"
+          } > issue-body.md
+          gh label create freshness --description "陳腐化・ドリフトの検知/報告" --color C2E0C6 --force
+          # 相乗り防止: 自動レポートの Issue (タイトル完全一致) だけを重複判定の対象にする。
+          # label:freshness 全体でマッチさせると、手で起票したドリフト報告に週次レポートが積まれてしまう
+          existing=$(gh issue list --label freshness --state open --json number,title \
+            --jq '[.[] | select(.title == "freshness: 週次チェックがドリフトを検知")][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file issue-body.md
+          else
+            gh issue create --title "freshness: 週次チェックがドリフトを検知" --label freshness --body-file issue-body.md
+          fi
+
+      - name: 検知があれば run を赤にする
+        if: steps.refs.outcome == 'failure' || steps.lychee.outputs.exit_code != '0'
+        run: exit 1

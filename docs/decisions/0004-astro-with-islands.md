@@ -28,6 +28,9 @@ Astro (SSR + islands) を採用する。
   D1 を引かないページ側に `export const prerender = true` を置く
 - エディタは `client:only` の island として載せ、canvastage の素の DOM 実装を
   ほぼ無変換で移植する。island の中では従来どおり命令的に書く
+  (→ **実装は Astro ページ内の `<script>` になった。`client:only` は UI フレームワークの
+  コンポーネントに付けるディレクティブで、下の「UI フレームワークは入れない」と両立しない。
+  素の DOM を命令的に書くという趣旨は `<script>` のまま満たせている**)
 - UI フレームワーク (React 等) は入れない。必要になった時点で island 単位で導入できる
 
 ## 影響
