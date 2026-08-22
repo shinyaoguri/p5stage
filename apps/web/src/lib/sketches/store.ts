@@ -29,6 +29,8 @@ interface SketchRow {
   readonly revision_etag: string | null;
   readonly revision_checked_at: number | null;
   readonly gist_deleted_at: number | null;
+  readonly delivery_blocked_at: number | null;
+  readonly delivery_blocked_revision: string | null;
   readonly forked_from_sketch_id: string | null;
   readonly forked_from_revision: string | null;
   readonly thumbnail_revision: string | null;
@@ -52,6 +54,8 @@ const COLUMN_NAMES = [
   "revision_etag",
   "revision_checked_at",
   "gist_deleted_at",
+  "delivery_blocked_at",
+  "delivery_blocked_revision",
   "forked_from_sketch_id",
   "forked_from_revision",
   "thumbnail_revision",
@@ -77,6 +81,8 @@ function toSketch(row: SketchRow): Sketch {
     revisionEtag: row.revision_etag,
     revisionCheckedAt: row.revision_checked_at,
     gistDeletedAt: row.gist_deleted_at,
+    deliveryBlockedAt: row.delivery_blocked_at,
+    deliveryBlockedRevision: row.delivery_blocked_revision,
     forkedFromSketchId: row.forked_from_sketch_id,
     forkedFromRevision: row.forked_from_revision,
     thumbnailRevision: row.thumbnail_revision,
@@ -122,6 +128,8 @@ export async function createSketch(
     revisionEtag: null,
     revisionCheckedAt: null,
     gistDeletedAt: null,
+    deliveryBlockedAt: null,
+    deliveryBlockedRevision: null,
     forkedFromSketchId: null,
     forkedFromRevision: null,
     thumbnailRevision: null,
@@ -187,6 +195,8 @@ export async function createSketchFromGist(
     revisionEtag: null,
     revisionCheckedAt: null,
     gistDeletedAt: null,
+    deliveryBlockedAt: null,
+    deliveryBlockedRevision: null,
     forkedFromSketchId,
     forkedFromRevision,
     thumbnailRevision: null,
@@ -540,6 +550,54 @@ export async function markRevisionChecked(
   await db
     .prepare("UPDATE sketches SET revision_checked_at = ? WHERE id = ?")
     .bind(now, id)
+    .run();
+}
+
+/**
+ * 配信が断った版の印を立てる (#70)。
+ *
+ * `revision_checked_at` も一緒に進める。**断りは「変わっていなかった」とは違う**が、
+ * 次に確かめるまでの間隔は同じでよく、進めないと閲覧のたびに GitHub を叩き続ける。
+ * `revision_etag` は書かない — 書くと次の再検証が 304 で返り、作者が GitHub 側を
+ * 直しても永久に気付かない。
+ *
+ * 既に印が立っていても上書きする。`markGistDeleted` (最初に気付いた時点が正しい)
+ * とは逆で、**断った版は編集のたびに変わる**ので、作者に見せるのは最後に断った版。
+ */
+export async function markDeliveryBlocked(
+  db: D1Database,
+  id: string,
+  revision: string,
+  now: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sketches
+          SET delivery_blocked_at = ?, delivery_blocked_revision = ?,
+              revision_checked_at = ?
+        WHERE id = ?`
+    )
+    .bind(now, revision, now, id)
+    .run();
+}
+
+/**
+ * 断りの印を消す (#70)。
+ *
+ * 呼ぶのは配信が進んだとき 1 か所 (`publishRevision`) だけ。作者が保存で直しても、
+ * GitHub 側を直して再検証が通っても、**版が進んだ**という同じ事実で解ける。
+ */
+export async function clearDeliveryBlock(
+  db: D1Database,
+  id: string
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sketches
+          SET delivery_blocked_at = NULL, delivery_blocked_revision = NULL
+        WHERE id = ? AND delivery_blocked_at IS NOT NULL`
+    )
+    .bind(id)
     .run();
 }
 

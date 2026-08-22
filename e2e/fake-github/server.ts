@@ -26,6 +26,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 // Node が直接実行するファイルなので、相対 import には拡張子が要る
 // (spec 側は他の e2e ファイルと同じく拡張子なしで読む)。
 import {
+  BLOCKED_GIST_ID,
   FAKE_AUTHOR,
   FAKE_VIEWER,
   FOREIGN_ASSET_GIST_ID,
@@ -317,14 +318,21 @@ function handleGists(
  * **無い**ことを前提にしたテストがあり、版もこちらの連番とは合わない。
  */
 function seedForeignGists(): void {
-  for (const [id, description, isPublic, content] of [
-    [FOREIGN_GIST_ID, "E2E 他人のスケッチ", true, "../seed-content.json"],
+  for (const [id, description, isPublic, content, owner] of [
+    [
+      FOREIGN_GIST_ID,
+      "E2E 他人のスケッチ",
+      true,
+      "../seed-content.json",
+      AUTHOR,
+    ],
     // fork は元が secret なら secret になる。系譜の見せ方が変わる側。
     [
       FOREIGN_UNLISTED_GIST_ID,
       "E2E 他人の限定公開スケッチ",
       false,
       "../seed-content.json",
+      AUTHOR,
     ],
     // アセットを使う方。フォークで他人の blob が計上されるかを見る側。
     [
@@ -332,6 +340,16 @@ function seedForeignGists(): void {
       "E2E 他人のアセット作品",
       true,
       "../seed-content-assets.json",
+      AUTHOR,
+    ],
+    // 作者が GitHub 側で壊した自分の Gist (#70)。配信の再検証がこれを拾う。
+    // **持ち主はログインする人**で、上の 3 つ (他人の Gist) とはそこが違う。
+    [
+      BLOCKED_GIST_ID,
+      "E2E 壊れたマニフェストの作品",
+      true,
+      "../seed-content-assets.json",
+      VIEWER,
     ],
   ] as const) {
     const files = JSON.parse(
@@ -344,7 +362,7 @@ function seedForeignGists(): void {
       isPublic,
       files: new Map(Object.entries(files)),
       version: nextVersion(),
-      owner: AUTHOR,
+      owner,
     });
   }
 }

@@ -49,6 +49,13 @@ export interface OpenedSketch {
   readonly title: string | null;
   /** 付いているタグ (Phase 5)。無ければ空。 */
   readonly tags: readonly string[];
+  /**
+   * 配信が断った版 (#70)。GitHub 側の編集が反映されていないときだけ入る。
+   *
+   * 断りは背景処理 (再検証) が下すので、**作者はここでしか気付けない**。
+   * 作品ページには出せない (エッジキャッシュを閲覧者全員と共有するため)。
+   */
+  readonly blockedRevision: string | null;
 }
 
 /** 作品を開けなかった理由。利用者に見せる文言にする。 */
@@ -89,10 +96,19 @@ export async function loadSketch(id: string): Promise<OpenedSketch> {
     gist?: SavedGist | null;
     files?: SketchFiles | null;
     truncated?: string[];
-    sketch?: { title?: string } | null;
+    sketch?: {
+      title?: string;
+      deliveryBlockedAt?: number | null;
+      deliveryBlockedRevision?: string | null;
+    } | null;
     tags?: unknown;
   };
   const title = body.sketch?.title;
+  // 印が立っていない (= null) 間は版も見ない。**時刻の方が印**で、版はその理由を
+  // 指す添え物なので、片方だけ残った応答を「断られている」と読まない。
+  const blocked = body.sketch?.deliveryBlockedAt;
+  const blockedRevision =
+    typeof blocked === "number" ? body.sketch?.deliveryBlockedRevision : null;
   return {
     gist: body.gist ?? null,
     files: body.files ?? null,
@@ -102,6 +118,10 @@ export async function loadSketch(id: string): Promise<OpenedSketch> {
     tags: Array.isArray(body.tags)
       ? body.tags.filter((tag): tag is string => typeof tag === "string")
       : [],
+    blockedRevision:
+      typeof blockedRevision === "string" && blockedRevision !== ""
+        ? blockedRevision
+        : null,
   };
 }
 

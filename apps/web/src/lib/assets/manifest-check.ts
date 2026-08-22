@@ -81,3 +81,15 @@ export function unclaimedMessage(count: number): string {
 export function unclaimedAdoptMessage(count: number): string {
   return `${count} 件のアセットが見つかりません。先にアップロードするか、assets.json から外してください`;
 }
+
+/**
+ * 配信の裏で拾った中身が同じことをしていたときの文言 (#70)。
+ *
+ * 第 1 文は保存・取り込みと揃える。違うのは**誰に向けた言葉か**で、この経路の
+ * 読み手は閲覧者ではなく作者だけ (作品ページには出ない — 所有者を見分けられる
+ * のはエディタだけなので)。次の一手も他の 2 本とは違い、**手元には何も無い** —
+ * 直す対象は GitHub 側の `assets.json` そのもの。
+ */
+export function unclaimedDeliveryMessage(count: number): string {
+  return `GitHub 側の ${count} 件のアセットが見つかりません。この編集は反映されていません (assets.json を直すか、先にアップロードしてください)`;
+}
