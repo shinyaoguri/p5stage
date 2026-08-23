@@ -58,11 +58,15 @@ function registerThemes(): void {
 }
 
 /**
- * JavaScript の意味解析を止める。
+ * JavaScript の意味解析を止める。構文エラーの検出は残す。
  *
- * p5.js のグローバル関数 (`createCanvas` など) は型定義が無いと未定義扱いになり、
- * 正しいスケッチが赤線だらけになる。構文エラーの検出は残す。
- * 型定義を配って意味解析を戻すかは p5.js の配布方法とあわせて決める (Issue #11)。
+ * **型定義を配った後 (`configureP5Types`) も止めたままにしている。** Monaco の既定は
+ * strict なので、戻すと `let img;` (`preload` で代入する定番の書き方) や
+ * `select("#box").mousePressed(...)` が赤くなる。`noImplicitAny` と
+ * `strictNullChecks` を緩めれば消えるところまでは分かっているが、設定パネルの
+ * トグルとして出す段階の話なので分けた (Issue #104 の段階 2)。
+ *
+ * 補完と診断は独立して切れるので、**補完だけ先に出せる**。
  *
  * Monaco 0.56 の既定も同じだが、上流の既定が変わると赤線だらけに転ぶので明示する。
  */
@@ -71,6 +75,43 @@ function configureJavaScriptDiagnostics(): void {
     noSemanticValidation: true,
     noSyntaxValidation: false,
   });
+}
+
+/**
+ * 型定義の登録は 1 回で足りる。`javascriptDefaults` はモジュールのグローバルで、
+ * エディタを作り直しても言語サービスは生き続ける。
+ */
+let p5TypesRequested = false;
+
+/**
+ * p5.js の型定義を言語サービスへ渡す (Issue #104 / ADR 0021)。
+ *
+ * これを渡すまで補完の材料は `lib.dom` / `lib.esnext` しか無く、**p5 の API は
+ * 1 件も出ない**。渡すと API 補完・引数名・オーバーロード・p5 リファレンスの
+ * 説明文つきホバーまで一度に効く。
+ *
+ * **エディタの初期表示は待たせない**。動的 import の解決後に登録するので、補完は
+ * 数百 ms 遅れて効き始める (初期 JS を削る話は Issue #18)。取り込みに失敗しても
+ * エディタは動く — 補完の材料が増えないだけ。
+ *
+ * ファイルを跨ぐ補完のために `setEagerModelSync(true)` を足す案もあったが、
+ * **0.56 では要らなかった** (真偽どちらでも `other.js` の関数が `sketch.js` の
+ * 候補に出る)。効かない設定は置かない。この振る舞いは
+ * e2e/completion.spec.ts が押さえている。
+ */
+function configureP5Types(): void {
+  if (p5TypesRequested) return;
+  p5TypesRequested = true;
+
+  import("virtual:p5-types")
+    .then(({ default: files }) => {
+      for (const file of files) {
+        javascriptDefaults.addExtraLib(file.content, file.filePath);
+      }
+    })
+    .catch((error: unknown) => {
+      console.warn("p5.js の型定義を読み込めませんでした", error);
+    });
 }
 
 export class CodeEditor {
@@ -88,6 +129,7 @@ export class CodeEditor {
   constructor(container: HTMLElement, options: CodeEditorOptions) {
     registerThemes();
     configureJavaScriptDiagnostics();
+    configureP5Types();
 
     this.#onFilesChanged = options.onFilesChanged;
     this.#onChange = options.onChange;
