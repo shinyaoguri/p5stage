@@ -2,6 +2,8 @@
 import cloudflare from "@astrojs/cloudflare";
 import { defineConfig } from "astro/config";
 
+import { p5Types } from "./vite/p5-types.ts";
+
 // ギャラリー・作品ページは D1 のメタデータを引くため既定をオンデマンド描画にし、
 // 静的で足りるページ側に `export const prerender = true` を置く。
 export default defineConfig({
@@ -20,4 +22,8 @@ export default defineConfig({
   // セッションは GitHub OAuth を入れる Phase 2 で設計する。
   // それまで SESSION KV バインディングを要求させない。
   session: false,
+  vite: {
+    // エディタが動的 import する `virtual:p5-types` を作る (Issue #104 / ADR 0021)。
+    plugins: [p5Types()],
+  },
 });
