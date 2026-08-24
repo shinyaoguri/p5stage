@@ -46,7 +46,7 @@ OpenProcessing との差別化:
 
 - 対応形式 (初期 allowlist): 画像 png/jpg/gif/webp・3D obj/gltf/glb・音声 mp3/wav/ogg・データ json/csv/txt・フォント otf/ttf
 - SVG / HTML は XSS ベクタのため初期は除外
-- クォータ: 1 ファイル 5MB / ユーザー合計 250MB (無料)。**値はユーザー単位の設定値として持ち、有料プランで引き上げられる構造にする** (プラン内容は将来検討)
+- クォータ: 1 ファイル 5MB / ユーザー合計 250MB (無料)。**値はユーザー単位の設定値として持ち、有料プランで引き上げられる構造にする** (課金の原則は ADR 0023)
 - content-addressed storage: sha256 キーの不変 blob (R2) + Gist 内 assets.json で参照 (ADR 0003)
 - コード内は相対ファイル名のまま (`loadImage("cat.png")`)。実行時にマニフェストで URL 解決
 - アップロードは Worker 経由で検証 (sha256 / MIME / クォータ)。既存 blob は転送スキップ (dedup)
@@ -84,7 +84,8 @@ OpenProcessing との差別化:
 
 - いいね・コメント・フォローなどのコミュニティ機能
 - チュートリアル機能・教育向けクラス機能
-- 有料プラン (クォータ拡大に加え、より良い付加価値を検討したい)
+- 有料プラン — 何に課金し、**何に課金しないか**の原則は ADR 0023。当面の収益経路は
+  GitHub Sponsors のみで、クォータ課金の実装と決済基盤は保留している
 - OpenProcessing への書き出し (canvastage 資産の移植)
 - 外部サイトへの embed (モデレーション・abuse 対策とセットで)
 

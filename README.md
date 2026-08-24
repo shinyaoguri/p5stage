@@ -7,7 +7,11 @@ p5.js スケッチの開発・共有プラットフォーム。Gist / GitHub 連
 - 実装計画: [docs/roadmap.md](docs/roadmap.md)
 - 設計判断: [docs/decisions/](docs/decisions/)
 
-現在 Phase 1 (エディタコア) を実装中。
+現在 Phase 1 (エディタコア) を実装中で、**まだ一般に使える状態ではありません。**
+個人で開発しているプロジェクトです。
+
+- 貢献について: [CONTRIBUTING.md](CONTRIBUTING.md)
+- 脆弱性の報告: [SECURITY.md](SECURITY.md) (公開の Issue には書かないでください)
 
 ## 構成
 
@@ -128,3 +132,13 @@ PR プレビューは `--preview-alias pr-<番号>` で PR ごとに固定の UR
 独自ドメインは各 `wrangler.jsonc` の `routes` に `custom_domain: true` で宣言してあり、
 DNS レコードと証明書は初回デプロイ時に Cloudflare が作る。ダッシュボードでの手作業は要らない
 (ゾーン `p5stage.org` が Cloudflare にあることが前提)。
+
+## ライセンス
+
+[AGPL-3.0](LICENSE)。公開に至った経緯とライセンス選択の理由は
+[ADR 0022](docs/decisions/0022-open-sourcing-the-repository.md) に、
+何に課金し何に課金しないかの原則は
+[ADR 0023](docs/decisions/0023-what-we-charge-for.md) に記録してある。
+
+AGPL 13 条により、ネットワーク越しに利用させる場合はソースの入手経路を示す必要がある。
+サイト共通のフッターを作るとき (Phase 5-6) にこのリポジトリへのリンクを含める。
