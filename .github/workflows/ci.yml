@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # ready_for_review を足すのは e2e を draft の間だけ止めているため。既定の types
+    # (opened / synchronize / reopened) だけだと、draft を ready に変えても CI が走らず
+    # e2e が skipped のまま「レビュー可能な PR」ができてしまう。
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,30 +18,32 @@ permissions:
   contents: read
 
 jobs:
-  # squash merge では PR タイトルがそのまま main のコミットメッセージになるため、
-  # 形式の崩れが履歴全体に残る。個別に required にはせず ci-gate の needs へ畳む
-  # (required check を ci-gate 1 本に保つため。下の ci-gate のコメントを参照)。
-  #
-  # 走るのは pull_request のときだけ。既定の types (opened / synchronize / reopened) に
-  # edited は含めない — edited を拾うと、コード変更なしに同じ SHA へ ci-gate の結果を
-  # 上書きしてしまう。タイトルだけ直したときは CI を再実行する。
-  pr-title:
-    name: pr-title (conventional commits)
-    if: github.event_name == 'pull_request'
+  # **秒で終わる仕事に独立したジョブを与えない。** Actions の課金はジョブ単位の
+  # 分切り上げなので、3 秒のジョブも 1 分として引かれる。pr-title (平均 2.7 秒) と
+  # preview deploy (平均 23 秒) はどちらも他ジョブを待つ必要が無く、verify のステップ
+  # として畳める。required check は ci-gate 1 本なので、畳んでも ruleset は変わらない。
+  verify:
+    name: lint / typecheck / test / build
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # プレビュー URL を PR へ知らせるため (末尾の「プレビュー URL を PR にコメント」)。
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
+
+      # squash merge では PR タイトルがそのまま main のコミットメッセージになるため、
+      # 形式の崩れが履歴全体に残る。
+      #
+      # 走るのは pull_request のときだけ。types に edited は含めない — edited を拾うと、
+      # コード変更なしに同じ SHA へ ci-gate の結果を上書きしてしまう。タイトルだけ
+      # 直したときは CI を再実行する。
       - name: PR タイトルが Conventional Commits 形式か確かめる
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: ./scripts/check-pr-title.sh
 
-  verify:
-    name: lint / typecheck / test / build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -50,30 +56,238 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # ---- ここから下は pull request のときだけのプレビューデプロイ ----
+      #
+      # E2E は待たない。落ちたときに実物を見て切り分けられるよう、確認用の URL は先に出す。
+      # (以前は preview-deploy という別ジョブだったが、needs は verify だけで他を待って
+      #  おらず、npm ci と build を verify と二重に走らせていた。ここへ畳んで両方を解消。)
+      #
+      # プレビュー URL は <alias>-<worker 名>.<subdomain>.workers.dev で決まる。
+      # 先に両方の URL を確定させてから、互いのオリジンを var で上書きしてアップロードする。
+      # そうしないと本体は本番の実行環境を指したままになり、実行 iframe が
+      # frame-ancestors に弾かれて動かない (ADR 0007)。
+      #
+      # fork からの PR にはシークレットが渡らないので同一リポジトリの PR に限る。
+      # 以降のステップは ready の判定だけを見る (このステップが skip されると outputs は
+      # 空になり、条件は自然に false になる)。
+      - name: プレビューの前提を確認して URL を決める
+        id: preview_guard
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # workers.dev のサブドメイン名 (例: example-account)。プレビュー URL の組み立てに使う。
+          # 秘密ではない (公開 URL の一部) のでリポジトリ変数に置く。
+          WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためプレビューをスキップしました"
+            exit 0
+          fi
+          if [ -z "$WORKERS_SUBDOMAIN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::リポジトリ変数 CLOUDFLARE_WORKERS_SUBDOMAIN が未設定のためプレビューをスキップしました"
+            exit 0
+          fi
+
+          # エイリアスは PR 単位。commit ごとに URL が変わらないので PR コメントが陳腐化しない。
+          alias="pr-${{ github.event.pull_request.number }}"
+          {
+            echo "ready=true"
+            echo "alias=$alias"
+            echo "web_url=https://$alias-p5stage-web.$WORKERS_SUBDOMAIN.workers.dev"
+            echo "preview_url=https://$alias-p5stage-preview.$WORKERS_SUBDOMAIN.workers.dev"
+          } >> "$GITHUB_OUTPUT"
+
+      # versions upload は本番トラフィックを切り替えず、確認用の URL だけを発行する。
+      # --var で本番オリジンを PR プレビューのオリジンに差し替える (両 Worker とも
+      # 変数はこれ 1 つだけなので、他の変数を落とす心配は無い)。
+      #
+      # 実行環境を先に出す。本体だけ先に上がると iframe の参照先が欠ける。
+      - name: preview をバージョンアップロード
+        if: steps.preview_guard.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # pipefail が無いと tee の成功でアップロードの失敗が隠れる。
+          set -o pipefail
+          npx wrangler versions upload \
+            --preview-alias "${{ steps.preview_guard.outputs.alias }}" \
+            --var "PUBLIC_WEB_ORIGIN:${{ steps.preview_guard.outputs.web_url }}" \
+            2>&1 | tee upload.log
+          grep -qF "${{ steps.preview_guard.outputs.preview_url }}" upload.log \
+            || echo "::warning::preview のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
+        working-directory: apps/preview
+
+      # **web にプレビュー URL は出ない。** `p5stage-web` はライブ同期の Durable Object
+      # (ADR 0017) を持ち、Cloudflare は DO を実装した Worker にプレビュー URL を
+      # 発行しない (`preview_urls: true` を書いても出ない — プラットフォーム側の制約)。
+      #
+      # それでもアップロードは走らせる。**本番デプロイが壊れる予兆をここで拾う**のが
+      # プレビューデプロイを ci-gate の内側に置いている理由で、URL が出るかどうかとは別。
+      # 画面の確認は e2e ジョブが撮る証跡が受け持つ。
+      #
+      # 未適用の Durable Object migration があるときだけは落とさない (下の判定)。
+      # この扱いを web 側にしか置かないのは、実行環境 (apps/preview) に状態を持たせない
+      # 設計だから — あちらに DO が増えることは想定していない (ADR 0007)。
+      - name: web をバージョンアップロード (プレビュー URL は出ない)
+        id: web_upload
+        if: steps.preview_guard.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          if npx wrangler versions upload \
+            --preview-alias "${{ steps.preview_guard.outputs.alias }}" \
+            --var "PUBLIC_PREVIEW_ORIGIN:${{ steps.preview_guard.outputs.preview_url }}" \
+            2>&1 | tee upload.log
+          then
+            exit 0
+          fi
+
+          # Durable Object のライフサイクル変更 (クラスの作成・削除・改名) は
+          # **versions upload では適用できない** (Cloudflare API の code 10211)。
+          # 原子的な操作なので段階的ロールアウトに載らず、`wrangler deploy` でしか
+          # 適用できない、というプラットフォーム側の制約。
+          #
+          # したがって**新しい DO を入れる PR は必ずここで落ちる**。落とし続けると
+          # required check (ci-gate) が詰まって、その migration を適用する唯一の道
+          # (main への deploy) に永久に辿り着けない。
+          #
+          # 見逃すのはこの 1 コードだけ。他の失敗は今までどおり止める — 本番デプロイが
+          # 壊れる予兆をここで拾えるのが、この検査を ci-gate の内側に置いている理由。
+          if grep -q "10211" upload.log; then
+            echo "pending_do_migration=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::未適用の Durable Object migration があるため web のバージョンを上げられません (main への deploy で適用されます)"
+            exit 0
+          fi
+          exit 1
+        working-directory: apps/web
+
+      - name: プレビュー URL を PR にコメント
+        if: steps.preview_guard.outputs.ready == 'true'
+        uses: actions/github-script@v9
+        env:
+          PREVIEW_URL: ${{ steps.preview_guard.outputs.preview_url }}
+          PENDING_DO: ${{ steps.web_upload.outputs.pending_do_migration }}
+        with:
+          script: |
+            const marker = "## 🚀 Preview Deployment";
+            // **web の URL は出さない。** 出せないものを載せると、404 を踏んでから
+            // 「壊れている」と読まれる。理由と、代わりに何を見ればよいかを書く。
+            //
+            // 未適用の DO migration は別の話 (アップロード自体が通らない)。
+            // 触れずに黙ると、バージョンが上がっていないことに気付けない。
+            const pending = process.env.PENDING_DO === "true";
+            const body = [
+              marker,
+              "",
+              `- preview (実行環境): ${process.env.PREVIEW_URL} — **開いても何も動きません**。本体の iframe から読まれる前提の実行環境で、直接開くとプレースホルダが出るだけ (要件 5.1 / ADR 0007)。上がったことの確認用`,
+              "- web (本体): **プレビュー URL は出せません** — ライブ同期の Durable Object を持つ Worker には、Cloudflare がプレビュー URL を発行しないため ([制約](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/#limitations) / ADR 0017 の申し送り)。画面は「📸 画面の証跡」のコメントで、動きは手元の `npm run dev` で確かめてください",
+              ...(pending
+                ? [
+                    "",
+                    "> [!NOTE]",
+                    "> 未適用の Durable Object migration があるため、web のバージョンは上げられていません (`wrangler versions upload` では適用できない制約)。main へマージすると `wrangler deploy` が適用します。",
+                  ]
+                : []),
+              "",
+              "URL は PR 単位で固定。新しい commit を push すると同じ URL の中身が入れ替わる。",
+              "",
+              `commit: ${context.sha.slice(0, 7)}`,
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.type === "Bot" && c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
   e2e:
     name: e2e (playwright)
+    # **draft の間は回さない。** e2e はこのリポジトリで最も重い仕事 (1 回あたり約 6 分) で、
+    # 書きかけの PR に何度も push するたびに丸ごと走っていた。ready for review に変えた
+    # 時点で走る (on.pull_request.types の ready_for_review)。
+    # skip されたジョブは ci-gate が success 扱いにするので required は詰まらない。
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     # 画面の証跡を PR へ知らせるため (下の「証跡」ステップ)。
     permissions:
       contents: read
       pull-requests: write
     steps:
+      # **ドキュメントだけの変更で 6 分の E2E を回さない。**
+      #
+      # workflow の paths-ignore は使えない。CI 全体が起動せず ci-gate が報告されないまま
+      # required が永久 pending になる。ジョブは起動させ (1 分)、中身だけを飛ばす。
+      #
+      # 判定は checkout より前に置く。飛ばすときは checkout も npm ci もしない。
+      - name: 変更がドキュメントだけか判定する
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 取得に失敗したら空になる。判定できないことを理由に検査を省かない (下で回す)。
+          files=$(gh api --paginate \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename' || true)
+          if [ -z "$files" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # docs / Markdown / LICENSE 以外が 1 つでもあれば回す。
+          if printf '%s\n' "$files" | grep -qvE '(^docs/|\.md$|^LICENSE$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ドキュメントのみの変更なので E2E をスキップしました"
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.scope.outputs.run == 'true'
       - uses: actions/setup-node@v7
+        if: steps.scope.outputs.run == 'true'
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+        if: steps.scope.outputs.run == 'true'
 
       # ブラウザ本体は 100MB 超。Playwright のバージョンが変わるまで使い回す。
       - name: Playwright のブラウザをキャッシュ
         id: playwright-cache
+        if: steps.scope.outputs.run == 'true'
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Playwright のブラウザを入れる
         # キャッシュから戻したときも OS の依存ライブラリは入れ直す必要がある。
+        if: steps.scope.outputs.run == 'true'
         run: npx playwright install --with-deps chromium
 
       # サーバ (両アプリの wrangler dev) の起動は playwright.config.ts が受け持つ。
@@ -87,6 +301,7 @@ jobs:
       # テスト自体の失敗はやり直さない (揺れは Playwright の retries が受け持つ)。
       # **どちらも #38 を隠しているだけ**で、上流が直るまで原因は残る。
       - name: E2E (サーバが落ちたときだけやり直す)
+        if: steps.scope.outputs.run == 'true'
         run: |
           set -o pipefail
           if npm run test:e2e 2>&1 | tee "$RUNNER_TEMP/e2e.log"; then exit 0; fi
@@ -108,7 +323,7 @@ jobs:
       # ときにこそ要る。撮影自体が失敗しても E2E の判定は変えない (`continue-on-error`) —
       # 証跡が無いことは、テストが通ったかどうかとは別の話。
       - name: 画面の証跡を撮る
-        if: always()
+        if: always() && steps.scope.outputs.run == 'true'
         continue-on-error: true
         run: npm run shots
 
@@ -120,7 +335,7 @@ jobs:
       # 証跡は在れば助かるもので、無いことが CI を止める理由にはならない。
       - name: 画面の証跡を Gyazo へ上げる
         id: shots
-        if: always() && github.event_name == 'pull_request'
+        if: always() && steps.scope.outputs.run == 'true' && github.event_name == 'pull_request'
         continue-on-error: true
         env:
           GYAZO_ACCESS_TOKEN: ${{ secrets.GYAZO_ACCESS_TOKEN }}
@@ -156,7 +371,7 @@ jobs:
           fi
 
       - name: 証跡を PR にコメント
-        if: always() && github.event_name == 'pull_request' && hashFiles('shots.tsv') != ''
+        if: always() && steps.scope.outputs.run == 'true' && github.event_name == 'pull_request' && hashFiles('shots.tsv') != ''
         uses: actions/github-script@v9
         with:
           script: |
@@ -285,182 +500,11 @@ jobs:
         run: npx wrangler deploy
         working-directory: apps/web
 
-  preview-deploy:
-    name: preview deploy (pull request)
-    # E2E は待たない。落ちたときに実物を見て切り分けられるよう、
-    # 確認用の URL は先に出す。
-    needs: verify
-    # fork からの PR にはシークレットが渡らないので同一リポジトリの PR に限る。
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      # workers.dev のサブドメイン名 (例: example-account)。プレビュー URL の組み立てに使う。
-      # 秘密ではない (公開 URL の一部) のでリポジトリ変数に置く。
-      WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
-    steps:
-      # プレビュー URL は <alias>-<worker 名>.<subdomain>.workers.dev で決まる。
-      # 先に両方の URL を確定させてから、互いのオリジンを var で上書きしてアップロードする。
-      # そうしないと本体は本番の実行環境を指したままになり、実行 iframe が
-      # frame-ancestors に弾かれて動かない (ADR 0007)。
-      - name: プレビューの前提を確認して URL を決める
-        id: guard
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためプレビューをスキップしました"
-            exit 0
-          fi
-          if [ -z "$WORKERS_SUBDOMAIN" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::リポジトリ変数 CLOUDFLARE_WORKERS_SUBDOMAIN が未設定のためプレビューをスキップしました"
-            exit 0
-          fi
-
-          # エイリアスは PR 単位。commit ごとに URL が変わらないので PR コメントが陳腐化しない。
-          alias="pr-${{ github.event.pull_request.number }}"
-          {
-            echo "ready=true"
-            echo "alias=$alias"
-            echo "web_url=https://$alias-p5stage-web.$WORKERS_SUBDOMAIN.workers.dev"
-            echo "preview_url=https://$alias-p5stage-preview.$WORKERS_SUBDOMAIN.workers.dev"
-          } >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v7
-        if: steps.guard.outputs.ready == 'true'
-      - uses: actions/setup-node@v7
-        if: steps.guard.outputs.ready == 'true'
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-        if: steps.guard.outputs.ready == 'true'
-      - run: npm run build
-        if: steps.guard.outputs.ready == 'true'
-
-      # versions upload は本番トラフィックを切り替えず、確認用の URL だけを発行する。
-      # --var で本番オリジンを PR プレビューのオリジンに差し替える (両 Worker とも
-      # 変数はこれ 1 つだけなので、他の変数を落とす心配は無い)。
-      - name: preview をバージョンアップロード
-        if: steps.guard.outputs.ready == 'true'
-        run: |
-          # pipefail が無いと tee の成功でアップロードの失敗が隠れる。
-          set -o pipefail
-          npx wrangler versions upload \
-            --preview-alias "${{ steps.guard.outputs.alias }}" \
-            --var "PUBLIC_WEB_ORIGIN:${{ steps.guard.outputs.web_url }}" \
-            2>&1 | tee upload.log
-          grep -qF "${{ steps.guard.outputs.preview_url }}" upload.log \
-            || echo "::warning::preview のプレビュー URL が出力に見当たりません (Cloudflare 側で Preview URLs が無効かもしれません)"
-        working-directory: apps/preview
-      # **web にプレビュー URL は出ない。** `p5stage-web` はライブ同期の Durable Object
-      # (ADR 0017) を持ち、Cloudflare は DO を実装した Worker にプレビュー URL を
-      # 発行しない (`preview_urls: true` を書いても出ない — プラットフォーム側の制約)。
-      #
-      # それでもアップロードは走らせる。**本番デプロイが壊れる予兆をここで拾う**のが
-      # preview deploy を required に入れている理由で、URL が出るかどうかとは別。
-      # 画面の確認は e2e ジョブが撮る証跡が受け持つ。
-      #
-      # 未適用の Durable Object migration があるときだけは落とさない (下の判定)。
-      # この扱いを web 側にしか置かないのは、実行環境 (apps/preview) に状態を持たせない
-      # 設計だから — あちらに DO が増えることは想定していない (ADR 0007)。
-      - name: web をバージョンアップロード (プレビュー URL は出ない)
-        id: web_upload
-        if: steps.guard.outputs.ready == 'true'
-        run: |
-          set -o pipefail
-          if npx wrangler versions upload \
-            --preview-alias "${{ steps.guard.outputs.alias }}" \
-            --var "PUBLIC_PREVIEW_ORIGIN:${{ steps.guard.outputs.preview_url }}" \
-            2>&1 | tee upload.log
-          then
-            exit 0
-          fi
-
-          # Durable Object のライフサイクル変更 (クラスの作成・削除・改名) は
-          # **versions upload では適用できない** (Cloudflare API の code 10211)。
-          # 原子的な操作なので段階的ロールアウトに載らず、`wrangler deploy` でしか
-          # 適用できない、というプラットフォーム側の制約。
-          #
-          # したがって**新しい DO を入れる PR は必ずここで落ちる**。落とし続けると
-          # required check (ci-gate) が詰まって、その migration を適用する唯一の道
-          # (main への deploy) に永久に辿り着けない。
-          #
-          # 見逃すのはこの 1 コードだけ。他の失敗は今までどおり止める — 本番デプロイが
-          # 壊れる予兆をここで拾えるのが、preview deploy を required に含めている理由。
-          if grep -q "10211" upload.log; then
-            echo "pending_do_migration=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::未適用の Durable Object migration があるため web のバージョンを上げられません (main への deploy で適用されます)"
-            exit 0
-          fi
-          exit 1
-        working-directory: apps/web
-
-      - name: プレビュー URL を PR にコメント
-        if: steps.guard.outputs.ready == 'true'
-        uses: actions/github-script@v9
-        env:
-          PREVIEW_URL: ${{ steps.guard.outputs.preview_url }}
-          PENDING_DO: ${{ steps.web_upload.outputs.pending_do_migration }}
-        with:
-          script: |
-            const marker = "## 🚀 Preview Deployment";
-            // **web の URL は出さない。** 出せないものを載せると、404 を踏んでから
-            // 「壊れている」と読まれる。理由と、代わりに何を見ればよいかを書く。
-            //
-            // 未適用の DO migration は別の話 (アップロード自体が通らない)。
-            // 触れずに黙ると、バージョンが上がっていないことに気付けない。
-            const pending = process.env.PENDING_DO === "true";
-            const body = [
-              marker,
-              "",
-              `- preview (実行環境): ${process.env.PREVIEW_URL} — **開いても何も動きません**。本体の iframe から読まれる前提の実行環境で、直接開くとプレースホルダが出るだけ (要件 5.1 / ADR 0007)。上がったことの確認用`,
-              "- web (本体): **プレビュー URL は出せません** — ライブ同期の Durable Object を持つ Worker には、Cloudflare がプレビュー URL を発行しないため ([制約](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/#limitations) / ADR 0017 の申し送り)。画面は「📸 画面の証跡」のコメントで、動きは手元の `npm run dev` で確かめてください",
-              ...(pending
-                ? [
-                    "",
-                    "> [!NOTE]",
-                    "> 未適用の Durable Object migration があるため、web のバージョンは上げられていません (`wrangler versions upload` では適用できない制約)。main へマージすると `wrangler deploy` が適用します。",
-                  ]
-                : []),
-              "",
-              "URL は PR 単位で固定。新しい commit を push すると同じ URL の中身が入れ替わる。",
-              "",
-              `commit: ${context.sha.slice(0, 7)}`,
-            ].join("\n");
-
-            const { data: comments } = await github.rest.issues.listComments({
-              ...context.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(
-              (c) => c.user.type === "Bot" && c.body.includes(marker)
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                ...context.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                ...context.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-  # ruleset の required check はこの 1 本に集約する。deploy / preview-deploy は
-  # 条件付きで skip されるので、個別に required にすると「実行されない PR」で
-  # 永久 pending になり auto-merge が詰まる。
+  # ruleset の required check はこの 1 本に集約する。deploy は条件付きで skip されるので、
+  # 個別に required にすると「実行されない PR」で永久 pending になり auto-merge が詰まる。
   ci-gate:
     name: ci-gate
-    needs: [pr-title, verify, e2e, deploy, preview-deploy]
+    needs: [verify, e2e, deploy]
     # 既定では前段が失敗するとこのジョブごと skip され、required check が報告されない
     # まま pending で止まる。always() で必ず走らせ、結果は自前で判定する。
     if: always()
