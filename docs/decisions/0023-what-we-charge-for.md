@@ -106,8 +106,23 @@ Merchant of Record (Paddle 等) を挟めば回避できるが手数料が上が
 - Phase 3 のアセットクォータは、**将来の課金で引き上げられる余地を残した形**で実装する
   (上限をコードに焼き込まず、ユーザーごとの値として持てるようにしておく)
 - 要件 4 節と roadmap の v2 の「有料プラン」は、この ADR を参照する形に改める
-- Sponsors を有効化したら `.github/FUNDING.yml` を置く。ただし **FUNDING.yml を置くだけでは
-  リポジトリに Sponsor ボタンは出ない** — GitHub 側の Settings → General → Features →
-  Sponsorships を有効にして初めて表示される。この設定は REST / GraphQL API から切り替えられず
-  (`has_sponsorships` は PATCH しても黙って無視される)、Web UI で操作するしかない
+- Sponsors を有効化したら `.github/FUNDING.yml` を置く。**GitHub Sponsors だけを書き、
+  クォータ課金を始めてもその決済基盤をここへ足さない** — FUNDING.yml が指すのは「支援」で
+  あって、サービスの対価ではないため
+- Sponsor ボタンの表示にはリポジトリ側の Sponsorships 設定 (Settings → General → Features)
+  も要る。切り替えは REST の `PATCH /repos/{owner}/{repo}` では効かない (`has_sponsorships` は
+  黙って無視される) が、GraphQL の `updateRepository(hasSponsorshipsEnabled:)` では変えられる。
+  現状の確認は次で足りる:
+
+  ```bash
+  gh api graphql -f query='{ repository(owner:"shinyaoguri", name:"p5stage") {
+    hasSponsorshipsEnabled fundingLinks { platform url } } }'
+  ```
+
+  `hasSponsorshipsEnabled` がリポジトリ設定、`fundingLinks` が GitHub 側の FUNDING.yml 解釈
+  結果。後者が空ならボタンは出ない (公開ページの埋め込み JSON も `showSponsorButton: false`
+  を返す)
+- FUNDING.yml は GitHub 公式テンプレートに沿った最小形で保つ。設計意図はこの ADR に置き、
+  ファイル側にコメントを足さない — GitHub 側のパースを疑うとき、ファイルが素であるほど
+  切り分けが速い
 - 課金を実装する段になったら、この ADR の状態を更新するか後継の ADR を起こす
