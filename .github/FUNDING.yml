@@ -1,10 +1,1 @@
-# 支援の受け口。ADR 0023 で「当面の収益経路は GitHub Sponsors のみ」と決めているため、
-# ここも GitHub Sponsors だけを書く (決済と税務を GitHub が引き受けるので、日本の個人でも
-# 特商法の表示義務を負わずに済む)。
-#
-# クォータ課金を始めるときも、その決済基盤をここへ足すことはしない。FUNDING.yml が指すのは
-# 「支援」であって、サービスの対価ではない。
-#
-# このファイルだけでは Sponsor ボタンは出ない。GitHub の Settings → General → Features →
-# Sponsorships も有効にすること (Web UI のみ。API では切り替えられない)。ADR 0023 参照。
-github: [shinyaoguri]
+github: shinyaoguri
