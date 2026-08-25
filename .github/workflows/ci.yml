@@ -5,10 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    # ready_for_review を足すのは e2e を draft の間だけ止めているため。既定の types
-    # (opened / synchronize / reopened) だけだと、draft を ready に変えても CI が走らず
-    # e2e が skipped のまま「レビュー可能な PR」ができてしまう。
-    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -224,11 +220,10 @@ jobs:
 
   e2e:
     name: e2e (playwright)
-    # **draft の間は回さない。** e2e はこのリポジトリで最も重い仕事 (1 回あたり約 6 分) で、
-    # 書きかけの PR に何度も push するたびに丸ごと走っていた。ready for review に変えた
-    # 時点で走る (on.pull_request.types の ready_for_review)。
-    # skip されたジョブは ci-gate が success 扱いにするので required は詰まらない。
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # **draft でも回す。** 以前は課金 (private の included minutes) を理由に draft の間だけ
+    # 止めていたが、public 化で GitHub-hosted runner が無料になったため戻した (ADR 0022)。
+    # 書きかけのうちに壊れていると分かるほうが、ready にした瞬間に初めて落ちるより早い。
+    # 連続 push の無駄は concurrency の cancel-in-progress が受け持つ。
     runs-on: ubuntu-latest
     # 画面の証跡を PR へ知らせるため (下の「証跡」ステップ)。
     permissions:
