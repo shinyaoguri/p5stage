@@ -2,6 +2,7 @@
 import cloudflare from "@astrojs/cloudflare";
 import { defineConfig } from "astro/config";
 
+import { monacoDompurify } from "./vite/monaco-dompurify.ts";
 import { p5Types } from "./vite/p5-types.ts";
 
 // ギャラリー・作品ページは D1 のメタデータを引くため既定をオンデマンド描画にし、
@@ -24,6 +25,7 @@ export default defineConfig({
   session: false,
   vite: {
     // エディタが動的 import する `virtual:p5-types` を作る (Issue #104 / ADR 0021)。
-    plugins: [p5Types()],
+    // Monaco が同梱する DOMPurify は npm の dompurify へ向け直す (Issue #111 / ADR 0024)。
+    plugins: [p5Types(), monacoDompurify()],
   },
 });
