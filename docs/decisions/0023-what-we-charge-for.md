@@ -122,8 +122,10 @@ Merchant of Record (Paddle 等) を挟めば回避できるが手数料が上が
   `hasSponsorshipsEnabled` がリポジトリ設定、`fundingLinks` が GitHub 側の FUNDING.yml 解釈
   結果。後者が空ならボタンは出ない (公開ページの埋め込み JSON も `showSponsorButton: false`
   を返す)
-- FUNDING.yml は **Settings → Sponsorships の「Set up sponsor button」導線が生成する
-  公式テンプレートのまま**置き、手でコメントを書き足さない。手書きのファイルを main に置いても
-  GitHub 側が認識しない事象に当たったため (#119)、設計意図はこの ADR に置いてファイル側は
-  GitHub が作った形を保つ
+- FUNDING.yml は `github: shinyaoguri` の 1 行だけに保ち、コメントを書き足さない。設計意図は
+  この ADR に置く — GitHub 側の検出を疑うとき、ファイルが素であるほど切り分けが速い
+- **現在このリポジトリでは Sponsor ボタンが出ていない** (#119)。ファイル・リポジトリ設定・
+  Sponsors リスティングのすべてを、検出が数秒で通る対照用リポジトリと同一に揃えても
+  `fundingLinks` が空のままなので、GitHub 側でこのリポジトリの funding 検出が壊れていると
+  判断している。GitHub Support への問い合わせ文面は #119 に置いた
 - 課金を実装する段になったら、この ADR の状態を更新するか後継の ADR を起こす
