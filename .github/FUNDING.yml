@@ -4,4 +4,7 @@
 #
 # クォータ課金を始めるときも、その決済基盤をここへ足すことはしない。FUNDING.yml が指すのは
 # 「支援」であって、サービスの対価ではない。
+#
+# このファイルだけでは Sponsor ボタンは出ない。GitHub の Settings → General → Features →
+# Sponsorships も有効にすること (Web UI のみ。API では切り替えられない)。ADR 0023 参照。
 github: [shinyaoguri]

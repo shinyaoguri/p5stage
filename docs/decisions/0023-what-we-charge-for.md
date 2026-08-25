@@ -106,5 +106,8 @@ Merchant of Record (Paddle 等) を挟めば回避できるが手数料が上が
 - Phase 3 のアセットクォータは、**将来の課金で引き上げられる余地を残した形**で実装する
   (上限をコードに焼き込まず、ユーザーごとの値として持てるようにしておく)
 - 要件 4 節と roadmap の v2 の「有料プラン」は、この ADR を参照する形に改める
-- Sponsors を有効化したら `.github/FUNDING.yml` を置く
+- Sponsors を有効化したら `.github/FUNDING.yml` を置く。ただし **FUNDING.yml を置くだけでは
+  リポジトリに Sponsor ボタンは出ない** — GitHub 側の Settings → General → Features →
+  Sponsorships を有効にして初めて表示される。この設定は REST / GraphQL API から切り替えられず
+  (`has_sponsorships` は PATCH しても黙って無視される)、Web UI で操作するしかない
 - 課金を実装する段になったら、この ADR の状態を更新するか後継の ADR を起こす
