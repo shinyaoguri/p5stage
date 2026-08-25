@@ -25,6 +25,9 @@
     "test:e2e:ui": "playwright test --ui",
     "shots": "SHOTS=1 playwright test --grep @shots"
   },
+  "overrides": {
+    "dompurify": "^3.4.14"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
