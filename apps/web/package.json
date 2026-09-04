@@ -19,9 +19,9 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@astrojs/cloudflare": "^14.2.3",
+    "@astrojs/cloudflare": "^14.2.5",
     "@types/p5": "^1.7.7",
-    "astro": "^7.2.4",
-    "wrangler": "4.124.0"
+    "astro": "^7.2.9",
+    "wrangler": "4.127.1"
   }
 }
