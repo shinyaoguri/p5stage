@@ -38,5 +38,10 @@ export default tseslint.config(
     files: ["e2e/**/*.ts"],
     languageOptions: { globals: globals.node },
   },
+  // CI を支えるスクリプトの検査も Node (Vitest) が動かす。
+  {
+    files: ["scripts/**/*.ts"],
+    languageOptions: { globals: globals.node },
+  },
   prettier
 );
