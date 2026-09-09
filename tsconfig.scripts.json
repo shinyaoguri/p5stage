@@ -1,0 +1,9 @@
+{
+  // CI を支えるスクリプト (scripts/) はワークスペースのどれにも属さないので、ここで型を見る。
+  // 見る対象はテストだけ (スクリプト本体は bash で、CI では npm ci より前に走るため)。
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["scripts"]
+}

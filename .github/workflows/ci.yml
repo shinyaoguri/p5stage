@@ -44,7 +44,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      # 素の `npm ci` ではなくスクリプト経由で入れる。レジストリ側の一時障害だけ
+      # やり直すため (#131)。理由と判定はスクリプトのコメントにある。
+      - run: ./scripts/npm-ci.sh
       - run: npm run lint
       - run: npm run format:check
       # typecheck は wrangler types で worker-configuration.d.ts を生成してから走る
@@ -269,7 +271,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: ./scripts/npm-ci.sh
         if: steps.scope.outputs.run == 'true'
 
       # ブラウザ本体は 100MB 超。Playwright のバージョンが変わるまで使い回す。
@@ -464,7 +466,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: ./scripts/npm-ci.sh
         if: steps.guard.outputs.ready == 'true'
       - run: npm run build
         if: steps.guard.outputs.ready == 'true'
