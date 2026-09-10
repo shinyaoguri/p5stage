@@ -33,7 +33,7 @@ export const FAKE_AUTHOR = {
 } as const;
 
 /** その作者の Gist として偽 GitHub に置く種。`sketches.gist_id` と対応する。 */
-export const FOREIGN_GIST_ID = "e2e-gist-foreign";
+export const FOREIGN_GIST_ID = "e2e10000000000000000000000000006";
 
 /**
  * 限定公開の方 (secret gist)。
@@ -42,7 +42,7 @@ export const FOREIGN_GIST_ID = "e2e-gist-foreign";
  * 起きない** (#44)。代わりに気を付けるのは系譜の表示で、限定公開の親の URL を
  * 公開の子に出すと、URL を知らない相手にまで配られる。
  */
-export const FOREIGN_UNLISTED_GIST_ID = "e2e-gist-foreign-unlisted";
+export const FOREIGN_UNLISTED_GIST_ID = "e2e10000000000000000000000000007";
 
 /**
  * アセットを使う方。
@@ -51,7 +51,7 @@ export const FOREIGN_UNLISTED_GIST_ID = "e2e-gist-foreign-unlisted";
  * いれば、フォーク先はそのまま保存できる (保存経路は自分に計上されていない実体を
  * 参照するマニフェストを断る)。
  */
-export const FOREIGN_ASSET_GIST_ID = "e2e-gist-foreign-assets";
+export const FOREIGN_ASSET_GIST_ID = "e2e10000000000000000000000000008";
 
 /**
  * 作者が gist.github.com で直接壊した Gist (#70)。
@@ -63,4 +63,4 @@ export const FOREIGN_ASSET_GIST_ID = "e2e-gist-foreign-assets";
  * 偽 GitHub 側の持ち主も `e2e-user` にする。**自分の Gist を自分で書き換えた**
  * のがこの Issue の状況で、他人の Gist の話ではない。
  */
-export const BLOCKED_GIST_ID = "e2e-gist-blocked";
+export const BLOCKED_GIST_ID = "e2e10000000000000000000000000009";
