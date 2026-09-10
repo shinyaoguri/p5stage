@@ -39,7 +39,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          args: --no-progress './**/*.md'
+          # localhost は README のコマンド表が案内する開発サーバ (`npm run dev` など)。
+          # ランナーからは当然繋がらず、毎週「接続拒否」を 3 件積むだけだった (#107)。
+          # 見たいのは時間が経つと壊れる外部リンクなので、ループバックは対象から外す。
+          args: --no-progress --exclude-loopback './**/*.md'
           output: lychee-report.md
           fail: false
 
