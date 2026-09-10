@@ -12,6 +12,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { FOREIGN_GIST_ID } from "./fake-github/viewer";
 import {
   expectGeneration,
   login,
@@ -82,7 +83,7 @@ test.describe("フォーク", () => {
     ).toContainText("E2E_SKETCH_MARKER");
 
     // **別の Gist が立っている** = fork API を通った (元の Gist を指していない)。
-    expect(await gistHref(page)).not.toContain("e2e-gist-foreign");
+    expect(await gistHref(page)).not.toContain(FOREIGN_GIST_ID);
 
     // 系譜が出る。GitHub 側の `Forked from` ではなく D1 が正典 (#44)。
     await expect(page.locator(".sketch-lineage")).toContainText(

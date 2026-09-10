@@ -11,9 +11,18 @@
 -- リビジョンは**本物と同じ 16 進 40 桁**にしてある (偽 GitHub が返す形も同じ)。
 -- 作品ページの `?rev=` は形で足切りするので、種だけ現実と違う形にしておくと
 -- 「テストでは通るが本番では弾かれる」経路ができる (Phase 4-1)。
--- 公開の種の gist_id も同じ理由で 16 進 (サムネイル配信 `/t/` が `isGistId` で
--- 足切りする — Phase 5)。他の種の gist_id はまだ `e2e-gist-*` のままで、
--- 揃える作業は別途 (該当の配信経路を踏むテストが無いため)。
+-- gist_id も同じ理由で**本物と同じ 16 進 32 桁**にしてある (サムネイル配信 `/t/` が
+-- `isGistId` で足切りする — Phase 5 / #81)。
+--
+-- 16 進にすると名前で読めなくなるので、どれがどの種かはここで引く。末尾の 1 桁だけが
+-- 違い、頭はすべて `e2e1` + 0 の並び。同じ値を playwright.config.ts (R2 の写し) と
+-- e2e/fake-github/viewer.ts (偽 GitHub 側の実物) も持つ。
+--
+--   …0001  公開                    …0006  他人 (フォークの相手)
+--   …0002  限定公開                …0007  他人・限定公開
+--   …0003  アセットを使う          …0008  他人・アセットを使う
+--   …0004  台帳を持たない (埋め直し) …0009  作者が GitHub 側で壊した
+--   …0005  削除済み (墓標)
 
 INSERT OR REPLACE INTO users (id, login, avatar_url, created_at, updated_at)
 VALUES (424242, 'e2e-author', NULL, 0, 0);
@@ -42,7 +51,7 @@ INSERT OR REPLACE INTO sketches
    created_at, updated_at, current_revision, revision_etag,
    revision_checked_at, gist_deleted_at)
 VALUES
-  ('E2EAssetSketch01', 424242, 'e2e-gist-assets', 'E2E アセットスケッチ',
+  ('E2EAssetSketch01', 424242, 'e2e10000000000000000000000000003', 'E2E アセットスケッチ',
    '', 'public',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL);
@@ -80,7 +89,7 @@ DELETE FROM user_blobs
 -- 3-5b の担当なので、こちらは前提として置く。
 INSERT OR REPLACE INTO blob_refs (gist_id, revision, sha256, created_at)
 VALUES
-  ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
+  ('e2e10000000000000000000000000003', 'e2e0000000000000000000000000000000000000',
    '7d7e41d5f4c76f3e3fd8d8c0793726ed5d7d0e40d91207d94a95fd28dd1b5c91', 0);
 
 -- 作者が GitHub 側で `assets.json` を壊した作品 (#70)。
@@ -102,7 +111,7 @@ INSERT OR REPLACE INTO sketches
    revision_checked_at, gist_deleted_at,
    delivery_blocked_at, delivery_blocked_revision)
 VALUES
-  ('E2EBlockedAst001', 20250812, 'e2e-gist-blocked', 'E2E 壊れたマニフェストの作品',
+  ('E2EBlockedAst001', 20250812, 'e2e10000000000000000000000000009', 'E2E 壊れたマニフェストの作品',
    '', 'public',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    0, NULL, NULL, NULL);
@@ -112,7 +121,7 @@ VALUES
 -- seed-content-assets.json の中身に変わる。
 INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
 VALUES
-  ('e2e-gist-blocked', 'e2e1111111111111111111111111111111111111', 0);
+  ('e2e10000000000000000000000000009', 'e2e1111111111111111111111111111111111111', 0);
 
 -- 限定公開。共有キャッシュに載らないこと・注意書き・noindex を見る。
 -- 新着一覧には**出ない**ことも見る。時刻を今にするのは公開の種と同じ理由で、
@@ -122,7 +131,7 @@ INSERT OR REPLACE INTO sketches
    created_at, updated_at, current_revision, revision_etag,
    revision_checked_at, gist_deleted_at)
 VALUES
-  ('E2EUnlistedSkt01', 424242, 'e2e-gist-unlisted', 'E2E 限定公開スケッチ',
+  ('E2EUnlistedSkt01', 424242, 'e2e10000000000000000000000000002', 'E2E 限定公開スケッチ',
    '', 'unlisted',
    unixepoch() * 1000, unixepoch() * 1000,
    'e2e1111111111111111111111111111111111111', '"e2e"',
@@ -154,7 +163,7 @@ INSERT OR REPLACE INTO sketches
 VALUES
   ('E2EUnsavedSkt001', 424242, NULL, 'E2E 未保存スケッチ', '', 'public',
    unixepoch() * 1000, unixepoch() * 1000, NULL, NULL, NULL, NULL),
-  ('E2ETombstoneSk01', 424242, 'e2e-gist-tombstone', 'E2E 削除済みスケッチ',
+  ('E2ETombstoneSk01', 424242, 'e2e10000000000000000000000000005', 'E2E 削除済みスケッチ',
    '', 'public',
    unixepoch() * 1000, unixepoch() * 1000,
    'e2e1111111111111111111111111111111111111', '"e2e"',
@@ -171,13 +180,13 @@ VALUES
    (unixepoch() - 86400) * 1000),
   ('e2e10000000000000000000000000001', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000),
-  ('e2e-gist-assets', 'e2e0000000000000000000000000000000000000',
+  ('e2e10000000000000000000000000003', 'e2e0000000000000000000000000000000000000',
    (unixepoch() - 86400) * 1000),
-  ('e2e-gist-assets', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000003', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000),
-  ('e2e-gist-unlisted', 'e2e0000000000000000000000000000000000000',
+  ('e2e10000000000000000000000000002', 'e2e0000000000000000000000000000000000000',
    (unixepoch() - 86400) * 1000),
-  ('e2e-gist-unlisted', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000002', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000);
 
 -- 4-1 以前の種が置いていた版 (`e2erev01`) を落とす。ローカルの D1 と R2 は実行を
@@ -196,14 +205,14 @@ INSERT OR REPLACE INTO sketches
    created_at, updated_at, current_revision, revision_etag,
    revision_checked_at, gist_deleted_at)
 VALUES
-  ('E2EBackfillSkt01', 424242, 'e2e-gist-backfill', 'E2E 埋め直しスケッチ',
+  ('E2EBackfillSkt01', 424242, 'e2e10000000000000000000000000004', 'E2E 埋め直しスケッチ',
    '', 'public',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL);
 
 -- 台帳とカーソルを落として、実行のたびに同じ状態から始める
 -- (ローカルの D1 は実行をまたいで残る)。
-DELETE FROM gist_revisions WHERE gist_id = 'e2e-gist-backfill';
+DELETE FROM gist_revisions WHERE gist_id = 'e2e10000000000000000000000000004';
 DELETE FROM gc_state WHERE key = 'revisions_backfill_cursor';
 
 -- フォークの相手 (Phase 4-3)。
@@ -220,29 +229,29 @@ INSERT OR REPLACE INTO sketches
    revision_checked_at, gist_deleted_at,
    forked_from_sketch_id, forked_from_revision)
 VALUES
-  ('E2EForeignSkt001', 424242, 'e2e-gist-foreign', 'E2E 他人のスケッチ',
+  ('E2EForeignSkt001', 424242, 'e2e10000000000000000000000000006', 'E2E 他人のスケッチ',
    'フォークされる側の作品です。', 'public',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL, NULL, NULL),
   -- 限定公開の親。**系譜の表示で URL を漏らさない**ことを確かめる側 (ADR 0018)。
-  ('E2EForeignUnl001', 424242, 'e2e-gist-foreign-unlisted',
+  ('E2EForeignUnl001', 424242, 'e2e10000000000000000000000000007',
    'E2E 他人の限定公開スケッチ', '', 'unlisted',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL, NULL, NULL),
   -- アセットを使う親。**他人の blob が自分に計上されるか**を見る側 (ADR 0003)。
   -- 参照する実体は上で置いた dot.png で、所有は誰も持っていない状態から始まる。
-  ('E2EForeignAst001', 424242, 'e2e-gist-foreign-assets',
+  ('E2EForeignAst001', 424242, 'e2e10000000000000000000000000008',
    'E2E 他人のアセット作品', '', 'public',
    0, 0, 'e2e1111111111111111111111111111111111111', '"e2e"',
    unixepoch() * 1000, NULL, NULL, NULL);
 
 INSERT OR REPLACE INTO gist_revisions (gist_id, revision, created_at)
 VALUES
-  ('e2e-gist-foreign', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000006', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000),
-  ('e2e-gist-foreign-unlisted', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000007', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000),
-  ('e2e-gist-foreign-assets', 'e2e1111111111111111111111111111111111111',
+  ('e2e10000000000000000000000000008', 'e2e1111111111111111111111111111111111111',
    (unixepoch() - 3600) * 1000);
 
 -- 前回の実行で作られたフォーク (と、その作者の計上) を落として、毎回同じ状態から
