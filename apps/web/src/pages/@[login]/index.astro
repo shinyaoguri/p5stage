@@ -68,39 +68,37 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
 >
   <main>
     <header class="profile">
-      {
-        user.avatarUrl !== null && (
-          <img
-            class="avatar"
-            src={user.avatarUrl}
-            alt=""
-            width="48"
-            height="48"
-          />
-        )
-      }
+      {user.avatarUrl !== null && (
+        <img
+          class="avatar"
+          src={user.avatarUrl}
+          alt=""
+          width="48"
+          height="48"
+        />
+      )}
       <div class="identity">
         <h1>{user.login}</h1>
         <a
           class="github"
           href={`https://github.com/${encodeURIComponent(user.login)}`}
           target="_blank"
-          rel="noopener noreferrer">GitHub</a
+          rel="noopener noreferrer"
         >
+          GitHub
+        </a>
       </div>
     </header>
 
     <section aria-labelledby="works-heading">
       <h2 id="works-heading">公開中の作品</h2>
-      {
-        cards.length === 0 ? (
-          /* 限定公開しか無い人もここに来る。**その事実は出さない** —
+      {cards.length === 0 ? (
+        /* 限定公開しか無い人もここに来る。**その事実は出さない** —
              一覧に出さないものの存在を文言で漏らしては同じことになる */
-          <p class="empty">公開された作品はまだありません。</p>
-        ) : (
-          <SketchGrid cards={cards} showAuthor={false} />
-        )
-      }
+        <p class="empty">公開された作品はまだありません。</p>
+      ) : (
+        <SketchGrid cards={cards} showAuthor={false} />
+      )}
     </section>
   </main>
 </BaseLayout>

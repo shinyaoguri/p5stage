@@ -41,16 +41,14 @@ const {
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    {
-      image !== undefined && (
-        <Fragment>
-          <meta property="og:image" content={image} />
-          {/* 絵があるときだけ大きいカードにする。無いのに宣言すると、
+    {image !== undefined && (
+      <Fragment>
+        <meta property="og:image" content={image} />
+        {/* 絵があるときだけ大きいカードにする。無いのに宣言すると、
               画像の入る場所が空いたままのカードになる */}
-          <meta name="twitter:card" content="summary_large_image" />
-        </Fragment>
-      )
-    }
+        <meta name="twitter:card" content="summary_large_image" />
+      </Fragment>
+    )}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>

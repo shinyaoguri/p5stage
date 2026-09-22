@@ -42,26 +42,25 @@ try {
 ---
 
 <BaseLayout title="エディタ | p5stage">
-  {
-    originError !== null ? (
-      <p class="error">実行環境のオリジン設定が不正です: {originError}</p>
-    ) : (
-      <div
-        id="editor-root"
-        data-preview-origin={previewOrigin}
-        data-assets-origin={assetsOrigin}
-      >
-        {/* 実行キャンバス。エディタはこの上に透過で重なる (要件 3.1)。 */}
-        <div id="stage" />
-        <div id="editor" />
+  {originError !== null ? (
+    <p class="error">実行環境のオリジン設定が不正です: {originError}</p>
+  ) : (
+    <div
+      id="editor-root"
+      data-preview-origin={previewOrigin}
+      data-assets-origin={assetsOrigin}
+    >
+      {/* 実行キャンバス。エディタはこの上に透過で重なる (要件 3.1)。 */}
+      <div id="stage" />
+      <div id="editor" />
 
-        <div id="file-tabs" />
+      <div id="file-tabs" />
 
-        {/* 実行ボタンと作品の名前。編集中に最も多く押す操作なので、右上の操作列に
+      {/* 実行ボタンと作品の名前。編集中に最も多く押す操作なので、右上の操作列に
             混ぜず画面上部中央に単独で置く (#41 の 3)。 */}
-        <div id="project-bar" />
+      <div id="project-bar" />
 
-        {/* 操作列。**文字はもう無い** (#41 の 6)。今そうである状態はそれぞれの
+      {/* 操作列。**文字はもう無い** (#41 の 6)。今そうである状態はそれぞれの
             アイコン自身が持ち (保存の色とドット・実行ボタンの ▶/■)、もう終わった
             出来事はトースト (scripts/ui/toast.ts) が受け持つ。
 
@@ -71,32 +70,31 @@ try {
             **常時出るのは保存・全画面・アカウントの 3 つ**。設定はアカウント
             メニューへ畳んだ (#87 の段階 5)。ここは投影されている画面の隅なので、
             残すのは「今すぐ押す口」に限る。 */}
-        <div class="chrome">
-          {/* 直すまで続く条件。無い間は何も出ない (#41 の 6)。 */}
-          <div id="warning-controls" />
-          {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
-          <div id="draft-controls" />
-          {/* 保存 (GitHub マーク)。**押す口は右上に揃える** — 中央は作品そのもの
+      <div class="chrome">
+        {/* 直すまで続く条件。無い間は何も出ない (#41 の 6)。 */}
+        <div id="warning-controls" />
+        {/* 下書きが今どうなっているか。書く前は何も出ない。 */}
+        <div id="draft-controls" />
+        {/* 保存 (GitHub マーク)。**押す口は右上に揃える** — 中央は作品そのもの
               (実行・名前・作品メニュー) の場所で、保存はそこに置くと名前の一部の
               ように読める。 */}
-          <div id="save-controls" />
-          {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
-          <div id="fullscreen-controls" />
-          <div id="account" />
-        </div>
-
-        <div id="console" />
-
-        {/* 尋ねる面 (ダイアログ・ドロワー) の置き場。開く口はメニューの中に
-            あるので、操作列には並ばない (#87 の段階 2-3)。 */}
-        <div id="adopt-controls" />
-        {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
-        <div id="tags-controls" />
-        {/* 作品が使うアセット (Phase 3-4)。面そのものは画面の直下に置かれる。 */}
-        <div id="assets" />
+        <div id="save-controls" />
+        {/* 画面を最大化する (#87 の段階 1)。使えない環境では中身ごと出ない。 */}
+        <div id="fullscreen-controls" />
+        <div id="account" />
       </div>
-    )
-  }
+
+      <div id="console" />
+
+      {/* 尋ねる面 (ダイアログ・ドロワー) の置き場。開く口はメニューの中に
+            あるので、操作列には並ばない (#87 の段階 2-3)。 */}
+      <div id="adopt-controls" />
+      {/* 作品の主題 (Phase 5)。保存した作品にだけ付けられる。 */}
+      <div id="tags-controls" />
+      {/* 作品が使うアセット (Phase 3-4)。面そのものは画面の直下に置かれる。 */}
+      <div id="assets" />
+    </div>
+  )}
 </BaseLayout>
 
 <script>

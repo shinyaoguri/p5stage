@@ -38,7 +38,9 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
     <header class="hero">
       <h1>p5stage</h1>
       <p class="lead">p5.js スケッチの開発・共有プラットフォーム</p>
-      <a class="cta" href="/edit">スケッチを作る</a>
+      <a class="cta" href="/edit">
+        スケッチを作る
+      </a>
       {/* 作るだけでなく探せることを、入口で見せる (Phase 5 の検索)。 */}
       <div class="search">
         <SearchForm />
@@ -47,13 +49,11 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
 
     <section class="latest" aria-labelledby="latest-heading">
       <h2 id="latest-heading">新着の作品</h2>
-      {
-        cards.length === 0 ? (
-          <p class="empty">公開された作品はまだありません。</p>
-        ) : (
-          <SketchGrid cards={cards} />
-        )
-      }
+      {cards.length === 0 ? (
+        <p class="empty">公開された作品はまだありません。</p>
+      ) : (
+        <SketchGrid cards={cards} />
+      )}
     </section>
   </main>
 </BaseLayout>
