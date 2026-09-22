@@ -13,6 +13,12 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # 1.0.1 は <style> 内の複数行 CSS コメントを書くたびに 2 桁ずつ深く字下げし、
+      # format:check が収束しない (withastro/prettier-plugin-astro#487)。
+      # package.json で 1.0.0 に固定してあり、修正版が出たら固定とこの行を外す。
+      - dependency-name: "prettier-plugin-astro"
+        versions:
+          - "1.0.1"
     groups:
       minor-and-patch:
         update-types:
