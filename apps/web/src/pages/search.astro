@@ -56,37 +56,34 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
     </header>
 
     <section aria-labelledby="results-heading">
-      <h2 id="results-heading" class="sr-only">検索結果</h2>
-      {
-        ignored.length > 0 && (
-          <p class="note">
-            {/* 1 つの式にまとめる。文字列と式を並べて書くと、整形で挟まる改行が
+      <h2 id="results-heading" class="sr-only">
+        検索結果
+      </h2>
+      {ignored.length > 0 && (
+        <p class="note">
+          {/* 1 つの式にまとめる。文字列と式を並べて書くと、整形で挟まる改行が
                 そのまま抜けて「(3文字以上」のように空白が落ちる。 */}
-            {`${ignored.join("・")} は検索語から除きました (${SEARCH_TERM_MIN_LENGTH} 文字以上の語で探せます)。`}
-          </p>
-        )
-      }
-      {
-        query.kind === "empty" ? (
-          <p class="empty">
-            探したい言葉を入れてください。
-            <a href="/">新着の作品を見る</a>
-          </p>
-        ) : query.kind === "too-short" ? (
-          <p class="empty">
-            {SEARCH_TERM_MIN_LENGTH} 文字以上の語で探してください。
-            <a href="/">新着の作品を見る</a>
-          </p>
-        ) : cards.length === 0 ? (
-          <p class="empty">
-            {query.terms.join("・")}{" "}
-            に当てはまる公開作品は見つかりませんでした。
-            <a href="/">新着の作品を見る</a>
-          </p>
-        ) : (
-          <SketchGrid cards={cards} />
-        )
-      }
+          {`${ignored.join("・")} は検索語から除きました (${SEARCH_TERM_MIN_LENGTH} 文字以上の語で探せます)。`}
+        </p>
+      )}
+      {query.kind === "empty" ? (
+        <p class="empty">
+          探したい言葉を入れてください。
+          <a href="/">新着の作品を見る</a>
+        </p>
+      ) : query.kind === "too-short" ? (
+        <p class="empty">
+          {SEARCH_TERM_MIN_LENGTH} 文字以上の語で探してください。
+          <a href="/">新着の作品を見る</a>
+        </p>
+      ) : cards.length === 0 ? (
+        <p class="empty">
+          {query.terms.join("・")} に当てはまる公開作品は見つかりませんでした。
+          <a href="/">新着の作品を見る</a>
+        </p>
+      ) : (
+        <SketchGrid cards={cards} />
+      )}
     </section>
   </main>
 </BaseLayout>

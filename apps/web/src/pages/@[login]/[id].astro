@@ -281,170 +281,142 @@ const notice = (() => {
       <h1>{sketch.title}</h1>
       <p class="sketch-meta">
         <a class="sketch-author" href={userPath(sketch.ownerLogin)}>
-          {
-            sketch.ownerAvatarUrl !== null && (
-              <img
-                class="sketch-avatar"
-                src={sketch.ownerAvatarUrl}
-                alt=""
-                width="24"
-                height="24"
-                loading="lazy"
-              />
-            )
-          }
+          {sketch.ownerAvatarUrl !== null && (
+            <img
+              class="sketch-avatar"
+              src={sketch.ownerAvatarUrl}
+              alt=""
+              width="24"
+              height="24"
+              loading="lazy"
+            />
+          )}
           {sketch.ownerLogin}
         </a>
         <span class="sketch-updated">更新 {updatedAt}</span>
-        {
-          gistUrl !== null && (
-            <a href={gistUrl} target="_blank" rel="noopener noreferrer">
-              Gist
-            </a>
-          )
-        }
-        {
-          /* 追従できているときだけ出る。印を描くのは CSS で、条件は
+        {gistUrl !== null && (
+          <a href={gistUrl} target="_blank" rel="noopener noreferrer">
+            Gist
+          </a>
+        )}
+        {/* 追従できているときだけ出る。印を描くのは CSS で、条件は
             `data-live-state`(JS が書く)。繋がる前・切れた後・混雑で断られたときは
-            出ない — **閲覧そのものは何も変わらない**ので、失敗を言い立てない */
-        }
+            出ない — **閲覧そのものは何も変わらない**ので、失敗を言い立てない */}
         {live && <span class="sketch-live">同期中</span>}
       </p>
-      {
-        sketch.description !== "" && (
-          <p class="sketch-description">{sketch.description}</p>
-        )
-      }
-      {
-        tags.length > 0 && (
-          <ul class="sketch-tags" aria-label="タグ">
-            {tags.map((tag) => (
-              <li>
-                <a href={tagPath(tag)}>{tag}</a>
-              </li>
-            ))}
-          </ul>
-        )
-      }
-      {
-        sketch.visibility === "unlisted" && (
-          <p class="sketch-warning">
-            限定公開 — この URL を知っている人は誰でも見られます
-            (非公開ではありません)。
-          </p>
-        )
-      }
-      {
-        past !== null && (
-          <p class="sketch-past">
-            過去の版を見ています
-            {past.kind === "ready" && ` (${formatTime(past.createdAt)} の写し)`}
-            。<a href={sketchPath(sketch.ownerLogin, sketch.id)}>最新の版へ</a>
-          </p>
-        )
-      }
-      {
-        parent !== null && (
-          <p class="sketch-lineage">
-            {parent.visibility === "public" ? (
-              <Fragment>
-                <a href={sketchPath(parent.ownerLogin, parent.id)}>
-                  {parent.title}
-                </a>
-                {` (${parent.ownerLogin}) から派生`}
-              </Fragment>
-            ) : (
-              // 親の存在までは隠さない (子から辿れる事実なので) が、URL は出さない。
-              "限定公開の作品から派生"
-            )}
-          </p>
-        )
-      }
-      {
-        /* ログインしている人にだけ出る操作 (#43 / Phase 4-3)。**中身は JS が足す** —
-          ここで出し分けると、その人向けの HTML がエッジキャッシュ越しに他人へ配られる */
-      }
+      {sketch.description !== "" && (
+        <p class="sketch-description">{sketch.description}</p>
+      )}
+      {tags.length > 0 && (
+        <ul class="sketch-tags" aria-label="タグ">
+          {tags.map((tag) => (
+            <li>
+              <a href={tagPath(tag)}>{tag}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {sketch.visibility === "unlisted" && (
+        <p class="sketch-warning">
+          限定公開 — この URL を知っている人は誰でも見られます
+          (非公開ではありません)。
+        </p>
+      )}
+      {past !== null && (
+        <p class="sketch-past">
+          過去の版を見ています
+          {past.kind === "ready" && ` (${formatTime(past.createdAt)} の写し)`}。
+          <a href={sketchPath(sketch.ownerLogin, sketch.id)}>最新の版へ</a>
+        </p>
+      )}
+      {parent !== null && (
+        <p class="sketch-lineage">
+          {parent.visibility === "public" ? (
+            <Fragment>
+              <a href={sketchPath(parent.ownerLogin, parent.id)}>
+                {parent.title}
+              </a>
+              {` (${parent.ownerLogin}) から派生`}
+            </Fragment>
+          ) : (
+            // 親の存在までは隠さない (子から辿れる事実なので) が、URL は出さない。
+            "限定公開の作品から派生"
+          )}
+        </p>
+      )}
+      {/* ログインしている人にだけ出る操作 (#43 / Phase 4-3)。**中身は JS が足す** —
+          ここで出し分けると、その人向けの HTML がエッジキャッシュ越しに他人へ配られる */}
       <div class="sketch-actions" id="sketch-actions"></div>
     </header>
 
-    {
-      originError !== null ? (
-        <p class="sketch-notice">
-          実行環境のオリジン設定が不正です: {originError}
-        </p>
-      ) : (
-        notice !== null && <p class="sketch-notice">{notice}</p>
-      )
-    }
+    {originError !== null ? (
+      <p class="sketch-notice">
+        実行環境のオリジン設定が不正です: {originError}
+      </p>
+    ) : (
+      notice !== null && <p class="sketch-notice">{notice}</p>
+    )}
 
-    {
-      files !== null && originError === null && (
-        <div class="sketch-stage" id="stage" />
-      )
-    }
+    {files !== null && originError === null && (
+      <div class="sketch-stage" id="stage" />
+    )}
 
-    {
-      files !== null && (
-        <section class="sketch-code">
-          <h2 class="sketch-code-heading">コード</h2>
-          {/* タブは JS が作る。中身は最初から DOM にあるので、JS 無しでも読める */}
-          <div class="sketch-tabs" id="sketch-tabs" />
-          {/* 中身は set:text で 1 要素に閉じる。子要素を挟むと整形が要素の間に
+    {files !== null && (
+      <section class="sketch-code">
+        <h2 class="sketch-code-heading">コード</h2>
+        {/* タブは JS が作る。中身は最初から DOM にあるので、JS 無しでも読める */}
+        <div class="sketch-tabs" id="sketch-tabs" />
+        {/* 中身は set:text で 1 要素に閉じる。子要素を挟むと整形が要素の間に
               改行を入れ、その空白がコードの一部として実行にも回ってしまう。
               set:text は値をエスケープするので、他者のコードを埋めても安全。 */}
-          {fileNames.map((name) => (
-            <pre
-              class="sketch-file"
-              data-file={name}
-              hidden={name !== activeFile}
-              set:text={files[name]}
-            />
-          ))}
-        </section>
-      )
-    }
+        {fileNames.map((name) => <pre
+          class="sketch-file"
+          data-file={name}
+          hidden={name !== activeFile}
+          set:text={files[name]}
+        ></pre>)}
+      </section>
+    )}
 
     {/* 版が 1 つしか無い作品に「履歴」は要らない (保存した直後がその状態)。 */}
-    {
-      revisions.length > 1 && (
-        <section class="sketch-history">
-          <h2 class="sketch-history-heading">履歴</h2>
-          <p class="sketch-history-note">
-            p5stage が写しを持っている版です (Gist の全履歴ではありません)。
-          </p>
-          {/* ただのリンクなので JS 無しでも辿れる。 */}
-          <ol class="sketch-history-list">
-            {revisions.map((entry) => {
-              const isCurrent = entry.revision === sketch.currentRevision;
-              const viewing =
-                past === null ? isCurrent : entry.revision === past.revision;
-              return (
-                <li class="sketch-history-item">
-                  <a
-                    href={
-                      isCurrent
-                        ? sketchPath(sketch.ownerLogin, sketch.id)
-                        : sketchRevisionPath(
-                            sketch.ownerLogin,
-                            sketch.id,
-                            entry.revision
-                          )
-                    }
-                    aria-current={viewing ? "true" : undefined}
-                  >
-                    <time datetime={new Date(entry.createdAt).toISOString()}>
-                      {formatTime(entry.createdAt)}
-                    </time>
-                    <code>{entry.revision.slice(0, 7)}</code>
-                    {isCurrent && <span class="sketch-history-tag">最新</span>}
-                  </a>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      )
-    }
+    {revisions.length > 1 && (
+      <section class="sketch-history">
+        <h2 class="sketch-history-heading">履歴</h2>
+        <p class="sketch-history-note">
+          p5stage が写しを持っている版です (Gist の全履歴ではありません)。
+        </p>
+        {/* ただのリンクなので JS 無しでも辿れる。 */}
+        <ol class="sketch-history-list">
+          {revisions.map((entry) => {
+            const isCurrent = entry.revision === sketch.currentRevision;
+            const viewing =
+              past === null ? isCurrent : entry.revision === past.revision;
+            return (
+              <li class="sketch-history-item">
+                <a
+                  href={
+                    isCurrent
+                      ? sketchPath(sketch.ownerLogin, sketch.id)
+                      : sketchRevisionPath(
+                          sketch.ownerLogin,
+                          sketch.id,
+                          entry.revision
+                        )
+                  }
+                  aria-current={viewing ? "true" : undefined}
+                >
+                  <time datetime={new Date(entry.createdAt).toISOString()}>
+                    {formatTime(entry.createdAt)}
+                  </time>
+                  <code>{entry.revision.slice(0, 7)}</code>
+                  {isCurrent && <span class="sketch-history-tag">最新</span>}
+                </a>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    )}
   </main>
 </BaseLayout>
 

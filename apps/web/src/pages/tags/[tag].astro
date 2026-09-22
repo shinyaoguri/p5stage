@@ -63,17 +63,17 @@ Astro.response.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
     </header>
 
     <section aria-labelledby="works-heading">
-      <h2 id="works-heading" class="sr-only">このタグの作品</h2>
-      {
-        cards.length === 0 ? (
-          <p class="empty">
-            このタグが付いた公開作品はまだありません。
-            <a href="/">新着の作品を見る</a>
-          </p>
-        ) : (
-          <SketchGrid cards={cards} />
-        )
-      }
+      <h2 id="works-heading" class="sr-only">
+        このタグの作品
+      </h2>
+      {cards.length === 0 ? (
+        <p class="empty">
+          このタグが付いた公開作品はまだありません。
+          <a href="/">新着の作品を見る</a>
+        </p>
+      ) : (
+        <SketchGrid cards={cards} />
+      )}
     </section>
   </main>
 </BaseLayout>

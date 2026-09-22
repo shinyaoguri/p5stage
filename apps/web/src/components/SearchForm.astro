@@ -28,7 +28,9 @@ const { query = "", autofocus = false } = Astro.props;
 ---
 
 <form class="search-form" method="get" action="/search" role="search">
-  <label class="sr-only" for="search-q">作品を検索</label>
+  <label class="sr-only" for="search-q">
+    作品を検索
+  </label>
   <input
     id="search-q"
     class="search-input"
@@ -40,7 +42,9 @@ const { query = "", autofocus = false } = Astro.props;
     autocomplete="off"
     autofocus={autofocus}
   />
-  <button class="search-submit" type="submit">検索</button>
+  <button class="search-submit" type="submit">
+    検索
+  </button>
 </form>
 
 <style>

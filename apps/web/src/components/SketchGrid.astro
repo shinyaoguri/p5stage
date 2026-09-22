@@ -30,40 +30,38 @@ const formatTime = (value: number): string =>
 ---
 
 <ul class="grid">
-  {
-    cards.map((card) => (
-      <li>
-        <a class="card" href={card.href}>
-          {card.thumbnailUrl !== null ? (
-            <img class="thumb" src={card.thumbnailUrl} alt="" loading="lazy" />
-          ) : (
-            <div class="thumb thumb-placeholder" aria-hidden="true" />
+  {cards.map((card) => (
+    <li>
+      <a class="card" href={card.href}>
+        {card.thumbnailUrl !== null ? (
+          <img class="thumb" src={card.thumbnailUrl} alt="" loading="lazy" />
+        ) : (
+          <div class="thumb thumb-placeholder" aria-hidden="true" />
+        )}
+        <h3 class="card-title">{card.title}</h3>
+        <p class="card-meta">
+          {showAuthor && (
+            <span class="card-author">
+              {card.ownerAvatarUrl !== null && (
+                <img
+                  class="card-avatar"
+                  src={card.ownerAvatarUrl}
+                  alt=""
+                  width="20"
+                  height="20"
+                  loading="lazy"
+                />
+              )}
+              {card.ownerLogin}
+            </span>
           )}
-          <h3 class="card-title">{card.title}</h3>
-          <p class="card-meta">
-            {showAuthor && (
-              <span class="card-author">
-                {card.ownerAvatarUrl !== null && (
-                  <img
-                    class="card-avatar"
-                    src={card.ownerAvatarUrl}
-                    alt=""
-                    width="20"
-                    height="20"
-                    loading="lazy"
-                  />
-                )}
-                {card.ownerLogin}
-              </span>
-            )}
-            <time datetime={new Date(card.updatedAt).toISOString()}>
-              {formatTime(card.updatedAt)}
-            </time>
-          </p>
-        </a>
-      </li>
-    ))
-  }
+          <time datetime={new Date(card.updatedAt).toISOString()}>
+            {formatTime(card.updatedAt)}
+          </time>
+        </p>
+      </a>
+    </li>
+  ))}
 </ul>
 
 <style>
