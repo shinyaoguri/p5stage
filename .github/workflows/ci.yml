@@ -282,6 +282,22 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # `--with-deps` の `apt-get update` は runner に登録済みの全ソースを引く。Chrome
+      # (dl.google.com) と Microsoft の索引は Playwright に要らないのに、配信側で
+      # Release と Packages が食い違う (Hash Sum mismatch) と巻き添えで落ちる (#134)。
+      # 食い違いは 10 分以上続くことがあり、やり直しでは救えないので引くこと自体をやめる。
+      # ファイル名ではなく中身の配信元で選ぶ (runner イメージが名前を変えても効く)。
+      - name: 使っていないサードパーティの apt ソースを外す
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          set -eu
+          files=$(grep -lE 'dl\.google\.com|packages\.microsoft\.com' \
+            /etc/apt/sources.list.d/* 2>/dev/null || true)
+          if [ -n "$files" ]; then
+            printf '%s\n' "$files"
+            printf '%s\n' "$files" | xargs sudo rm -f
+          fi
       - name: Playwright のブラウザを入れる
         # キャッシュから戻したときも OS の依存ライブラリは入れ直す必要がある。
         if: steps.scope.outputs.run == 'true'
