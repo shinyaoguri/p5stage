@@ -21,7 +21,7 @@
     "@astrojs/check": "^0.9.12",
     "@astrojs/cloudflare": "^14.4.8",
     "@types/p5": "^1.7.7",
-    "astro": "^7.3.5",
+    "astro": "^7.4.13",
     "wrangler": "4.162.0"
   }
 }
